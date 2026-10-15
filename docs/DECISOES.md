@@ -25,7 +25,7 @@ Versões fixas (lockfile commitado): `vitest 5.0.5` (test runner; TS direto, rel
 descartada por menos recursos de mock/timers), `eslint 10.12.0` + `typescript-eslint 8.71.2` (preset `strict`),
 `prettier 3.9.10`, `@types/node 22.20.5`. CI: GitHub Actions em `ubuntu-latest` e `windows-latest` com Node 24.
 
-## D4 — Playwright e navegador — Proposta
+## D4 — Playwright e navegador — Proposta (usuário: Windows 11, qualquer navegador, só Defender → padrão msedge)
 
 - **Versão:** `playwright 1.64.1` (publicada em 2026-10-15; depende de `playwright-core` 1.64.1; Node ≥20). Entra na Fase 2.
 - **Ambiente da nuvem:** Chromium 141 (revisão 1194) pré-instalado em `/opt/pw-browsers`, diferente da revisão esperada pelo
@@ -77,7 +77,7 @@ Nenhum banco, nenhum JSON de histórico. Estado em memória (ocorrências, taref
 navegador, sessão do Telegram (quando houver), `.env` e modelo de mensagem. O Telegram é o histórico. Consequência assumida:
 reinício = nova linha de base; transferências com o bot fechado não são recuperadas.
 
-## D9 — Levantamento das opções de Telegram — **PENDENTE DA DECISÃO DO USUÁRIO** (nada instalado ou implementado)
+## D9 — Levantamento das opções de Telegram — **PARCIAL: conta pessoal exigida (2026-10-15); falta escolher A ou B na Fase 5** (nada instalado ou implementado)
 
 Versões (npm, 2026-10-15): `telegram` (GramJS) 2.26.22 (último publish 2026-07-14); `tdl` 8.1.0 (2026-03-10);
 `prebuilt-tdlib` 0.1008067.0 (2026-08-26; binários `@prebuilt-tdlib/win32-x64` etc.); `grammy` 1.46.0 (Bot API).
