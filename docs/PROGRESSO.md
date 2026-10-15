@@ -1,14 +1,14 @@
 # Progresso
 
-| Fase                                        | Situação                                                                        |
-| ------------------------------------------- | ------------------------------------------------------------------------------- |
-| 1 — Investigação, requisitos e arquitetura  | **Aprovada**                                                                    |
-| 2 — Navegador, login e leitura da tabela    | **Em andamento — parada intermediária (aguardando a saída do `npm run recon`)** |
-| 3 — Monitoramento e fila (simulação)        | Não iniciada                                                                    |
-| 4 — Customer Data List, cadastro e mensagem | Não iniciada                                                                    |
-| 5 — Telegram                                | Bloqueada (decisão do usuário pendente)                                         |
-| 6 — Integração e E2E                        | Não iniciada                                                                    |
-| 7 — Instalação no Windows                   | Não iniciada                                                                    |
+| Fase                                        | Situação                                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| 1 — Investigação, requisitos e arquitetura  | **Aprovada**                                                                                              |
+| 2 — Navegador, login e leitura da tabela    | **Em andamento — parada intermediária (aguardando a saída do `npm run recon`)**                           |
+| 3 — Monitoramento e fila (simulação)        | **Adiantada** (autorização do usuário em 2026-10-15): CallTracker, TaskQueue e todos os cenários testados |
+| 4 — Customer Data List, cadastro e mensagem | Parcial: `MessageBuilder` pronto; consulta real aguarda evidência                                         |
+| 5 — Telegram                                | Bloqueada (decisão do usuário pendente)                                                                   |
+| 6 — Integração e E2E                        | Parcial: laço de monitoramento, modo simulado e recuperação de sessão testados                            |
+| 7 — Instalação no Windows                   | Parcial: `.bat` e README escritos (não testados no Windows)                                               |
 
 ## Fase 1 — critérios de conclusão
 
@@ -35,3 +35,22 @@ Testes: 26 passando (unitários + integração com Chromium contra site simulado
 
 Pendente (parte 2, depois da evidência): adaptador de login real, `TableReader` tipado, normalização de `Start Time`/`Call Duration`, página simulada fiel à estrutura confirmada,
 testes de expiração de sessão, confirmação no Windows (login automático e manual, leitura bate com a tela, logs sem PII, som, janela minimizada).
+
+## Trabalho adiantado sem evidência do site (2026-10-15)
+
+O usuário não pode rodar o `recon` por ora e pediu para programar o máximo possível. Feito (tudo testado com dados fictícios; **84 testes**):
+
+- **`CallTracker`** (Fase 3): ocorrência = Callback Number + discriminador; linha de base; confirmação de N leituras; 1→3 gera tarefa, 1→2 ignorada,
+  2→3 e 3→1 inesperadas (aviso), primeira vez em Stage 3 (aviso), status desconhecido, callback duplicado (anomalia), janela sem leitura, reinício de baseline, TTL.
+  Cenários cobertos: ver `tests/call-tracker.test.ts` (24 testes).
+- **`TaskQueue`** (Fase 3): estados e transições validadas, dedup, sequencial com trava, retries limitados, envio incerto sem reenvio automático, `verify`, decisão manual, limpeza (16 testes).
+- **`MessageBuilder`** (Fase 4): validação de placeholders, cópia literal, `config/mensagem.txt` (4 testes).
+- **`Monitor`** (Fase 6): laço, consulta em segundo plano sem parar a leitura, sessão expirada → login + nova base, alertas (6 testes).
+- **`LeitorTabelaHtml`**: lê a tabela pelos **cabeçalhos informados** (ver suposições abaixo).
+- **Modo simulado** (`npm run simular`) e teste ponta a ponta do cenário fictício.
+- **Windows** (Fase 7 parcial): `instalar.bat`, `configurar.bat`, `iniciar.bat`, `simular.bat`, `recon.bat` (CRLF, **não testados no Windows**) e `README.md`.
+
+**Suposições provisórias (todas `TODO(confirmar)`, ver PERGUNTAS_ABERTAS):** discriminador padrão = `Start Time|Callee Number` (texto cru); a tabela é HTML/ARIA com os cabeçalhos informados;
+`Call Duration` em `SS`, `MM:SS` ou `HH:MM:SS`; "logado" = tabela de chamadas visível; sessão expirada = tabela ausente por vários segundos.
+
+**Não feito (depende de evidência ou decisão):** login automático, `CustomerLookup` real (menu/pesquisa/edição), Telegram, `SEND_MODE=live` (recusado de propósito).

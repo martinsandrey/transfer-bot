@@ -62,3 +62,14 @@ Marcações no código `TODO(confirmar)` apontam para itens daqui. Respostas gan
 
 - Discriminador de ocorrência (R1/P5), formato de `Start Time`/`Call Duration` (P6), valores de status (P4), sinais de
   login/sessão (P1/P2), tabela vazia vs. carregando (P3), 2ª aba (P9), forma da pesquisa (P10), rótulos do cadastro (P11).
+
+## Suposições provisórias adotadas no código (2026-10-15) — confirmar com o recon
+
+| Suposição                                                                                               | Onde                                                              | Pergunta                       |
+| ------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------ |
+| Discriminador de ocorrência = `Start Time` + `Callee Number` (texto cru)                                | `src/monitor/call-tracker.ts` (`discriminadorPadrao`)             | P5                             |
+| A tabela é `<table>`/`role=table                                                                        | grid` e localizada pelo cabeçalho "Callback Number"/"Call Status" | `src/leitura/leitor-tabela.ts` | P3  |
+| `Call Duration`: `SS`, `MM:SS` ou `HH:MM:SS`, senão `null`                                              | `parseDuracao`                                                    | P6                             |
+| "Logado" = tabela de chamadas visível; "sessão expirada" = tabela ausente por ~5 s                      | `main.ts`, `LeitorTabelaHtml`                                     | P1/P2                          |
+| Textos de status exatos: `Stage 1 Agent`, `Stage 2 Agent`, `Stage 3 Agent` (sem diferenciar maiúsculas) | `interpretarStatus`                                               | P4                             |
+| `SITE_URL` do usuário é `http://` (sem criptografia) — informado em 2026-10-15; fica só no `.env` local | —                                                                 | —                              |

@@ -14,7 +14,9 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "vitest run",
-    "recon": "npm run build && node dist/recon/cli.js"
+    "recon": "npm run build && node dist/recon/cli.js",
+    "simular": "npm run build && node dist/main.js --simular",
+    "start": "npm run build && node dist/main.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

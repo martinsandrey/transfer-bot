@@ -327,3 +327,10 @@ sonoro e pede decisão manual no console (reenviar / dar como enviada / descarta
 
 Regras: fixtures **sintéticas** (números fictícios, ex.: reservados para ficção); nenhuma captura real é commitada sem
 anonimização revisada pelo usuário; testes não podem depender do site real.
+
+## Anexo — como ficou a implementação (2026-10-15)
+
+Diferenças em relação às interfaces propostas acima: `CallTracker.gap()` foi dividido em `marcarJanelaSemLeitura()` (preserva ocorrências: consulta em aba única)
+e `reiniciarBaseline()` (sessão expirada). Ids de ocorrência/tarefa (`o3`, `t1`) e `chave` (resumo SHA-256 truncado) **não contêm telefone**. A tarefa `incerta`
+mantém a mensagem em memória até a decisão manual; os demais estados terminais apagam cadastro e mensagem. Módulos: `src/monitor` (tracker, monitor), `src/fila`,
+`src/mensagem`, `src/leitura`, `src/login`, `src/navegador`, `src/recon`, `src/simulacao`, `src/main.ts`.

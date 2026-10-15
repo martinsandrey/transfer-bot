@@ -27,6 +27,8 @@ npm run typecheck    # tsc --noEmit (strict)
 npm test             # vitest run
 npm run format       # prettier --write (format:check no CI)
 npm run build        # tsc -p tsconfig.build.json
+npm run simular      # cenário fictício completo (sem site, sem navegador)
+npm start            # modo real (hoje: só detecta transferências)
 npm run recon        # (Fase 2) ferramenta de reconhecimento: rodar no Windows, ver docs/RECONHECIMENTO.md
 ```
 
