@@ -1,0 +1,34 @@
+# dependências e build
+node_modules/
+dist/
+coverage/
+
+# segredos e configuração local
+.env
+.env.*
+!.env.example
+config/local.*
+
+# perfis de navegador, sessões do Telegram e dados de sessão
+perfil-navegador/
+sessao-telegram/
+sessoes/
+*.session
+*.sqlite
+
+# logs
+logs/
+*.log
+
+# saídas do reconhecimento (revisar antes de qualquer commit)
+saida-reconhecimento/
+
+# playwright
+test-results/
+playwright-report/
+traces/
+*.trace.zip
+
+# sistema
+.DS_Store
+Thumbs.db
