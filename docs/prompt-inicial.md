@@ -36,12 +36,19 @@ Programa para Windows que:
 2. Faz login no site usando usuário e senha configurados; se não estiverem configurados, se houver captcha/2FA ou se o login falhar, permite que **eu** faça login manualmente. O mesmo vale quando a sessão expirar.
 3. Monitora continuamente uma **tabela de chamadas** que se atualiza sozinha a cada ~1 segundo (as linhas mudam de posição o tempo todo).
 4. Lê de cada linha, no mínimo: `Callback Number`, `Callee Number` (identifica o **cliente**), `Call Status`, `Start Time`, `Call Duration` e qualquer outro campo necessário.
-5. **Identifica cada chamada pelo `Callback Number`**, que segundo o negócio **nunca se repete**. Use-o como chave da chamada. Por precaução, se a mesma chave aparecer com `Callee Number` ou `Start Time` diferente do já registrado, trate como anomalia: registre no log (sem dados pessoais), não gere tarefa automaticamente a partir dessa linha e me avise.
+5. **Identifica cada chamada a partir do `Callback Number`.** Cada funcionário faz **uma ligação por vez**, então um mesmo Callback Number **nunca aparece em duas linhas ao mesmo tempo**, mas **se repete várias vezes ao longo do dia** (ligações sucessivas do mesmo funcionário). Portanto:
+   - Use o Callback Number para localizar a chamada atual daquele funcionário na tabela, independentemente da posição da linha.
+   - A identidade de uma **ocorrência de chamada** é o Callback Number **mais** algo que distinga ligações sucessivas (ex.: `Start Time` e/ou `Callee Number`; confirmar com a evidência da Fase 2). Quando o mesmo Callback Number passa a mostrar outro `Start Time`/`Callee Number`, ou some e reaparece, trata-se de **uma nova chamada**, com estado próprio.
+   - A deduplicação é por ocorrência de chamada, **nunca** só pelo Callback Number; caso contrário, a segunda transferência do mesmo funcionário no dia seria ignorada.
+   - Se, contra a regra, o mesmo Callback Number aparecer em duas linhas ao mesmo tempo, trate como anomalia: registre no log (sem dados pessoais), não gere tarefa a partir dessas linhas e me avise.
 6. Mantém em memória as chamadas detectadas e as tarefas em andamento.
 7. Detecta **transferência**: quando o `Call Status` de uma mesma chamada muda de `Stage 1 Agent` para `Stage 3 Agent`. Nesse momento registra o Callback Number e o Callee Number.
-   - Existe também `Stage 2 Agent`. **Transferências para o Stage 2 não me interessam** e nunca geram tarefa.
+   - Existe também `Stage 2 Agent`. A partir do Stage 1, a chamada vai **ou** para Stage 2 **ou** para Stage 3; **nunca** de Stage 2 para Stage 3.
+     - `Stage 1 → Stage 2`: não é do meu interesse; **não faça nada**.
+     - `Stage 1 → Stage 3`: **é uma transferência**; gere a tarefa.
+     - Qualquer outra sequência (ex.: `Stage 2 → Stage 3`) é inesperada: não gere tarefa, registre no log e me avise.
    - Não há regra de tempo/duração para considerar uma transferência: o critério é exclusivamente a mudança de status.
-   - Casos de borda a confirmar comigo antes da Fase 3: chamada que passa por Stage 1 → Stage 2 → Stage 3; chamada observada pela primeira vez já em Stage 3; transição que ocorre entre duas leituras.
+   - Caso de borda ainda a confirmar comigo antes da Fase 3: chamada observada pela primeira vez **já em Stage 3** durante a execução (a transição pode ter ocorrido entre duas leituras). Padrão proposto até eu responder: não gerar tarefa, registrar no log e emitir aviso, para evitar falso positivo.
 8. Para cada transferência confirmada: abre a página **Customer Data List** (menu lateral esquerdo), digita o Callee Number no campo de pesquisa **Phone** (barra superior), clica em **Search** e aguarda os resultados.
    - Deve haver exatamente 1 resultado. Se houver mais de 1: emite um **alerta sonoro** no Windows e continua com o **primeiro**. Se houver 0: não envia nada, registra o erro (sem dados pessoais) e alerta.
    - Navegue pelo menu e pela interface, sem depender de URLs internas fixas, já que a URL base muda com frequência.
@@ -62,7 +69,9 @@ Programa para Windows que:
     - `Occupation:` e `NOTE:` ficam **em branco** (texto fixo, para preenchimento manual depois).
     - `{{callback number}}` vem da tabela de chamadas; os demais placeholders vêm do cadastro do cliente.
     - O modelo deve ficar em um arquivo de texto editável (ex.: `config/mensagem.txt`), carregado na inicialização, com validação de placeholders desconhecidos ou ausentes.
-    - O mapeamento de cada placeholder para o campo do formulário de edição (ex.: se `age` é um campo ou é calculado a partir da data de nascimento; quais campos compõem `location`; se `Phone` é o telefone do cadastro ou o Callee Number; formato do CPF) **precisa ser confirmado comigo** com base na evidência da Fase 4.
+    - Os valores são **copiados literalmente** dos campos correspondentes do formulário de edição, sem cálculo, formatação ou validação de conteúdo: o que estiver no campo `age` vai para `{{age}}`, o que estiver no campo `location` vai para `{{location}}`, e assim por diante para nome e CPF. Apenas remova espaços nas extremidades.
+    - `{{Phone}}`: o telefone do cadastro é sempre igual ao Callee Number. Use o valor do cadastro e confira (após normalizar dígitos) que ele bate com o Callee Number; se não bater, isso indica cliente errado: não envie, alerte e registre no log sem dados pessoais.
+    - Quais rótulos/seletores do formulário correspondem a cada placeholder será confirmado com a evidência da Fase 4.
 11. Envia a mensagem ao Telegram. **A forma de integração com o Telegram (conta pessoal, bot, grupo etc.) ainda será definida por mim.** Até lá, o envio fica atrás de uma interface (`MessageSender`) com implementação de console/simulação.
 12. Volta a monitorar.
 
@@ -79,10 +88,10 @@ Registre comparações e escolhas em `docs/DECISOES.md`.
 ## 3. Requisitos de confiabilidade (projete para eles desde a Fase 1)
 
 - Monitoramento contínuo com intervalo configurável.
-- **Identidade da chamada pelo Callback Number** (ver item 1.5). Nunca use a posição da linha como identidade.
+- **Identidade da chamada pelo Callback Number + distinção de ligações sucessivas** (ver item 1.5). Nunca use a posição da linha como identidade.
 - **Linha de base na inicialização**: chamadas já presentes quando o bot abre (inclusive já em Stage 3) são ignoradas; só transições `Stage 1 → Stage 3` observadas **durante** a execução geram tarefas.
 - **Confirmação de transição**: exigir que o novo status seja observado de forma consistente (ex.: N leituras seguidas, configurável) antes de criar a tarefa; tratar leituras parciais da tabela durante a atualização.
-- **Fila de tarefas** com estados explícitos (ex.: `detectada → na_fila → pesquisando → pronta → enviando → enviada | incerta | falhou | ignorada`), processamento **sequencial** de consultas no navegador, trava contra tarefas concorrentes e cliques repetidos, e conjunto em memória de Callback Numbers já processados.
+- **Fila de tarefas** com estados explícitos (ex.: `detectada → na_fila → pesquisando → pronta → enviando → enviada | incerta | falhou | ignorada`), processamento **sequencial** de consultas no navegador, trava contra tarefas concorrentes e cliques repetidos, e conjunto em memória das ocorrências de chamada já processadas (com limpeza periódica das antigas para não crescer indefinidamente).
 - **Monitoramento não pode parar durante a consulta ao cliente**: avalie usar uma **segunda aba** no mesmo contexto para a Customer Data List enquanto a aba da tabela continua sendo lida. Se o site não permitir, documente o impacto (transições perdidas durante a consulta) e proponha mitigação.
 - Esperas baseadas em condições (elemento visível, resultado carregado, requisição concluída), nunca `sleep` fixo como mecanismo principal; *timeouts* configuráveis.
 - **Envio incerto** (timeout, queda de conexão após o envio): marcar como `incerta`, **não reenviar automaticamente**; verificar quando possível e, se ainda incerto, alertar e pedir decisão manual. Não prometa eliminação absoluta de duplicatas.
@@ -104,7 +113,7 @@ Cada fase tem entregáveis, testes e critérios de conclusão próprios. Ao fina
 ### FASE 1 — Investigação, requisitos e arquitetura (execute AGORA)
 - Inspecione o repositório e o ambiente da nuvem (versões de Node/npm, Playwright/Chromium disponíveis, acesso ao registro npm, limitações de rede). Registre o que encontrou.
 - Pesquise versões atuais e situação de manutenção de: Playwright, biblioteca de logs, *test runner*, carregamento/validação de configuração, forma de tocar som no Windows, armazenamento de credenciais no Windows; e levante as opções de Telegram (sem decidir).
-- Escreva `docs/ARQUITETURA.md` com: componentes (Browser, LoginManager, TableReader, CallTracker/detector de transições, TaskQueue, CustomerLookup, MessageBuilder, MessageSender, Notifier/som, Config, Logger), interfaces TypeScript propostas, máquinas de estado (chamada e tarefa), identidade por Callback Number e tratamento de anomalias, estratégia de abas, login automático com *fallback* manual, modo observação/envio real, estratégia de testes com simulação.
+- Escreva `docs/ARQUITETURA.md` com: componentes (Browser, LoginManager, TableReader, CallTracker/detector de transições, TaskQueue, CustomerLookup, MessageBuilder, MessageSender, Notifier/som, Config, Logger), interfaces TypeScript propostas, máquinas de estado (chamada e tarefa), identidade de chamada (Callback Number + distinção de ligações sucessivas) e tratamento de anomalias, estratégia de abas, login automático com *fallback* manual, modo observação/envio real, estratégia de testes com simulação.
 - Escreva `docs/DECISOES.md` com as decisões sobre Node/Playwright/navegador (Chromium do Playwright vs. Edge instalado no Windows via `channel`), configuração/credenciais e o levantamento das opções de Telegram (marcado como **pendente da minha decisão**).
 - Escreva `docs/RISCOS.md` com riscos técnicos, impacto e como cada um será investigado/mitigado.
 - Escreva `docs/PERGUNTAS_ABERTAS.md` com tudo o que precisa vir de mim (ver seção 5) e me faça as perguntas mais bloqueantes.
@@ -124,15 +133,15 @@ Cada fase tem entregáveis, testes e critérios de conclusão próprios. Ao fina
 - Concluída quando: os testes simulados passam na nuvem, e eu confirmar no Windows que o login (automático e manual) funciona e que a leitura real bate com o que vejo na tela, sem logs com dados pessoais.
 
 ### FASE 3 — Monitoramento e fila (somente simulação)
-- `CallTracker`: identidade por Callback Number, detecção de anomalias de chave, linha de base na inicialização, detecção da transição `Stage 1 Agent → Stage 3 Agent` com confirmação, descarte de transições para Stage 2, tratamento de status desconhecidos e dos casos de borda **conforme eu confirmar**.
+- `CallTracker`: identidade por Callback Number com separação de ligações sucessivas do mesmo funcionário, detecção de anomalias, linha de base na inicialização, detecção da transição `Stage 1 Agent → Stage 3 Agent` com confirmação, descarte de `Stage 1 → Stage 2`, tratamento de sequências inesperadas e status desconhecidos, e do caso "visto pela primeira vez em Stage 3" **conforme eu confirmar**.
 - `TaskQueue`: estados, deduplicação em memória, processamento sequencial, travas, *retries* limitados.
-- Testes unitários com cenários fictícios: mesma chamada mudando de posição, Stage 1 → Stage 2 (ignorar), Stage 1 → Stage 3 (tarefa), Stage 1 → Stage 2 → Stage 3 (conforme regra confirmada), chamada que já começa em Stage 3, status oscilando, transição entre duas leituras, mesma chave com cliente diferente (anomalia), reinicialização do bot, chamada que some antes de ser processada.
-- Concluída quando: todos os cenários documentados têm teste passando e os casos de borda foram confirmados por mim.
+- Testes unitários com cenários fictícios: mesma chamada mudando de posição, Stage 1 → Stage 2 (ignorar), Stage 1 → Stage 3 (tarefa), Stage 2 → Stage 3 (inesperado: sem tarefa, com aviso), chamada vista pela primeira vez em Stage 3, status oscilando, transição entre duas leituras, **mesmo funcionário com duas transferências no mesmo dia (duas tarefas distintas)**, mesmo Callback Number em duas linhas simultâneas (anomalia), reinicialização do bot, chamada que some antes de ser processada.
+- Concluída quando: todos os cenários documentados têm teste passando e o caso "visto pela primeira vez em Stage 3" foi confirmado por mim.
 
 ### FASE 4 — Customer Data List, pesquisa, leitura do cadastro e mensagem
 - Navegação até Customer Data List pelo menu (preferencialmente em aba separada), pesquisa por Phone, clique em Search, espera pelos resultados, tratamento de 0/1/várias linhas (som + primeiro resultado), abertura da edição, leitura dos campos, verificação de que o telefone corresponde ao Callee Number, fechamento **sem salvar**.
 - Bloqueios de segurança contra escrita e contra cliques repetidos.
-- `MessageBuilder` com o modelo de `config/mensagem.txt`; confirme comigo o mapeamento de cada placeholder (`nome`, `cpf`, `location`, `age`, `Phone`) para os campos do formulário, com base na evidência capturada.
+- `MessageBuilder` com o modelo de `config/mensagem.txt`, copiando literalmente os valores dos campos do formulário; confirme comigo apenas quais rótulos do formulário correspondem a `nome`, `cpf`, `location`, `age` e `Phone`, com base na evidência capturada.
 - Testes contra página simulada e testes unitários do modelo (texto exato, campos vazios, caracteres especiais); validação real em modo observação no meu Windows, com a prévia apenas no console.
 
 ### FASE 5 — Integração com o Telegram
@@ -153,19 +162,22 @@ Cada fase tem entregáveis, testes e critérios de conclusão próprios. Ao fina
 Já respondido:
 - Regra de cinco minutos: **descartada**; não existe critério de tempo.
 - Stage 2 existe; transferências para Stage 2 **não** geram tarefa. Só `Stage 1 Agent → Stage 3 Agent` interessa.
-- Identidade da chamada: **Callback Number**, que nunca se repete.
+- Identidade da chamada: **Callback Number**. Nunca aparece em duas linhas ao mesmo tempo (1 ligação por funcionário), mas se repete várias vezes por dia.
+- Fluxo de status: Stage 1 vai **ou** para Stage 2 (ignorar) **ou** para Stage 3 (transferência). Nunca Stage 2 → Stage 3.
+- Campos da mensagem: copiar literalmente o conteúdo dos campos do cadastro (`age`, `location` etc.), sem interpretar. Telefone do cadastro = Callee Number, sempre.
 - URL, usuário e senha: **configuráveis**, a URL muda com frequência.
 - Modelo da mensagem: definido (seção 1, item 10).
 
 Ainda pendente:
 - Se o login tem 2FA/captcha; duração típica da sessão.
 - Evidência da estrutura da tabela, do login e da Customer Data List (via roteiro de reconhecimento).
-- Todos os valores possíveis de `Call Status` e os casos de borda: Stage 1 → Stage 2 → Stage 3 conta? Chamada vista pela primeira vez em Stage 3 conta? Stage 3 pode voltar para Stage 1?
-- "Nunca se repete" significa único para sempre ou apenas único entre as linhas visíveis ao mesmo tempo?
+- Todos os valores possíveis de `Call Status` (além dos três Stages) e se Stage 3 pode voltar para Stage 1.
+- Chamada vista pela primeira vez já em Stage 3 durante a execução: gera tarefa ou não? (padrão proposto: não, apenas aviso)
+- Qual campo distingue com segurança ligações sucessivas do mesmo Callback Number (`Start Time`? ID oculto?).
 - Formato e fuso de `Start Time`; formato de `Call Duration` e dos telefones (DDI, máscara).
 - Se a tabela é paginada/filtrada; o que acontece com a linha quando a chamada termina.
 - Se a Customer Data List pode ser aberta em outra aba sem derrubar a tabela.
-- Mapeamento dos placeholders para os campos do cadastro (`nome`, `cpf`, `location`, `age`, `Phone`) e formato do CPF.
+- Rótulos dos campos do formulário de edição que correspondem a `nome`, `cpf`, `location`, `age` e `Phone` (via evidência).
 - Forma de integração com o Telegram, destino e volume de mensagens (definirei depois).
 - Versão do Windows, se o Node já está instalado, se posso usar o Edge, restrições de antivírus/proxy.
 
@@ -174,7 +186,7 @@ Ainda pendente:
 A Fase 1 só está concluída quando:
 
 1. Existem e estão coerentes: `CLAUDE.md`, `docs/ARQUITETURA.md`, `docs/DECISOES.md`, `docs/RISCOS.md`, `docs/PERGUNTAS_ABERTAS.md`, `docs/PLANO_DE_FASES.md`, `docs/RECONHECIMENTO.md`, `docs/PROGRESSO.md`, `.env.example`, `config/mensagem.txt`, `.gitignore`, `.gitattributes`.
-2. A arquitetura descreve: identidade por Callback Number e tratamento de anomalias, linha de base, confirmação da transição Stage 1 → Stage 3 e descarte de Stage 2, máquina de estados das tarefas, estratégia de abas, login automático com *fallback* manual, configuração alterável sem recompilar, deduplicação em memória, envio incerto, sessão expirada e modo observação.
+2. A arquitetura descreve: identidade por Callback Number com separação de ligações sucessivas e deduplicação por ocorrência de chamada, tratamento de anomalias, linha de base, confirmação da transição Stage 1 → Stage 3 e descarte de Stage 1 → Stage 2, máquina de estados das tarefas, estratégia de abas, login automático com *fallback* manual, configuração alterável sem recompilar, deduplicação em memória, envio incerto, sessão expirada e modo observação.
 3. O levantamento das opções de Telegram está pronto para minha decisão, sem nada instalado ou implementado.
 4. Nenhum seletor, URL ou comportamento do site foi inventado; toda suposição está marcada como pendente.
 5. O esqueleto instala com `npm ci`, e `npm run lint`, `npm run typecheck` e `npm test` passam na nuvem.
