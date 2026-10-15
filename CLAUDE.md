@@ -14,7 +14,7 @@ Desenvolvimento na nuvem (Linux), sem acesso ao site real: tudo é testado com s
 
 ## Fases (uma por vez; só avançar com aprovação explícita do usuário)
 
-1 Investigação/arquitetura (**feita**) · 2 Navegador/login/leitura · 3 Monitoramento e fila (simulado) ·
+1 Investigação/arquitetura (**feita**; Fase 2 em andamento — ver PROGRESSO) · 2 Navegador/login/leitura · 3 Monitoramento e fila (simulado) ·
 4 Customer Data List + mensagem · 5 Telegram · 6 Integração e E2E · 7 Instalação Windows. Detalhes: `docs/PLANO_DE_FASES.md`.
 Ao fim de cada fase: testes verdes, commit, push no branch da sessão, atualizar `docs/PROGRESSO.md`, relatório curto, **parar**.
 
@@ -27,6 +27,7 @@ npm run typecheck    # tsc --noEmit (strict)
 npm test             # vitest run
 npm run format       # prettier --write (format:check no CI)
 npm run build        # tsc -p tsconfig.build.json
+npm run recon        # (Fase 2) ferramenta de reconhecimento: rodar no Windows, ver docs/RECONHECIMENTO.md
 ```
 
 Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6.0.x** (typescript-eslint ainda não aceita o TS 7; ver DECISOES).

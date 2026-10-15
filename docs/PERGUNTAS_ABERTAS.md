@@ -16,7 +16,7 @@ Marcações no código `TODO(confirmar)` apontam para itens daqui. Respostas gan
 
 - **P-W1:** Windows 11; Node LTS mais recente já instalado; qualquer navegador serve; só o Windows Defender (sem proxy/antivírus corporativo). → Edge (`msedge`) como padrão; Chromium do Playwright como alternativa. Confirmar a versão exata do Node em `node -v` na Fase 2.
 - **P-W2:** sem 2FA e sem captcha, só usuário e senha. Duração da sessão: **desconhecida** (será observada; o tratamento de sessão expirada continua obrigatório).
-- **P-W3:** usuário não entendeu a pergunta → reexplicada em linguagem simples; aguardando resposta.
+- **P-W3:** reexplicada em linguagem simples; o usuário aprovou a Fase 2 (2026-10-15). Roteiro executável em `docs/RECONHECIMENTO.md` (seção "Passo a passo"). **Aguardando a saída do recon.**
 - **P-TG1:** a mensagem **precisa vir da conta pessoal** do usuário → opções A (TDLib) ou B (GramJS) em DECISOES D9; Bot API (C) descartada. Escolha entre A e B fica para a Fase 5; P-TG2..P-TG4 seguem em aberto.
 
 ## Perguntas bloqueantes (feitas ao usuário no relatório da Fase 1)

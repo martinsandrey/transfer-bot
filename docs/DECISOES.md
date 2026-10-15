@@ -105,3 +105,11 @@ Perguntas que decidem: P-TG1..P-TG3 em `PERGUNTAS_ABERTAS.md`.
 Modo observação padrão; `live` com confirmação a cada inicialização; bloqueio de escrita na aba de consulta via
 `context.route` (somente após confirmar como a pesquisa é feita); nunca clicar em salvar/atualizar/excluir; uma tentativa de
 login; sem tracing/screenshots por padrão; códigos de verificação só no console.
+
+## D11 — Implementações da Fase 2 (parte 1) — Decidida
+
+- **Logger:** `pino 10.4.0` apenas (sem `pino-pretty`): arquivo JSON diário na pasta de dados + linha legível no console escrita por nós. Allow-list de campos; descarte de qualquer outra chave.
+- **Config:** `util.parseEnv` nativo + `zod 4.6.7` (sem `dotenv`). Variáveis do sistema têm prioridade sobre o `.env`. Padrões: `SEND_MODE=observacao`, `NAVEGADOR=msedge`, `LOGIN_AUTOMATICO=false`.
+- **Som:** PowerShell (`SystemSounds`) no Windows; BEL nos demais. Falta validar no Windows.
+- **Recon:** anonimização por marcadores estáveis (mesmo valor → mesmo marcador) para preservar "igual/diferente" (necessário para descobrir o discriminador de ligações sucessivas); `Call Status` e `Call Duration` gravados em claro; respostas de rede só como estrutura. Rede observada de forma passiva (`context.on('response')`), sem requisições próprias.
+- **`npm run recon`** = `build` + `node dist/recon/cli.js` (sem `tsx`, menos dependências).

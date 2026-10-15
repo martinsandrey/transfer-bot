@@ -59,3 +59,38 @@ resultados (cabeçalhos), tela com 0/1/N resultados (sem valores), rótulos/`nam
 
 1. Instalar Node 24 LTS (se ainda não tiver) e baixar o projeto. 2. `npm ci`. 3. Copiar `.env.example` para `.env` e preencher a URL
    (usuário/senha opcionais). 4. `npm run recon` e logar manualmente quando pedido. 5. Revisar a saída (acima). 6. Enviar.
+
+---
+
+## Passo a passo (ferramenta pronta — Fase 2)
+
+Pré-requisitos: Node LTS instalado (você já tem) e o projeto baixado (ZIP do GitHub, branch `ccr-07253884-22ne8x`, ou `git clone`).
+
+1. Abra o **Prompt de Comando** na pasta do projeto e rode `npm ci` (só na primeira vez).
+2. Copie `.env.example` para `.env` (`copy .env.example .env`) e edite no Bloco de Notas: preencha **`SITE_URL`** com o endereço atual do
+   sistema. **`SITE_USUARIO`/`SITE_SENHA` são opcionais** e o recon **nunca os usa** para logar; se você preencher o usuário, o recon
+   troca esse texto por `<USUARIO>` em qualquer lugar da saída.
+3. Rode `npm run recon`. Abre uma janela do **Edge** (perfil exclusivo do bot, não mexe no seu Edge pessoal). Se o Edge não abrir,
+   coloque `NAVEGADOR=chromium` no `.env` e rode antes `npx playwright install chromium`.
+4. No console aparece `recon>`. Siga a ordem abaixo; em cada comando, deixe antes a **tela do navegador** no estado indicado:
+   | Comando     | Estado da tela antes de digitar                                                                                                                                       |
+   | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+   | `login`     | tela de login, ainda **sem logar** (se o navegador já estiver logado, saia do sistema primeiro)                                                                       |
+   | `tabela`    | **faça o login manualmente**, vá à tabela de chamadas, deixe a janela visível; depois digite o comando e `60` (segundos) quando perguntar. Não mexa durante a leitura |
+   | `menu`      | qualquer tela com o menu lateral aberto                                                                                                                               |
+   | `clientes`  | Customer Data List, antes de pesquisar                                                                                                                                |
+   | `resultado` | depois de pesquisar um telefone (repita com um telefone que dá **0** resultado e outro que dá **vários**, se existir)                                                 |
+   | `edicao`    | abra a edição de **um** cliente (só olhe; **não clique em salvar**)                                                                                                   |
+   | `abas`      | digite e informe `120`; durante esse tempo abra a Customer Data List numa **2ª aba**, depois **minimize a janela** por ~1 min e volte                                 |
+   | `sair`      | grava tudo e fecha                                                                                                                                                    |
+5. Abra a pasta `saida-reconhecimento\<data-hora>\` e leia **`LEIAME-REVISAO.txt`** (contagens e alertas da varredura automática).
+   Revise os `.json` conforme a seção "Como revisar" acima.
+6. Compacte a pasta (botão direito → Enviar para → Pasta compactada) e anexe na conversa. Junto, responda:
+   houve captcha/2FA? versão do Windows/Edge? fuso do computador? a tabela continuou atualizando durante o teste `abas`?
+
+**O que o recon NUNCA faz:** clicar, digitar, enviar formulário, salvar, chamar endereços por conta própria ou gravar senhas, cookies, cabeçalhos,
+valores de campos ou o conteúdo das células (só marcadores como `FUNC_01`, `CLIENTE_02`, `INICIO_03`). `Call Status` e `Call Duration` são
+gravados como aparecem (não são pessoais). As respostas de rede são gravadas só como estrutura (nomes de campos e tipos).
+
+**Atenção:** o Windows Defender pode perguntar algo na primeira execução (navegador automatizado); permita. A pasta `saida-reconhecimento\` está no
+`.gitignore` (não vai para o git sozinha).
