@@ -19,6 +19,7 @@ Já respondido:
 - Stage 2 existe, mas transferências para ele são ignoradas; só `Stage 1 Agent → Stage 3 Agent` gera tarefa.
 - Identidade da chamada: `Callback Number`. Nunca aparece duas vezes ao mesmo tempo, mas se repete ao longo do dia. A deduplicação é por ocorrência de chamada.
 - Stage 1 vai ou para Stage 2 (ignorar) ou para Stage 3 (transferência); nunca 2 → 3.
+- Chamada vista pela primeira vez já em Stage 3: não gera tarefa, só aviso.
 - Campos da mensagem: copiados literalmente do cadastro; telefone do cadastro = Callee Number.
 - URL, usuário e senha configuráveis (a URL muda com frequência).
 - Modelo da mensagem definido (fica em `config/mensagem.txt`).
@@ -28,7 +29,7 @@ Já respondido:
 | 1 | Se o login tem 2FA/captcha; quanto tempo a sessão dura | Fase 1–2 |
 | 2 | Captura anonimizada do login, da tabela de chamadas e da Customer Data List (gerada pela ferramenta `recon`) | Fase 2 / 4 |
 | 3 | Outros valores de `Call Status` além dos Stages; se Stage 3 pode voltar para Stage 1 | Fase 3 |
-| 4 | Chamada vista pela primeira vez já em Stage 3: gera tarefa? (padrão: não, só aviso). Qual campo distingue ligações sucessivas do mesmo Callback Number? | Fase 3 |
+| 4 | Qual campo distingue ligações sucessivas do mesmo Callback Number (vem da captura) | Fase 2–3 |
 | 5 | Formato/fuso de `Start Time`; formato de `Call Duration` e dos telefones | Fase 2 |
 | 6 | O que acontece com a linha quando a chamada termina; se a tabela é paginada ou filtrada | Fase 2–3 |
 | 7 | Se a Customer Data List pode ser aberta em outra aba sem derrubar a tabela | Fase 4 |
@@ -39,7 +40,7 @@ Já respondido:
 ## 3. Riscos técnicos que o Claude deve investigar antes de fechar a arquitetura
 
 1. **Identidade da chamada.** O `Callback Number` localiza a chamada, mas se repete ao longo do dia. Se a deduplicação usar só o número, a segunda transferência do mesmo funcionário seria ignorada. É preciso um campo que separe ligações sucessivas (provavelmente `Start Time`). A posição da linha nunca serve como identidade.
-2. **Transições perdidas.** Com atualização a cada segundo, uma ligação curta em Stage 1 pode passar para Stage 3 entre duas leituras e aparecer já em Stage 3. Falta definir se isso conta como transferência.
+2. **Transições perdidas.** Com atualização a cada segundo, uma ligação curta em Stage 1 pode passar para Stage 3 entre duas leituras e aparecer já em Stage 3. Decidido: nesse caso não há tarefa, só aviso, então essas transferências dependem de você notar o aviso.
 3. **Monitoramento interrompido durante a consulta.** Se a pesquisa do cliente acontecer na mesma aba, a tabela fica sem leitura. Uma segunda aba resolve, se o site permitir.
 4. **Leitura no meio da atualização.** Uma leitura parcial pode produzir linhas incompletas ou duplicadas. Isso pede leitura atômica e confirmação em leituras consecutivas.
 5. **Navegador em segundo plano.** O Chromium reduz timers em janelas minimizadas ou ocultas, o que pode congelar a atualização da tabela.

@@ -48,7 +48,7 @@ Programa para Windows que:
      - `Stage 1 → Stage 3`: **é uma transferência**; gere a tarefa.
      - Qualquer outra sequência (ex.: `Stage 2 → Stage 3`) é inesperada: não gere tarefa, registre no log e me avise.
    - Não há regra de tempo/duração para considerar uma transferência: o critério é exclusivamente a mudança de status.
-   - Caso de borda ainda a confirmar comigo antes da Fase 3: chamada observada pela primeira vez **já em Stage 3** durante a execução (a transição pode ter ocorrido entre duas leituras). Padrão proposto até eu responder: não gerar tarefa, registrar no log e emitir aviso, para evitar falso positivo.
+   - Chamada observada pela primeira vez **já em Stage 3** durante a execução (a transição pode ter ocorrido entre duas leituras): **não gere tarefa**; apenas registre no log (sem dados pessoais) e emita um aviso, para evitar falso positivo.
 8. Para cada transferência confirmada: abre a página **Customer Data List** (menu lateral esquerdo), digita o Callee Number no campo de pesquisa **Phone** (barra superior), clica em **Search** e aguarda os resultados.
    - Deve haver exatamente 1 resultado. Se houver mais de 1: emite um **alerta sonoro** no Windows e continua com o **primeiro**. Se houver 0: não envia nada, registra o erro (sem dados pessoais) e alerta.
    - Navegue pelo menu e pela interface, sem depender de URLs internas fixas, já que a URL base muda com frequência.
@@ -133,10 +133,10 @@ Cada fase tem entregáveis, testes e critérios de conclusão próprios. Ao fina
 - Concluída quando: os testes simulados passam na nuvem, e eu confirmar no Windows que o login (automático e manual) funciona e que a leitura real bate com o que vejo na tela, sem logs com dados pessoais.
 
 ### FASE 3 — Monitoramento e fila (somente simulação)
-- `CallTracker`: identidade por Callback Number com separação de ligações sucessivas do mesmo funcionário, detecção de anomalias, linha de base na inicialização, detecção da transição `Stage 1 Agent → Stage 3 Agent` com confirmação, descarte de `Stage 1 → Stage 2`, tratamento de sequências inesperadas e status desconhecidos, e do caso "visto pela primeira vez em Stage 3" **conforme eu confirmar**.
+- `CallTracker`: identidade por Callback Number com separação de ligações sucessivas do mesmo funcionário, detecção de anomalias, linha de base na inicialização, detecção da transição `Stage 1 Agent → Stage 3 Agent` com confirmação, descarte de `Stage 1 → Stage 2`, tratamento de sequências inesperadas e status desconhecidos, e do caso "visto pela primeira vez em Stage 3" (sem tarefa, apenas aviso).
 - `TaskQueue`: estados, deduplicação em memória, processamento sequencial, travas, *retries* limitados.
-- Testes unitários com cenários fictícios: mesma chamada mudando de posição, Stage 1 → Stage 2 (ignorar), Stage 1 → Stage 3 (tarefa), Stage 2 → Stage 3 (inesperado: sem tarefa, com aviso), chamada vista pela primeira vez em Stage 3, status oscilando, transição entre duas leituras, **mesmo funcionário com duas transferências no mesmo dia (duas tarefas distintas)**, mesmo Callback Number em duas linhas simultâneas (anomalia), reinicialização do bot, chamada que some antes de ser processada.
-- Concluída quando: todos os cenários documentados têm teste passando e o caso "visto pela primeira vez em Stage 3" foi confirmado por mim.
+- Testes unitários com cenários fictícios: mesma chamada mudando de posição, Stage 1 → Stage 2 (ignorar), Stage 1 → Stage 3 (tarefa), Stage 2 → Stage 3 (inesperado: sem tarefa, com aviso), chamada vista pela primeira vez em Stage 3 (sem tarefa, com aviso), status oscilando, transição entre duas leituras, **mesmo funcionário com duas transferências no mesmo dia (duas tarefas distintas)**, mesmo Callback Number em duas linhas simultâneas (anomalia), reinicialização do bot, chamada que some antes de ser processada.
+- Concluída quando: todos os cenários documentados têm teste passando.
 
 ### FASE 4 — Customer Data List, pesquisa, leitura do cadastro e mensagem
 - Navegação até Customer Data List pelo menu (preferencialmente em aba separada), pesquisa por Phone, clique em Search, espera pelos resultados, tratamento de 0/1/várias linhas (som + primeiro resultado), abertura da edição, leitura dos campos, verificação de que o telefone corresponde ao Callee Number, fechamento **sem salvar**.
@@ -164,6 +164,7 @@ Já respondido:
 - Stage 2 existe; transferências para Stage 2 **não** geram tarefa. Só `Stage 1 Agent → Stage 3 Agent` interessa.
 - Identidade da chamada: **Callback Number**. Nunca aparece em duas linhas ao mesmo tempo (1 ligação por funcionário), mas se repete várias vezes por dia.
 - Fluxo de status: Stage 1 vai **ou** para Stage 2 (ignorar) **ou** para Stage 3 (transferência). Nunca Stage 2 → Stage 3.
+- Chamada vista pela primeira vez já em Stage 3: **não gera tarefa**, apenas aviso.
 - Campos da mensagem: copiar literalmente o conteúdo dos campos do cadastro (`age`, `location` etc.), sem interpretar. Telefone do cadastro = Callee Number, sempre.
 - URL, usuário e senha: **configuráveis**, a URL muda com frequência.
 - Modelo da mensagem: definido (seção 1, item 10).
@@ -172,7 +173,6 @@ Ainda pendente:
 - Se o login tem 2FA/captcha; duração típica da sessão.
 - Evidência da estrutura da tabela, do login e da Customer Data List (via roteiro de reconhecimento).
 - Todos os valores possíveis de `Call Status` (além dos três Stages) e se Stage 3 pode voltar para Stage 1.
-- Chamada vista pela primeira vez já em Stage 3 durante a execução: gera tarefa ou não? (padrão proposto: não, apenas aviso)
 - Qual campo distingue com segurança ligações sucessivas do mesmo Callback Number (`Start Time`? ID oculto?).
 - Formato e fuso de `Start Time`; formato de `Call Duration` e dos telefones (DDI, máscara).
 - Se a tabela é paginada/filtrada; o que acontece com a linha quando a chamada termina.
