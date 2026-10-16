@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { CallRow, TableSnapshot } from "../src/dominio/tipos.js";
-import { CallTracker, interpretarStatus, type EventoTracker } from "../src/monitor/call-tracker.js";
+import {
+  CallTracker,
+  interpretarStatus,
+  interpretarStatusDetalhado,
+  type EventoTracker,
+} from "../src/monitor/call-tracker.js";
 
 // Todos os dados são FICTÍCIOS.
 const S1 = "Stage 1 Agent";
@@ -42,6 +47,104 @@ describe("interpretarStatus", () => {
     expect(interpretarStatus("  stage  2   AGENT ")).toBe("stage2");
     expect(interpretarStatus("Stage 3 Agent")).toBe("stage3");
     expect(interpretarStatus("Ringing")).toBe("desconhecido");
+  });
+});
+
+describe("interpretarStatusDetalhado (status observados no recon)", () => {
+  it("separa o número do Stage e o complemento", () => {
+    expect(interpretarStatusDetalhado("Stage 1 Ringing")).toMatchObject({
+      numero: 1,
+      sub: "ringing",
+    });
+    expect(interpretarStatusDetalhado("Stage 1 Manual Call")).toMatchObject({
+      numero: 1,
+      sub: "manual call",
+    });
+    expect(interpretarStatusDetalhado("Stage 3 Agent")).toMatchObject({ numero: 3, sub: "agent" });
+    expect(interpretarStatusDetalhado("Stage 4 Agent").numero).toBe(4);
+    expect(interpretarStatusDetalhado("Idle").numero).toBeNull();
+    expect(interpretarStatus("Stage 1 Ringing")).toBe("stage1");
+  });
+});
+
+describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => {
+  const RING = "Stage 1 Ringing";
+  const MANUAL = "Stage 1 Manual Call";
+
+  it("Ringing → Agent é normal: sem avisos e sem tarefa", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([linha("A", RING)]),
+      snap([linha("A", RING)]),
+      snap([linha("A", S1)]),
+      snap([linha("A", S1)]),
+    );
+    expect(ev).toEqual([]);
+  });
+
+  it("Ringing → Agent → Stage 3 Agent gera exatamente uma transferência", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([linha("A", RING)]),
+      snap([linha("A", S1)]),
+      snap([linha("A", S3)]),
+      snap([linha("A", S3)]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("chamada que já estava em Ringing na linha de base e vira Agent → Stage 3 também gera", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([linha("A", RING)]));
+    expect(tipos(alimentar(t, snap([linha("A", S1)]), snap([linha("A", S3)])))).toEqual([
+      "transferencia",
+    ]);
+  });
+
+  it("Stage 1 Agent → Stage 3 em outro complemento (ex.: Ringing) → transferência só quando chegar a Stage 3 Agent", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([linha("A", S1)]));
+    expect(alimentar(t, snap([linha("A", "Stage 3 Ringing")]))).toEqual([]);
+    expect(tipos(alimentar(t, snap([linha("A", S3)])))).toEqual(["transferencia"]);
+  });
+
+  it("Ringing → Stage 3 Agent sem nunca ter sido Stage 1 Agent: inesperado, sem tarefa", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([linha("A", RING)]));
+    expect(tipos(alimentar(t, snap([linha("A", S3)])))).toEqual(["aviso:sequencia_inesperada"]);
+  });
+
+  it("Manual Call não é transferência e não gera aviso ao aparecer/sumir", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    expect(alimentar(t, snap([linha("A", MANUAL)]), snap([linha("A", MANUAL)]), snap([]))).toEqual(
+      [],
+    );
+  });
+
+  it("redisca do mesmo funcionário (Start Time muda na mesma linha, mesmo Callee): nova ocorrência, sem avisos", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([linha("A", RING, "20:00:01", "X")]),
+      snap([linha("A", RING, "20:00:20", "X")]),
+      snap([linha("A", S1, "20:00:20", "X")]),
+      snap([linha("A", S3, "20:00:20", "X")]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("Stage 4 (existe no site, significado a confirmar) gera aviso e nunca tarefa", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([linha("A", S3)]));
+    expect(tipos(alimentar(t, snap([linha("A", "Stage 4 Agent")])))).toEqual([
+      "aviso:sequencia_inesperada",
+    ]);
   });
 });
 

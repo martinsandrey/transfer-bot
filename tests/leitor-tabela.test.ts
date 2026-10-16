@@ -65,15 +65,62 @@ describe("tabelaParaLinhas", () => {
       ],
     });
   });
-  it("linha incompleta ou com nº de células diferente invalida a leitura inteira", () => {
+  it("linha sem Callback Number ou sem status invalida a leitura inteira", () => {
     expect(tabelaParaLinhas(tabela(CAB, [["", "x", "Stage 1 Agent", "t", "0"]]))).toEqual({
       ok: false,
       motivo: "linha_incompleta",
     });
-    expect(tabelaParaLinhas(tabela(CAB, [["1", "2", "Stage 1 Agent"]]))).toMatchObject({
+    expect(tabelaParaLinhas(tabela(CAB, [["1", "2", "", "t", "0"]]))).toMatchObject({ ok: false });
+  });
+
+  it("linhas curtas demais (ex.: mensagem de tabela vazia) são ignoradas; linhas com MAIS células que cabeçalhos invalidam", () => {
+    expect(tabelaParaLinhas(tabela(CAB, [["Nenhum registro"]]))).toEqual({ ok: true, rows: [] });
+    expect(
+      tabelaParaLinhas(tabela(CAB, [["1", "2", "Stage 1 Agent", "t", "0", "x"]])),
+    ).toMatchObject({
       ok: false,
+      motivo: expect.stringContaining("mais_celulas_que_cabecalhos"),
     });
   });
+
+  it("ESTRUTURA CONFIRMADA PELO RECON: 8 cabeçalhos (o último é um resumo) e linhas de 7 células; Callee vem antes de Callback", () => {
+    const cabReal = [
+      "ID",
+      "Callee Number",
+      "Callback Number",
+      "Call Status",
+      "Start Time",
+      "Call Duration",
+      "Action",
+      "Manual Call： 2 Stage 1：2 Stage 2：0 Stage 3：0 Stage 4：0",
+    ];
+    const r = tabelaParaLinhas(
+      tabela(cabReal, [
+        ["1", "011941445986", "908112", "Stage 1 Agent", "20:57:43", "00:01:10", ""],
+        ["2", "016981544251", "908113", "Stage 1 Ringing", "20:56:47", "00:00:06", ""],
+      ]),
+    );
+    expect(r).toEqual({
+      ok: true,
+      rows: [
+        {
+          callbackNumber: "908112",
+          calleeNumber: "011941445986",
+          callStatus: "Stage 1 Agent",
+          startTime: "20:57:43",
+          callDurationSec: 70,
+        },
+        {
+          callbackNumber: "908113",
+          calleeNumber: "016981544251",
+          callStatus: "Stage 1 Ringing",
+          startTime: "20:56:47",
+          callDurationSec: 6,
+        },
+      ],
+    });
+  });
+
   it("cabeçalho obrigatório ausente invalida", () => {
     expect(tabelaParaLinhas(tabela(["Callback Number"], []))).toMatchObject({ ok: false });
   });
@@ -133,7 +180,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       await site?.fechar();
     });
 
-    for (const caminho of ["/painel-iframe", "/grade-div", "/shadow"]) {
+    for (const caminho of ["/layout-evidencia", "/painel-iframe", "/grade-div", "/shadow"]) {
       it(`LeitorTabelaHtml lê ${caminho}`, async () => {
         await nav.abrirUrl(`${site.url}${caminho}`);
         await nav.paginaPrincipal().waitForTimeout(800);
@@ -160,13 +207,15 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
           intervaloMs: 200,
           indiceTabela: null,
         });
-        expect(serie.cabecalhos).toEqual([
-          "Callback Number",
-          "Callee Number",
-          "Call Status",
-          "Start Time",
-          "Call Duration",
-        ]);
+        expect(serie.cabecalhos).toEqual(
+          expect.arrayContaining([
+            "Callback Number",
+            "Callee Number",
+            "Call Status",
+            "Start Time",
+            "Call Duration",
+          ]),
+        );
         expect(serie.snapshots.length).toBeGreaterThan(3);
         const diag = JSON.stringify(await diagnosticarPagina(nav.paginaPrincipal(), anon));
         expect(diag).toContain("callback number");

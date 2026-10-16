@@ -127,6 +127,20 @@ async function atualizar() {
 atualizar(); setInterval(atualizar, ${periodoMs});</script>`;
 }
 
+/**
+ * Variante que imita a estrutura CONFIRMADA pelo recon (2026-10-16): colunas ID | Callee Number | Callback Number |
+ * Call Status | Start Time | Call Duration | Action, com um 8º cabeçalho de resumo e linhas de 7 células; telefones no formato
+ * observado (Callee com 12 dígitos e zero à esquerda, Callback com 6 dígitos) e horário sem data. Dados fictícios.
+ */
+function paginaEvidencia(periodoMs: number): string {
+  return `<!doctype html><title>Evidencia</title><table id="t"><thead><tr><th>ID</th><th>Callee Number</th><th>Callback Number</th><th>Call Status</th><th>Start Time</th><th>Call Duration</th><th>Action</th><th>Manual Call： 0 Stage 1：2 Stage 2：0 Stage 3：0 Stage 4：0</th></tr></thead><tbody id="corpo"></tbody></table><script>
+async function atualizar() {
+  const r = await fetch('/api/chamadas'); const ls = (await r.json()).linhas;
+  document.getElementById('corpo').innerHTML = ls.map((d, i) => '<tr><td>' + (i + 1) + '</td><td>0' + d.ce.slice(2) + '</td><td>9' + d.cb.slice(-5) + '</td><td>' + d.status + '</td><td>' + d.inicio.slice(11) + '</td><td>' + d.duracao + '</td><td><img alt="" width="1" height="1"></td></tr>').join('');
+}
+atualizar(); setInterval(atualizar, ${periodoMs});</script>`;
+}
+
 export interface SiteSimulado {
   url: string;
   fechar(): Promise<void>;
@@ -143,6 +157,10 @@ export async function iniciarSiteSimulado(passoMs = 300): Promise<SiteSimulado> 
     } else if (caminho === "/painel-iframe") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PAGINA_IFRAME);
+    } else if (caminho === "/layout-evidencia") {
+      t0 = Date.now();
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(paginaEvidencia(Math.round(passoMs / 2)));
     } else if (caminho === "/grade-div" || caminho === "/shadow") {
       t0 = Date.now();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });

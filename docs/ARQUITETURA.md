@@ -334,3 +334,9 @@ Diferenças em relação às interfaces propostas acima: `CallTracker.gap()` foi
 e `reiniciarBaseline()` (sessão expirada). Ids de ocorrência/tarefa (`o3`, `t1`) e `chave` (resumo SHA-256 truncado) **não contêm telefone**. A tarefa `incerta`
 mantém a mensagem em memória até a decisão manual; os demais estados terminais apagam cadastro e mensagem. Módulos: `src/monitor` (tracker, monitor), `src/fila`,
 `src/mensagem`, `src/leitura`, `src/login`, `src/navegador`, `src/recon`, `src/simulacao`, `src/main.ts`.
+
+## Anexo — ajustes pela evidência do recon (2026-10-16)
+
+`interpretarStatusDetalhado` separa número do Stage e complemento (`ringing`, `agent`, `manual call`). A ocorrência guarda `viuStage1Agent` e `aguardaStage3Agent`:
+só vira transferência quem esteve em `Stage 1 Agent` e chega a `Stage 3 Agent` (direto, ou via outro complemento do Stage 3). Detalhes e fatos: `docs/EVIDENCIAS.md`.
+**Risco aberto (Q1):** se o Callback Number mudar na transferência, a identidade por Callback Number precisará de uma ligação pelo Callee Number.

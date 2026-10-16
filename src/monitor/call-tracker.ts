@@ -2,17 +2,41 @@ import { createHash } from "node:crypto";
 import { mascararTelefone } from "../util/mascara.js";
 import type { CallRow, TableSnapshot } from "../dominio/tipos.js";
 
-export type Stage = "stage1" | "stage2" | "stage3" | "desconhecido";
+export type Stage = "stage1" | "stage2" | "stage3" | "stage4" | "desconhecido";
 
-/** Interpreta o texto de Call Status. TODO(confirmar): lista completa de status (P4); por ora só os 3 informados. */
+export interface StatusInterpretado {
+  /** Número do Stage (1, 2, 3, 4...) ou `null` se o texto não segue o padrão "Stage N ...". */
+  numero: number | null;
+  /** Complemento em minúsculas: "agent", "ringing", "manual call"... (evidência do recon, 2026-10-16). */
+  sub: string;
+  /** Chave de comparação entre leituras. */
+  chave: string;
+}
+
+/**
+ * Interpreta o texto de Call Status. Evidência do recon: "Stage 1 Ringing", "Stage 1 Agent", "Stage 1 Manual Call",
+ * "Stage 3 Agent"; os contadores do site mostram também Stage 2 e Stage 4. TODO(confirmar) (P4): significado de cada um.
+ */
+export function interpretarStatusDetalhado(texto: string): StatusInterpretado {
+  const t = texto.trim().replace(/\s+/g, " ").toLowerCase();
+  const m = /^stage (\d+)(?: (.*))?$/.exec(t);
+  if (!m) return { numero: null, sub: t, chave: `?|${t}` };
+  const numero = Number(m[1]);
+  const sub = m[2] ?? "";
+  return { numero, sub, chave: `${numero}|${sub}` };
+}
+
+/** Família do Stage (ignora o complemento). */
 export function interpretarStatus(texto: string): Stage {
-  switch (texto.trim().replace(/\s+/g, " ").toLowerCase()) {
-    case "stage 1 agent":
+  switch (interpretarStatusDetalhado(texto).numero) {
+    case 1:
       return "stage1";
-    case "stage 2 agent":
+    case 2:
       return "stage2";
-    case "stage 3 agent":
+    case 3:
       return "stage3";
+    case 4:
+      return "stage4";
     default:
       return "desconhecido";
   }
@@ -47,10 +71,14 @@ interface Ocorrencia {
   id: string;
   callback: string;
   discriminador: string;
-  confirmado: Stage;
-  candidato: { stage: Stage; contagem: number } | null;
+  confirmado: StatusInterpretado;
+  candidato: { status: StatusInterpretado; contagem: number } | null;
   baseline: boolean;
   ausencias: number;
+  /** Já esteve (confirmada) em "Stage 1 Agent": pré-requisito para uma transferência. */
+  viuStage1Agent: boolean;
+  /** Passou de Stage 1 Agent para um Stage 3 que ainda não é "Agent" (ex.: Ringing): a transferência sai quando chegar a Agent. */
+  aguardaStage3Agent: boolean;
 }
 
 export const discriminadorPadrao = (r: CallRow): string => `${r.startTime}|${r.calleeNumber}`;
@@ -141,7 +169,7 @@ export class CallTracker {
       if (congelados.has(cb)) continue;
       const row = linhas[0] as CallRow;
       const disc = this.discriminador(row);
-      const stage = interpretarStatus(row.callStatus);
+      const status = interpretarStatusDetalhado(row.callStatus);
       let oc = this.ativas.get(cb);
 
       if (oc && oc.discriminador !== disc) {
@@ -153,15 +181,17 @@ export class CallTracker {
           id: `o${++this.sequencia}`,
           callback: cb,
           discriminador: disc,
-          confirmado: stage,
+          confirmado: status,
           candidato: null,
           baseline,
           ausencias: 0,
+          viuStage1Agent: status.numero === 1 && status.sub === "agent",
+          aguardaStage3Agent: false,
         };
         this.ativas.set(cb, oc);
         if (!baseline) {
-          if (stage === "stage3") eventos.push(this.aviso("visto_primeira_vez_stage3", oc));
-          else if (stage === "desconhecido") eventos.push(this.aviso("status_desconhecido", oc));
+          if (status.numero === 3) eventos.push(this.aviso("visto_primeira_vez_stage3", oc));
+          else if (status.numero === null) eventos.push(this.aviso("status_desconhecido", oc));
         }
         continue;
       }
@@ -170,18 +200,19 @@ export class CallTracker {
       if (cega) {
         oc.candidato = null;
       }
-      if (stage === oc.confirmado) {
+      if (status.chave === oc.confirmado.chave) {
         oc.candidato = null;
         continue;
       }
-      if (oc.candidato && oc.candidato.stage === stage) oc.candidato.contagem++;
-      else oc.candidato = { stage, contagem: 1 };
+      if (oc.candidato && oc.candidato.status.chave === status.chave) oc.candidato.contagem++;
+      else oc.candidato = { status, contagem: 1 };
       if (oc.candidato.contagem < this.op.leiturasConfirmacao) continue;
 
       const de = oc.confirmado;
-      oc.confirmado = stage;
+      oc.confirmado = status;
       oc.candidato = null;
-      this.aplicarTransicao(oc, de, stage, row, s.readAt, eventos);
+      if (status.numero === 1 && status.sub === "agent") oc.viuStage1Agent = true;
+      this.aplicarTransicao(oc, de, status, row, s.readAt, eventos);
     }
 
     // 3) ausências (não valem em linha de base nem em janela sem leitura, nem para callbacks congelados)
@@ -195,36 +226,69 @@ export class CallTracker {
     return eventos;
   }
 
+  /**
+   * Regras (usuário + evidência): só "Stage 1 Agent" → "Stage 3 Agent" é transferência. Mudanças de complemento dentro do
+   * mesmo Stage (Ringing → Agent) são normais. Stage 1 → Stage 2 é ignorado. O resto é inesperado (aviso, sem tarefa).
+   * Se o Stage 3 passar antes por outro complemento (ex.: "Stage 3 Ringing"), a transferência sai ao chegar em "Stage 3 Agent".
+   */
   private aplicarTransicao(
     oc: Ocorrencia,
-    de: Stage,
-    para: Stage,
+    de: StatusInterpretado,
+    para: StatusInterpretado,
     row: CallRow,
     agora: number,
     eventos: EventoTracker[],
   ): void {
-    if (de === "stage1" && para === "stage2") return; // não é do interesse
-    if (de === "stage1" && para === "stage3") {
-      const chave = `${oc.callback}|${oc.discriminador}`;
-      if (this.emitidas.has(chave)) {
-        eventos.push(this.aviso("transferencia_duplicada", oc));
-        return;
-      }
-      this.emitidas.set(chave, agora);
-      // `chave` é um resumo (sem telefone) para logs e idempotência do envio.
-      const resumo = createHash("sha256").update(chave).digest("hex").slice(0, 12);
-      eventos.push({
-        tipo: "transferencia",
-        ocorrencia: oc.id,
-        chave: resumo,
-        callback: oc.callback,
-        callee: row.calleeNumber,
-      });
+    if (para.numero === null) {
+      eventos.push(this.aviso("status_desconhecido", oc));
       return;
     }
-    eventos.push(
-      this.aviso(para === "desconhecido" ? "status_desconhecido" : "sequencia_inesperada", oc),
-    );
+    if (de.numero === null) {
+      // vindo de um status desconhecido (já avisado): só alerta se for direto para Stage 3
+      if (para.numero === 3) eventos.push(this.aviso("sequencia_inesperada", oc));
+      return;
+    }
+    if (de.numero === para.numero) {
+      if (para.numero === 3 && para.sub === "agent" && oc.aguardaStage3Agent) {
+        oc.aguardaStage3Agent = false;
+        this.emitirTransferencia(oc, row, agora, eventos);
+      }
+      return; // Ringing → Agent etc.: normal
+    }
+    if (de.numero === 1 && para.numero === 2) return; // não é do interesse
+    if (de.numero === 1 && para.numero === 3) {
+      if (!(de.sub === "agent" || oc.viuStage1Agent)) {
+        eventos.push(this.aviso("sequencia_inesperada", oc)); // nunca foi "Stage 1 Agent"
+        return;
+      }
+      if (para.sub === "agent") this.emitirTransferencia(oc, row, agora, eventos);
+      else oc.aguardaStage3Agent = true;
+      return;
+    }
+    eventos.push(this.aviso("sequencia_inesperada", oc));
+  }
+
+  private emitirTransferencia(
+    oc: Ocorrencia,
+    row: CallRow,
+    agora: number,
+    eventos: EventoTracker[],
+  ): void {
+    const chave = `${oc.callback}|${oc.discriminador}`;
+    if (this.emitidas.has(chave)) {
+      eventos.push(this.aviso("transferencia_duplicada", oc));
+      return;
+    }
+    this.emitidas.set(chave, agora);
+    // `chave` é um resumo (sem telefone) para logs e idempotência do envio.
+    const resumo = createHash("sha256").update(chave).digest("hex").slice(0, 12);
+    eventos.push({
+      tipo: "transferencia",
+      ocorrencia: oc.id,
+      chave: resumo,
+      callback: oc.callback,
+      callee: row.calleeNumber,
+    });
   }
 
   private aviso(codigo: CodigoAviso, oc: Ocorrencia): EventoTracker {

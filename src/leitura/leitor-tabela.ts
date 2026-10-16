@@ -60,13 +60,20 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
       motivo: `cabecalho_ausente:${faltando.map(([, n]) => String(n)).join(",")}`,
     };
 
+  // Evidência (recon 2026-10-16): o cabeçalho tem uma coluna a mais no final (resumo "Manual Call: N Stage 1: N ...")
+  // que as linhas de dados não têm. Por isso o alinhamento é por posição do cabeçalho e aceitamos linhas com MENOS
+  // células que cabeçalhos (desde que cubram as colunas necessárias). Linhas com MAIS células que cabeçalhos podem ter
+  // colunas deslocadas: leitura inválida (nunca adivinha). Linhas curtas demais (ex.: mensagem de tabela vazia) são ignoradas.
+  const necessarias = Math.max(iCb, iCe, iSt, iIn, iDu) + 1;
   const rows: CallRow[] = [];
   for (const l of t.linhas) {
-    if (l.celulas.length !== cab.length)
+    if (l.celulas.length > cab.length) {
       return {
         ok: false,
-        motivo: `linha_com_numero_de_celulas_diferente(cabecalhos=${cab.length},celulas=${l.celulas.length})`,
+        motivo: `linha_com_mais_celulas_que_cabecalhos(cabecalhos=${cab.length},celulas=${l.celulas.length})`,
       };
+    }
+    if (l.celulas.length < necessarias) continue;
     const c = (i: number): string => l.celulas[i]?.texto ?? "";
     const callback = normalizarTelefone(c(iCb));
     const status = c(iSt).trim();
