@@ -13,6 +13,7 @@ const ev = (chave = "k1", cb = "5511900000001", callee = "5521900000101"): Trans
   tipo: "transferencia",
   ocorrencia: "o1",
   chave,
+  vinculo: `v-${chave}`,
   callback: cb,
   callee,
 });
@@ -349,5 +350,115 @@ describe("TaskQueue", () => {
     await m.fila.drenar();
     await p;
     expect(estados(m.fila)).toEqual(["enviada", "enviada"]);
+  });
+
+  describe("reaproveita a mensagem do grupo de 5 min na transferência da mesma ligação", () => {
+    type Longa = Extract<EventoTracker, { tipo: "ligacao_longa" }>;
+    const longa = (vinc: string, cb = "5511900000001", callee = "5521900000101"): Longa => ({
+      tipo: "ligacao_longa",
+      ocorrencia: "o1",
+      chave: `L-${vinc}`,
+      vinculo: vinc,
+      callback: cb,
+      callee,
+    });
+    const transf = (vinc: string, chave = "T-" + vinc): Transf => ({ ...ev(chave), vinculo: vinc });
+    function dois(
+      over: Parameters<typeof montar>[0] = {},
+      respostasLonga: ConstructorParameters<typeof EnviadorFalso>[0] = [],
+    ) {
+      const longaSender = new EnviadorFalso(respostasLonga);
+      const m = montar({ op: { pausaEntreTarefasMs: 0 }, ...over });
+      const fila = new TaskQueue(
+        {
+          lookup: m.busca,
+          construtor: criarConstrutor(readFileSync("config/mensagem.txt", "utf8")),
+          sender: m.sender,
+          senderLonga: longaSender,
+          log: { debug() {}, info() {}, warn() {}, error() {} },
+          notificador: m.notif,
+        },
+        {
+          modo: over.modo ?? "live",
+          maxTentativasConsulta: 1,
+          maxTentativasEnvio: 1,
+          backoffMs: 1,
+          ttlTarefasMs: 1e6,
+          pausaEntreTarefasMs: 0,
+          ...over.op,
+          previa: (x, tipo) => m.previas.push(`${tipo}:${x}`),
+        },
+      );
+      return { fila, m, longaSender };
+    }
+
+    it("5 min enviada → transferência reenvia o mesmo texto ao outro grupo, sem nova consulta", async () => {
+      const { fila, m, longaSender } = dois();
+      fila.enqueue(longa("V1"));
+      fila.enqueue(transf("V1"));
+      await fila.drenar();
+      expect(estados(fila)).toEqual(["enviada", "enviada"]);
+      expect(m.busca.chamadas).toHaveLength(1); // só a consulta da ligação longa
+      expect(m.sender.enviados).toHaveLength(1);
+      expect(longaSender.enviados).toHaveLength(1);
+      expect(m.sender.enviados[0]?.texto).toBe(longaSender.enviados[0]?.texto);
+      expect(fila.todas[1]?.reaproveitada).toBe(true);
+    });
+
+    it("transferência antes dos 5 min (sem mensagem longa): cria a mensagem normalmente", async () => {
+      const { fila, m } = dois();
+      fila.enqueue(transf("V2"));
+      await fila.drenar();
+      expect(m.busca.chamadas).toHaveLength(1);
+      expect(fila.todas[0]?.reaproveitada).toBeUndefined();
+      expect(m.sender.enviados).toHaveLength(1);
+    });
+
+    it("mensagem longa que falhou: a transferência faz o fluxo normal (consulta e cria)", async () => {
+      const { fila, m } = dois({}, [{ tipo: "falhou", motivo: "x", reenviavel: false }]);
+      fila.enqueue(longa("V3"));
+      fila.enqueue(transf("V3"));
+      await fila.drenar();
+      expect(estados(fila)).toEqual(["falhou", "enviada"]);
+      expect(m.busca.chamadas).toHaveLength(2);
+      expect(fila.todas[1]?.reaproveitada).toBeUndefined();
+    });
+
+    it("ligações diferentes não se misturam", async () => {
+      const { fila, m } = dois();
+      fila.enqueue(longa("VA"));
+      fila.enqueue(transf("VB"));
+      await fila.drenar();
+      expect(m.busca.chamadas).toHaveLength(2);
+    });
+
+    it("memória vencida: não reaproveita", async () => {
+      const { fila, m } = dois({ op: { memoriaMensagemLongaMs: -1 } });
+      fila.enqueue(longa("V4"));
+      fila.enqueue(transf("V4"));
+      await fila.drenar();
+      expect(m.busca.chamadas).toHaveLength(2);
+    });
+
+    it("modo observação: a prévia da transferência reaproveita o texto da prévia de 5 min", async () => {
+      const { fila, m } = dois({ modo: "observacao" });
+      fila.enqueue(longa("V5"));
+      fila.enqueue(transf("V5"));
+      await fila.drenar();
+      expect(m.busca.chamadas).toHaveLength(1);
+      const [a, b] = m.previas;
+      expect(a?.startsWith("longa:")).toBe(true);
+      expect(b?.startsWith("transferencia:")).toBe(true);
+      expect(a?.slice(6)).toBe(b?.slice(14));
+    });
+
+    it("a mensagem guardada é usada uma única vez", async () => {
+      const { fila, m } = dois();
+      fila.enqueue(longa("V6"));
+      fila.enqueue(transf("V6", "T6a"));
+      fila.enqueue(transf("V6", "T6b"));
+      await fila.drenar();
+      expect(m.busca.chamadas).toHaveLength(2); // 1 da longa + 1 da segunda transferência (sem reaproveitar)
+    });
   });
 });

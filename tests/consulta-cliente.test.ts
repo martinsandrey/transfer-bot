@@ -171,6 +171,7 @@ describe("ConsultaDeCliente", () => {
       tipo: "transferencia",
       ocorrencia: "o1",
       chave: "k",
+      vinculo: "v-k",
       callback: "908112",
       callee: "011900000101",
     });

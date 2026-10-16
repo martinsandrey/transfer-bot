@@ -92,6 +92,7 @@ function montar(
     dormir: async () => undefined,
     agora: () => 2_000_000_000,
   });
+  const cont = { consultas: 0 };
   const tg2 = new TelegramFalso();
   const enviadorLonga = new EnviadorTelegram(tg2, {
     destino: "grupo-5min",
@@ -105,7 +106,10 @@ function montar(
     {
       senderLonga: enviadorLonga,
       lookup: opc.lookup ?? {
-        find: async () => ({ tipo: "ok", registro: CADASTRO, multiplos: false }),
+        find: async () => {
+          cont.consultas++;
+          return { tipo: "ok", registro: CADASTRO, multiplos: false };
+        },
       },
       construtor: criarConstrutor(readFileSync("config/mensagem.txt", "utf8")),
       sender: enviador,
@@ -148,7 +152,18 @@ function montar(
       pausarDuranteConsulta: true,
     },
   );
-  return { tg, tg2, notif, fila, monitor, tracker, relogio };
+  return {
+    tg,
+    tg2,
+    notif,
+    fila,
+    monitor,
+    tracker,
+    relogio,
+    get consultas() {
+      return cont.consultas;
+    },
+  };
 }
 
 /** Roteiro de uma transferência real: Stage 1 (callback antigo) some e surge Stage 3 com outro callback e o MESMO callee. */
@@ -186,7 +201,8 @@ describe("E2E: ligação de 5 min vai ao 2º grupo; transferência ao 1º", () =
     expect(m.tg2.enviadas).toHaveLength(1);
     expect(m.tg.enviadas).toHaveLength(1);
     expect(m.tg2.enviadas[0]).toContain("Line 1 number: 100001");
-    expect(m.tg.enviadas[0]).toContain("Line 1 number: 100001");
+    expect(m.tg.enviadas[0]).toBe(m.tg2.enviadas[0]); // a transferência reaproveita a mensagem já enviada ao grupo de 5 min
+    expect(m.consultas).toBe(1); // e não consulta o cadastro de novo
     expect(m.fila.todas.map((x) => x.tipo).sort()).toEqual(["longa", "transferencia"]);
   });
 

@@ -64,6 +64,10 @@ export type TipoTarefa = "transferencia" | "longa";
 
 export interface TarefaTransferencia {
   id: string;
+  /** Identifica a ligação (Stage 1) de origem; liga a mensagem de 5 min à transferência da mesma ligação. */
+  vinculo: string;
+  /** Esta tarefa reaproveitou a mensagem já enviada ao grupo de 5 min (não consultou o cadastro). */
+  reaproveitada?: boolean;
   /** `transferencia` = grupo das transferências; `longa` = ligação que atingiu o tempo mínimo em Stage 1 (segundo grupo). */
   tipo: TipoTarefa;
   /** Resumo da ocorrência (sem telefone): chave de idempotência. */
@@ -86,6 +90,8 @@ export interface OpcoesFila {
   maxTentativasEnvio: number;
   backoffMs: number;
   ttlTarefasMs: number;
+  /** Por quanto tempo lembrar (em memória) da mensagem enviada ao grupo de 5 min para reaproveitá-la numa transferência posterior. Padrão 3 h. */
+  memoriaMensagemLongaMs?: number;
   /** Mensagem mais velha que isso (desde a detecção) não é mais enviada (o Telegram pode ter ficado fora do ar). 0/ausente = não expira. */
   validadeMensagemMs?: number;
   /** Pausa entre uma tarefa e a próxima, para o monitor voltar a ler a tabela de chamadas entre as consultas (padrão 3 s). */
@@ -146,6 +152,7 @@ export class TaskQueue {
     const t: TarefaTransferencia = {
       id: `t${++this.seq}`,
       tipo,
+      vinculo: ev.vinculo,
       chave: ev.chave,
       estado: "detectada",
       callback: ev.callback,
@@ -176,6 +183,8 @@ export class TaskQueue {
   private mover(t: TarefaTransferencia, novo: EstadoTarefa, motivo?: string): void {
     if (!TRANSICOES[t.estado].includes(novo))
       throw new Error(`Transição de tarefa inválida: ${t.estado} → ${novo}`);
+    if ((novo === "enviada" || novo === "observada") && t.mensagem !== undefined)
+      this.guardarMensagemLonga(t, t.mensagem);
     t.estado = novo;
     if (motivo !== undefined) t.motivo = motivo;
     t.historico.push({ estado: novo, em: this.agora() });
@@ -209,6 +218,13 @@ export class TaskQueue {
   }
 
   private parando = false;
+
+  /** Mensagens JÁ ENVIADAS (ou prévias) do grupo de 5 min, por ligação: reaproveitadas se a ligação for transferida depois. Só em memória. */
+  private readonly mensagensLongas = new Map<string, { texto: string; em: number }>();
+
+  private guardarMensagemLonga(t: TarefaTransferencia, texto: string): void {
+    if (t.tipo === "longa") this.mensagensLongas.set(t.vinculo, { texto, em: this.agora() });
+  }
 
   /** Encerramento limpo: termina a tarefa em andamento (sem pegar outra) e devolve as tarefas que ficaram sem conclusão. */
   async encerrar(): Promise<TarefaTransferencia[]> {
@@ -249,38 +265,20 @@ export class TaskQueue {
 
   private async processar(t: TarefaTransferencia): Promise<void> {
     this.mover(t, "pesquisando");
-    const busca = await this.pesquisar(t);
-    if (!busca) return;
-    if (busca.tipo === "nenhum") {
-      this.mover(t, "ignorada", "cliente_nao_encontrado");
-      this.deps.notificador.alerta(
-        "erro",
-        `Tarefa ${t.id}: nenhum cliente encontrado para o Callee Number. Nada foi enviado.`,
-      );
+    const reaproveitada = this.mensagemReaproveitavel(t);
+    if (reaproveitada !== undefined) {
+      // A ligação já fez 5 min em Stage 1 e a mensagem foi ao grupo de 5 min: reenvia o MESMO texto, sem consultar o cadastro.
+      t.reaproveitada = true;
+      t.mensagem = reaproveitada;
+      this.deps.log.info("Mensagem do grupo de 5 min reaproveitada", {
+        evento: "mensagem_reaproveitada",
+        idCurto: t.id,
+      });
+      this.mover(t, "pronta");
+    } else if (!(await this.prepararMensagem(t))) {
       return;
     }
-    if (busca.tipo === "telefone_divergente") {
-      this.mover(t, "ignorada", "telefone_divergente");
-      this.deps.notificador.alerta(
-        "erro",
-        `Tarefa ${t.id}: telefone do cadastro diferente do Callee Number (cliente errado). Nada foi enviado.`,
-      );
-      return;
-    }
-    if (busca.multiplos)
-      this.deps.notificador.alerta(
-        "aviso",
-        `Tarefa ${t.id}: mais de um cliente encontrado; usando o primeiro resultado.`,
-      );
-    t.cadastro = busca.registro;
-    try {
-      t.mensagem = this.deps.construtor.build(busca.registro, t.callback);
-    } catch {
-      this.mover(t, "falhou", "erro_ao_montar_mensagem");
-      this.deps.notificador.alerta("erro", `Tarefa ${t.id}: erro ao montar a mensagem.`);
-      return;
-    }
-    this.mover(t, "pronta");
+    if (t.mensagem === undefined) return;
 
     if (this.op.modo === "observacao") {
       this.op.previa?.(t.mensagem, t.tipo);
@@ -310,6 +308,52 @@ export class TaskQueue {
       "erro",
       `Tarefa ${t.id}: a mensagem ficou velha demais para ser útil e NÃO foi enviada (${Math.round((this.op.validadeMensagemMs ?? 0) / 60000)} min).`,
     );
+  }
+
+  /** Consulta o cadastro e monta a mensagem. `false` = a tarefa já terminou (sem cliente, divergente, falha). */
+  private async prepararMensagem(t: TarefaTransferencia): Promise<boolean> {
+    const busca = await this.pesquisar(t);
+    if (!busca) return false;
+    if (busca.tipo === "nenhum") {
+      this.mover(t, "ignorada", "cliente_nao_encontrado");
+      this.deps.notificador.alerta(
+        "erro",
+        `Tarefa ${t.id}: nenhum cliente encontrado para o Callee Number. Nada foi enviado.`,
+      );
+      return false;
+    }
+    if (busca.tipo === "telefone_divergente") {
+      this.mover(t, "ignorada", "telefone_divergente");
+      this.deps.notificador.alerta(
+        "erro",
+        `Tarefa ${t.id}: telefone do cadastro diferente do Callee Number (cliente errado). Nada foi enviado.`,
+      );
+      return false;
+    }
+    if (busca.multiplos)
+      this.deps.notificador.alerta(
+        "aviso",
+        `Tarefa ${t.id}: mais de um cliente encontrado; usando o primeiro resultado.`,
+      );
+    t.cadastro = busca.registro;
+    try {
+      t.mensagem = this.deps.construtor.build(busca.registro, t.callback);
+    } catch {
+      this.mover(t, "falhou", "erro_ao_montar_mensagem");
+      this.deps.notificador.alerta("erro", `Tarefa ${t.id}: erro ao montar a mensagem.`);
+      return false;
+    }
+    this.mover(t, "pronta");
+    return true;
+  }
+
+  private mensagemReaproveitavel(t: TarefaTransferencia): string | undefined {
+    if (t.tipo !== "transferencia") return undefined;
+    const g = this.mensagensLongas.get(t.vinculo);
+    if (!g) return undefined;
+    this.mensagensLongas.delete(t.vinculo); // uma ligação só é transferida uma vez
+    const validade = this.op.memoriaMensagemLongaMs ?? 3 * 3_600_000;
+    return this.agora() - g.em <= validade ? g.texto : undefined;
   }
 
   private async pesquisar(t: TarefaTransferencia): Promise<ResultadoBusca | null> {

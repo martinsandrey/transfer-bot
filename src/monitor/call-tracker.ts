@@ -49,9 +49,24 @@ export type CodigoAviso =
   | "transferencia_duplicada";
 
 export type EventoTracker =
-  | { tipo: "transferencia"; ocorrencia: string; chave: string; callback: string; callee: string }
+  | {
+      tipo: "transferencia";
+      ocorrencia: string;
+      chave: string;
+      callback: string;
+      callee: string;
+      /** Identifica a ligação de origem (Stage 1); igual ao `vinculo` da `ligacao_longa` da MESMA ligação. Só em memória (tem telefone). */
+      vinculo: string;
+    }
   /** Ligação que atingiu o tempo mínimo (ex.: 5 min) AINDA em Stage 1 (nunca depois de transferida). */
-  | { tipo: "ligacao_longa"; ocorrencia: string; chave: string; callback: string; callee: string }
+  | {
+      tipo: "ligacao_longa";
+      ocorrencia: string;
+      chave: string;
+      callback: string;
+      callee: string;
+      vinculo: string;
+    }
   | { tipo: "aviso"; codigo: CodigoAviso; ocorrencia: string; callbackMascarado: string }
   | { tipo: "anomalia"; codigo: "callback_duplicado"; callbackMascarado: string };
 
@@ -343,6 +358,7 @@ export class CallTracker {
           chave: createHash("sha256").update(chave).digest("hex").slice(0, 12),
           callback: oc.callback,
           callee: row.calleeNumber,
+          vinculo: `${oc.callback}|${oc.discriminador}`,
         });
       }
     }
@@ -452,6 +468,7 @@ export class CallTracker {
       chave: resumo,
       callback: callbackOrigem,
       callee,
+      vinculo: chave,
     });
   }
 
