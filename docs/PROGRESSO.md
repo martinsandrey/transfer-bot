@@ -64,3 +64,7 @@ O usuário rodou o `recon` no Windows (comando `tabela`). Resultado registrado e
 - Simulação, site simulado e testes atualizados para a estrutura confirmada.
 
 **Pendente e bloqueante:** Q1 (o que acontece com o Callback Number na transferência) — ver PERGUNTAS_ABERTAS.
+
+## Linhas com dado faltando (2026-10-16)
+
+Regra do usuário aplicada: a linha com dado faltando é ignorada individualmente, sem parar o sistema (leitor, rastreador e monitor; **107 testes**).

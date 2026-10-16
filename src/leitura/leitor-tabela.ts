@@ -37,7 +37,9 @@ export function parseDuracao(texto: string): number | null {
   return Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3]);
 }
 
-export type ResultadoParse = { ok: true; rows: CallRow[] } | { ok: false; motivo: string };
+export type ResultadoParse =
+  | { ok: true; rows: CallRow[]; ignoradas: number; callbacksIncompletos: string[] }
+  | { ok: false; motivo: string };
 
 /** Converte a tabela bruta em linhas tipadas. Linha incompleta → leitura inválida (nunca "adivinha"). */
 export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
@@ -61,32 +63,39 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
     };
 
   // Evidência (recon 2026-10-16): o cabeçalho tem uma coluna a mais no final (resumo "Manual Call: N Stage 1: N ...")
-  // que as linhas de dados não têm. Por isso o alinhamento é por posição do cabeçalho e aceitamos linhas com MENOS
-  // células que cabeçalhos (desde que cubram as colunas necessárias). Linhas com MAIS células que cabeçalhos podem ter
-  // colunas deslocadas: leitura inválida (nunca adivinha). Linhas curtas demais (ex.: mensagem de tabela vazia) são ignoradas.
+  // que as linhas de dados não têm; o alinhamento é por posição do cabeçalho.
+  // Regra do usuário (2026-10-16): falta de dado numa linha é NORMAL. A linha problemática é simplesmente ignorada,
+  // sem invalidar a leitura nem parar o sistema. Só falta de CABEÇALHO obrigatório invalida a leitura.
+  // Uma linha só é usada se tiver Callback, Callee, Status e Start Time; Call Duration é opcional.
   const necessarias = Math.max(iCb, iCe, iSt, iIn, iDu) + 1;
   const rows: CallRow[] = [];
+  const incompletos = new Set<string>();
+  let ignoradas = 0;
   for (const l of t.linhas) {
-    if (l.celulas.length > cab.length) {
-      return {
-        ok: false,
-        motivo: `linha_com_mais_celulas_que_cabecalhos(cabecalhos=${cab.length},celulas=${l.celulas.length})`,
-      };
+    // mais células que cabeçalhos: colunas podem estar deslocadas, nunca adivinhar
+    if (l.celulas.length > cab.length || l.celulas.length < necessarias) {
+      ignoradas++;
+      continue;
     }
-    if (l.celulas.length < necessarias) continue;
     const c = (i: number): string => l.celulas[i]?.texto ?? "";
     const callback = normalizarTelefone(c(iCb));
+    const callee = normalizarTelefone(c(iCe));
     const status = c(iSt).trim();
-    if (!callback || !status) return { ok: false, motivo: "linha_incompleta" };
+    const inicio = c(iIn).trim();
+    if (!callback || !callee || !status || !inicio) {
+      ignoradas++;
+      if (callback) incompletos.add(callback);
+      continue;
+    }
     rows.push({
       callbackNumber: callback,
-      calleeNumber: normalizarTelefone(c(iCe)),
+      calleeNumber: callee,
       callStatus: status,
-      startTime: c(iIn).trim(),
+      startTime: inicio,
       callDurationSec: iDu === -1 ? null : parseDuracao(c(iDu)),
     });
   }
-  return { ok: true, rows };
+  return { ok: true, rows, ignoradas, callbacksIncompletos: [...incompletos] };
 }
 
 export interface OpcoesLeitor {
@@ -164,8 +173,13 @@ export class LeitorTabelaHtml implements TableReader {
     }
     this.semTabela = 0;
     const r = tabelaParaLinhas(tabela);
-    return r.ok
-      ? { readAt, rows: r.rows, valid: true }
-      : { readAt, rows: [], valid: false, invalidReason: r.motivo };
+    if (!r.ok) return { readAt, rows: [], valid: false, invalidReason: r.motivo };
+    return {
+      readAt,
+      rows: r.rows,
+      valid: true,
+      ...(r.ignoradas > 0 ? { rowsIgnored: r.ignoradas } : {}),
+      ...(r.callbacksIncompletos.length ? { incompleteCallbacks: r.callbacksIncompletos } : {}),
+    };
   }
 }

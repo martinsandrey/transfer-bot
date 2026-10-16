@@ -47,6 +47,7 @@ export function dormirComSinal(ms: number, sinal: AbortSignal): Promise<void> {
  */
 export class Monitor {
   private invalidasSeguidas = 0;
+  private todasIgnoradasSeguidas = 0;
   private falhasSeguidas = 0;
   private ultimaLimpeza = 0;
 
@@ -113,6 +114,24 @@ export class Monitor {
       return;
     }
     this.invalidasSeguidas = 0;
+    if (snapshot.rowsIgnored) {
+      log.debug("Linhas ignoradas nesta leitura", {
+        evento: "linhas_ignoradas",
+        contagem: snapshot.rowsIgnored,
+      });
+    }
+    // Linha com dado faltando é normal e é só ignorada; mas se TODAS as linhas vêm ignoradas por muito tempo, avise.
+    if (snapshot.rows.length === 0 && (snapshot.rowsIgnored ?? 0) > 0) {
+      this.todasIgnoradasSeguidas++;
+      if (this.todasIgnoradasSeguidas === this.op.invalidasParaAlertar) {
+        notificador.alerta(
+          "aviso",
+          `Todas as linhas lidas estão sendo ignoradas há ${this.todasIgnoradasSeguidas} leituras (dados faltando ou layout diferente).`,
+        );
+      }
+    } else {
+      this.todasIgnoradasSeguidas = 0;
+    }
     for (const ev of tracker.ingest(snapshot)) this.tratar(ev);
   }
 

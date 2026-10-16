@@ -20,6 +20,13 @@ export interface TableSnapshot {
   /** `false` = leitura parcial/inconsistente: descartada, não conta como leitura nem como ausência. */
   valid: boolean;
   invalidReason?: string;
+  /** Linhas descartadas individualmente (dado faltando/estrutura inesperada). Normal em pequena quantidade. */
+  rowsIgnored?: number;
+  /**
+   * Callback Numbers de linhas que existem mas estavam com algum dado faltando nesta leitura: o rastreador
+   * "congela" essas chamadas (não conta ausência nem muda estado) em vez de tratá-las como sumidas.
+   */
+  incompleteCallbacks?: string[];
 }
 
 export interface TableReader {

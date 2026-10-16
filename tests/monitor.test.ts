@@ -162,6 +162,23 @@ describe("Monitor", () => {
     expect(m2.notif.alertas.filter((a) => /falhou/.test(a.mensagem))).toHaveLength(1);
   });
 
+  it("linhas ignoradas por dado faltando não param nada; só alerta se TODAS forem ignoradas por muito tempo", async () => {
+    const parcial: TableSnapshot = {
+      readAt: 1,
+      rows: [R("A", "Stage 1 Agent")],
+      valid: true,
+      rowsIgnored: 2,
+      incompleteCallbacks: ["B"],
+    };
+    const m = montar([parcial, parcial, parcial, parcial]);
+    for (let i = 0; i < 4; i++) await m.monitor.passo();
+    expect(m.notif.alertas).toEqual([]);
+    const todas: TableSnapshot = { readAt: 1, rows: [], valid: true, rowsIgnored: 3 };
+    const m2 = montar([todas, todas, todas, todas, todas]);
+    for (let i = 0; i < 5; i++) await m2.monitor.passo();
+    expect(m2.notif.alertas.filter((a) => /ignoradas/.test(a.mensagem))).toHaveLength(1);
+  });
+
   it("executar respeita o sinal de parada", async () => {
     const m = montar([ok([], 1)]);
     const c = new AbortController();

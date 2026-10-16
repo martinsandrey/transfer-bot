@@ -215,10 +215,11 @@ export class CallTracker {
       this.aplicarTransicao(oc, de, status, row, s.readAt, eventos);
     }
 
-    // 3) ausências (não valem em linha de base nem em janela sem leitura, nem para callbacks congelados)
+    // 3) ausências (não valem em linha de base nem em janela sem leitura, nem para chamadas cuja linha veio incompleta)
+    const incompletos = new Set(s.incompleteCallbacks ?? []);
     if (!baseline && !cega) {
       for (const [cb, oc] of this.ativas) {
-        if (porCallback.has(cb)) continue;
+        if (porCallback.has(cb) || incompletos.has(cb)) continue;
         oc.ausencias++;
         if (oc.ausencias > this.op.ausenciaMaxLeituras) this.ativas.delete(cb);
       }

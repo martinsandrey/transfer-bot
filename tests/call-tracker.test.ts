@@ -148,6 +148,26 @@ describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => 
   });
 });
 
+describe("CallTracker com linhas incompletas", () => {
+  it("chamada cuja linha veio incompleta não conta como sumida, mesmo por muitas leituras", () => {
+    const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 2 });
+    alimentar(t, snap([linha("A", S1)]));
+    for (let i = 0; i < 10; i++) {
+      const s = snap([]);
+      t.ingest({ ...s, incompleteCallbacks: ["A"], rowsIgnored: 1 });
+    }
+    expect(t.ocorrenciasAtivas).toBe(1);
+    expect(tipos(alimentar(t, snap([linha("A", S3)])))).toEqual(["transferencia"]);
+  });
+
+  it("sem o aviso de linha incompleta, a mesma ausência encerra a ocorrência", () => {
+    const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 2 });
+    alimentar(t, snap([linha("A", S1)]));
+    alimentar(t, snap([]), snap([]), snap([]));
+    expect(t.ocorrenciasAtivas).toBe(0);
+  });
+});
+
 describe("CallTracker", () => {
   it("Stage 1 → Stage 3 gera uma única transferência, só após N leituras consecutivas", () => {
     const t = tracker();

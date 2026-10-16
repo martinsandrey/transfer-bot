@@ -91,3 +91,12 @@ Marcações no código `TODO(confirmar)` apontam para itens daqui. Respostas gan
 | Q2  | O que são **Stage 2** e **Stage 4**? Existe `Stage 3 Ringing` (ou outro complemento) antes de `Stage 3 Agent`? `Stage 3` pode voltar a `Stage 1`?                                                                                                                                                              | Hoje só `Stage 1 Agent → Stage 3 Agent` gera tarefa; qualquer sequência que envolva Stage 4 gera aviso sonoro                                                                                                                   |
 | Q3  | No texto da mensagem, `Line 1 number` deve ser o Callback Number **do Stage 1** (o funcionário que originou), mesmo que depois o Callback Number mude?                                                                                                                                                         | Define qual número vai para `{{callback number}}`                                                                                                                                                                               |
 | Q4  | Pode rodar agora os demais comandos do recon (`login`, `menu`, `clientes`, `resultado`, `edicao`, `abas`)?                                                                                                                                                                                                     | Sem eles não há login automático, consulta ao cliente nem mensagem real                                                                                                                                                         |
+
+## Decisão do usuário sobre dados faltando (2026-10-16)
+
+Falta de dado numa linha da tabela é normal. A linha problemática é **ignorada sozinha**; o sistema não para nem invalida a leitura. Implementação:
+
+- Uma linha só é usada se tiver Callback Number, Callee Number, Call Status e Start Time (Call Duration é opcional).
+- Linhas curtas demais ou com mais células que cabeçalhos também são só ignoradas.
+- Se a linha incompleta tem Callback Number, a chamada fica "congelada" no rastreador (não conta como sumida nem muda de estado).
+- Só a falta de um **cabeçalho** obrigatório invalida a leitura. Se **todas** as linhas forem ignoradas por muito tempo, há um aviso (possível mudança de layout).
