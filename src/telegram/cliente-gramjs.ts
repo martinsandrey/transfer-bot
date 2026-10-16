@@ -60,6 +60,20 @@ function traduzir(e: unknown): Error {
   return e instanceof Error ? e : new Error(msg);
 }
 
+type Dlg = Awaited<ReturnType<TelegramClient["getDialogs"]>>[number];
+
+/** Grupo comum antigo que foi convertido em supergrupo: continua aparecendo na lista, mas não recebe mais mensagens. */
+function ehGrupoAntigo(d: Dlg): boolean {
+  const e = d.entity;
+  return e instanceof Api.Chat && (e.deactivated === true || e.migratedTo !== undefined);
+}
+
+/** Supergrupo é "channel" no Telegram, mas para a pessoa é um grupo; canal de verdade é só o de transmissão. */
+function tipoDe(d: Dlg): "privado" | "grupo" | "canal" {
+  if (d.isChannel && !d.isGroup) return "canal";
+  return d.isGroup || d.isChannel ? "grupo" : "privado";
+}
+
 export class ClienteGramJS implements ClienteTelegram {
   private constructor(
     private readonly c: TelegramClient,
@@ -133,11 +147,11 @@ export class ClienteGramJS implements ClienteTelegram {
   }
 
   async dialogos(limite: number): Promise<Dialogo[]> {
-    const ds = await this.c.getDialogs({ limit: limite });
+    const ds = (await this.c.getDialogs({ limit: limite })).filter((x) => !ehGrupoAntigo(x));
     return ds.map((d) => ({
       id: String(d.id),
       titulo: d.title ?? "(sem título)",
-      tipo: d.isChannel ? "canal" : d.isGroup ? "grupo" : "privado",
+      tipo: tipoDe(d),
     }));
   }
 
@@ -169,6 +183,7 @@ export class ClienteGramJS implements ClienteTelegram {
     // O Telegram pode devolver a mesma conversa mais de uma vez (ex.: arquivadas): conta uma só por ID.
     const vistos = new Set<string>();
     const ds = todos.filter((x) => {
+      if (ehGrupoAntigo(x)) return false;
       const id = String(x.id);
       if (vistos.has(id)) return false;
       vistos.add(id);
@@ -185,9 +200,7 @@ export class ClienteGramJS implements ClienteTelegram {
         const alvo = normalizarTitulo(d);
         const cand = ds
           .filter((x) => normalizarTitulo(x.title ?? "").includes(alvo))
-          .map(
-            (x) => `${String(x.id)} (${x.isChannel ? "canal" : x.isGroup ? "grupo" : "privado"})`,
-          );
+          .map((x) => `${String(x.id)} (${tipoDe(x)})`);
         throw new FalhaTelegram(`${e.message} [ids: ${cand.join(", ")}]`);
       }
       throw e;
