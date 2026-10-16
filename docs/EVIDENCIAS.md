@@ -32,7 +32,7 @@ Não há dados pessoais neste arquivo: telefones e horários reais foram substit
 ## Ainda sem evidência (ver PERGUNTAS_ABERTAS)
 
 - Como a linha se comporta **na transferência** (mantém o Callback Number? aparece outra linha, com outro Callback Number?).
-- Significado de Stage 2 e Stage 4; se existe `Stage 3 Ringing`.
+- Significado de Stage 2 e Stage 4 (o log de 2026-10-16 mostrou que `Stage 3 Ringing` EXISTE; Stage 2 apareceu uma vez como `1 Agent → 2 Agent`).
 - Tela de login, menu, Customer Data List, resultado de busca e edição do cliente; teste de 2ª aba; duração da sessão.
 
 ## Estrutura geral da página — recon de 2026-10-16 (comandos `clientes`, `resultado`, `edicao`)
@@ -112,3 +112,10 @@ Nenhum dado pessoal aqui. (Aviso: os arquivos enviados continham **nomes reais d
 
 - Ao abrir o site aparece uma verificação em que basta **clicar num botão quadrado** (nada a ler). Depois vem o formulário de login (`username`, `password`, botão `submit`; `verify_key` e `done` escondidos, o primeiro preenchido por script da página). Regra do projeto mantida: **a pessoa clica na verificação**; o programa não a contorna. Depois que o formulário aparece, o login automático preenche usuário/senha do `.env` **uma única vez**.
 - Ainda não temos captura da tela de verificação nem do formulário; os seletores usados vêm dos nomes dos campos do POST (`username`, `password`, `submit`). Se o preenchimento falhar no site real, rodar o recon do login.
+
+**Diário de status de um dia de uso real (log de 2026-10-16, ~2200 mudanças de status) — confirmado**
+
+- **Existe `Stage 3 Ringing`.** Sequência típica de uma transferência: surge uma linha nova em `Stage 3 Ringing` → a linha do `Stage 1 Agent` some ~3 s depois → o Stage 3 passa a `Stage 3 Agent` (5 a 16 s depois de surgir). A mensagem sai quando o Stage 3 chega a `Agent` (3 casos de `Stage 3 Ringing` sumiram sem virar Agent: ninguém atendeu, não houve mensagem).
+- Também há transferência com a linha já surgindo direto em `Stage 3 Agent` (sem Ringing) — os dois caminhos acontecem.
+- Transições vistas: `(novo)→1 Ringing`, `1 Ringing→1 Agent`, `1 Agent→sumiu`, `1 Ringing→sumiu`, `1 Manual Call→sumiu`, `3 Ringing→3 Agent`, `3 Agent→sumiu` e **uma** `1 Agent→2 Agent` (Stage 2 existe; significado ainda desconhecido). Não apareceu Stage 4 no dia.
+- Nota: execuções de `simular.bat` gravam no mesmo arquivo de log (aparecem como transferências fictícias com `***0001`).
