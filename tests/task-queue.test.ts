@@ -131,6 +131,35 @@ describe("TaskQueue", () => {
     expect(estados(fila)).toEqual(["enviada", "enviada", "enviada"]);
   });
 
+  it("fica 'ocupada' só durante a tarefa e faz uma pausa entre tarefas para o monitor voltar a ler", async () => {
+    const eventos: string[] = [];
+    const ref: { fila?: TaskQueue } = {};
+    const busca: CustomerLookup = {
+      find: async () => {
+        eventos.push(`consulta(ocupada=${ref.fila?.ocupada})`);
+        return { tipo: "ok", registro: REG, multiplos: false };
+      },
+    };
+    const m = montar({
+      busca: busca as BuscaFalsa,
+      op: {
+        pausaEntreTarefasMs: 5000,
+        dormir: async (ms) => void eventos.push(`pausa(${ms},ocupada=${ref.fila?.ocupada})`),
+      },
+    });
+    ref.fila = m.fila;
+    const fila = m.fila;
+    fila.enqueue(ev("a"));
+    fila.enqueue(ev("b"));
+    await fila.drenar();
+    expect(eventos).toEqual([
+      "consulta(ocupada=true)",
+      "pausa(5000,ocupada=false)",
+      "consulta(ocupada=true)",
+    ]);
+    expect(fila.ocupada).toBe(false);
+  });
+
   it("0 resultados: ignorada, nada enviado, alerta de erro", async () => {
     const { fila, sender, notif } = montar({ busca: new BuscaFalsa([{ tipo: "nenhum" }]) });
     const t = fila.enqueue(ev());

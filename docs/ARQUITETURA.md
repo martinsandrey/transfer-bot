@@ -350,3 +350,9 @@ Campos ausentes ficam vazios. Código: `src/consulta/consulta-cliente.ts` (`Cons
 
 Depois de ler o cadastro (ou de não achar cliente), o bot **fecha a edição sem confirmar** e **volta para a página Voice Call Status**, onde a tabela de chamadas é lida, para o monitoramento continuar.
 Isso é feito sempre (inclusive com erro, 0 resultados ou cliente errado): `fecharSemSalvar()` + `voltarParaVoiceCallStatus()` no `finally` de `ConsultaDeCliente`. Se não conseguir voltar, avisa (o monitoramento pode ficar cego).
+
+## Anexo — aba única e pausa durante a consulta (2026-10-16, informado pelo usuário)
+
+Clicar no menu lateral **substitui a página atual** (não abre outra aba). Logo: ir à Customer Data List e voltar clicando em **Voice Call Status** acontece na MESMA aba, e sair do formulário de edição por esse clique **não pergunta nada** (nada é confirmado).
+Consequência: durante a consulta a tabela de chamadas não é lida. O `Monitor` (com `pausarDuranteConsulta`) não lê enquanto a fila está `ocupada` — sem confundir a ausência da tabela com sessão expirada — e, ao voltar, o `CallTracker` recebe `marcarJanelaSemLeitura()` (não conta ausências nem avança confirmações).
+A fila faz uma pausa entre tarefas (`pausaEntreTarefasMs`, padrão 3 s) para o monitor ler entre uma consulta e outra. **Risco:** chamadas que começam e terminam inteiramente dentro da consulta não são vistas; a janela `JANELA_TRANSFERENCIA_SEG` (60 s) precisa ser maior que a duração de uma consulta.

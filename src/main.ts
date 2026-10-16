@@ -92,6 +92,7 @@ async function principal(): Promise<void> {
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
   });
   const opMonitor = {
+    pausarDuranteConsulta: true,
     intervaloMs: cfg.monitor.intervaloMs,
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,

@@ -28,11 +28,10 @@ export interface PaginaClientes {
   abrirEdicaoDoPrimeiro(): Promise<void>;
   /** Lê os campos do formulário, sem alterá-los. Campo ausente = `undefined`. */
   lerCampos(): Promise<CamposDoCadastro>;
-  /** Fecha a edição SEM salvar: cancela/fecha o formulário, NUNCA confirma a edição do cliente. */
-  fecharSemSalvar(): Promise<void>;
   /**
-   * Volta para a página **Voice Call Status** (onde a tabela de chamadas é lida), pelo menu. Sempre chamado ao fim da consulta, com
-   * ou sem resultado, para o monitoramento continuar. TODO(confirmar) (R1): como voltar (menu, fechar janela/aba).
+   * Volta para a página **Voice Call Status** clicando no botão "Voice Call Status" do menu lateral esquerdo. Isso SUBSTITUI a página
+   * atual e descarta o formulário de edição SEM confirmar (informado pelo usuário: o sistema não faz nenhuma pergunta ao sair).
+   * Sempre chamado ao fim da consulta, com ou sem resultado, para o monitoramento continuar.
    */
   voltarParaVoiceCallStatus(): Promise<void>;
 }
@@ -49,7 +48,7 @@ export function telefonesIguais(a: string, b: string): boolean {
 
 /**
  * Fluxo combinado com o usuário: Callee Number → Customer Data List → pesquisa por Phone → clica em Edit na linha do cliente
- * → lê o cadastro → fecha sem salvar → volta para a Voice Call Status.
+ * → lê o cadastro → clica em "Voice Call Status" no menu (descarta a edição sem confirmar).
  * - 0 resultados: não gera mensagem. Vários: segue com o primeiro (a fila alerta).
  * - Campo faltando no cadastro: fica VAZIO (regra do usuário); não é erro.
  * - Telefone do cadastro diferente do Callee Number: cliente errado, não envia. Telefone ausente no cadastro: não dá para
@@ -64,12 +63,10 @@ export class ConsultaDeCliente implements CustomerLookup {
   ) {}
 
   async find(calleeNumber: string): Promise<ResultadoBusca> {
-    let editando = false;
     try {
       await this.pagina.abrir();
       const { resultados } = await this.pagina.pesquisarPorTelefone(calleeNumber);
       if (resultados <= 0) return { tipo: "nenhum" };
-      editando = true;
       await this.pagina.abrirEdicaoDoPrimeiro();
       const c = await this.pagina.lerCampos();
       const telefone = (c.phone ?? "").trim();
@@ -88,8 +85,7 @@ export class ConsultaDeCliente implements CustomerLookup {
         },
       };
     } finally {
-      // Sempre: fecha a edição sem confirmar e volta para a Voice Call Status, qualquer que tenha sido o resultado.
-      if (editando) await this.pagina.fecharSemSalvar().catch(() => undefined);
+      // Sempre: volta para a Voice Call Status pelo menu (o que descarta a edição sem confirmar), seja qual for o resultado.
       await this.pagina.voltarParaVoiceCallStatus().catch((e: unknown) => this.aoFalharAoVoltar(e));
     }
   }

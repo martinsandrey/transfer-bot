@@ -130,3 +130,7 @@ Precisamos da evidência de como é esse botão na linha de resultados (rótulo/
 ## Fim da consulta (2026-10-16)
 
 Após preparar a mensagem, voltar para **Voice Call Status** e **nunca confirmar** a edição do cliente (fechar sem salvar). Implementado no contrato `PaginaClientes`. Falta evidência (R1) de como voltar e de como fechar o formulário de edição sem confirmar (botão/ícone de fechar ou cancelar; se pede confirmação ao descartar).
+
+## R1 respondida em parte (2026-10-16)
+
+Clicar no menu lateral substitui a página atual; para voltar, clicar em **Voice Call Status** no menu lateral — sem nenhuma pergunta de confirmação ao sair do formulário de edição. Segue em aberto: como a Customer Data List aparece/abre ao clicar no menu e a captura `resultado`/`edicao` (R2).

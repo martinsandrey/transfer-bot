@@ -65,6 +65,8 @@ export interface OpcoesFila {
   maxTentativasEnvio: number;
   backoffMs: number;
   ttlTarefasMs: number;
+  /** Pausa entre uma tarefa e a próxima, para o monitor voltar a ler a tabela de chamadas entre as consultas (padrão 3 s). */
+  pausaEntreTarefasMs?: number;
   agora?: () => number;
   dormir?: (ms: number) => Promise<void>;
   /** Prévia no console (modo observação). Pode conter dados do cliente: nunca vai para o log. */
@@ -82,6 +84,7 @@ export interface DepsFila {
 export class TaskQueue {
   private readonly tarefas = new Map<string, TarefaTransferencia>();
   private drenando: Promise<void> | null = null;
+  private processando = false;
   private seq = 0;
 
   constructor(
@@ -94,6 +97,11 @@ export class TaskQueue {
   }
   private dormir(ms: number): Promise<void> {
     return (this.op.dormir ?? ((m) => new Promise<void>((r) => setTimeout(r, m))))(ms);
+  }
+
+  /** `true` enquanto uma tarefa está sendo processada (consulta ao cliente ocupa a aba); `false` nas pausas entre tarefas. */
+  get ocupada(): boolean {
+    return this.processando;
   }
 
   get todas(): readonly TarefaTransferencia[] {
@@ -151,9 +159,13 @@ export class TaskQueue {
   }
 
   private async laco(): Promise<void> {
+    let primeira = true;
     for (;;) {
       const proxima = this.todas.find((t) => t.estado === "na_fila");
       if (!proxima) return;
+      if (primeira === false) await this.dormir(this.op.pausaEntreTarefasMs ?? 3000);
+      primeira = false;
+      this.processando = true;
       try {
         await this.processar(proxima);
       } catch (e) {
@@ -164,6 +176,8 @@ export class TaskQueue {
         });
         if (!ESTADOS_TERMINAIS.has(proxima.estado))
           this.finalizarComoFalha(proxima, "erro_inesperado");
+      } finally {
+        this.processando = false;
       }
     }
   }

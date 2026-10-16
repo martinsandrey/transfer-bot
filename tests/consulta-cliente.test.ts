@@ -37,9 +37,6 @@ class PaginaFalsa implements PaginaClientes {
     this.passo("lerCampos");
     return this.campos;
   }
-  async fecharSemSalvar() {
-    this.passo("fecharSemSalvar");
-  }
   async voltarParaVoiceCallStatus() {
     this.passo("voltarParaVoiceCallStatus");
   }
@@ -62,7 +59,7 @@ describe("telefonesIguais", () => {
 });
 
 describe("ConsultaDeCliente", () => {
-  it("fluxo completo: pesquisa pelo Callee, lê o cadastro, fecha sem salvar; copia só com trim", async () => {
+  it("fluxo completo: pesquisa pelo Callee, lê o cadastro, volta pelo menu (sem confirmar a edição); copia só com trim", async () => {
     const p = new PaginaFalsa(1, COMPLETO);
     const r = await new ConsultaDeCliente(p).find("011900000101");
     expect(r).toEqual({
@@ -81,7 +78,6 @@ describe("ConsultaDeCliente", () => {
       "pesquisar:011900000101",
       "abrirEdicao",
       "lerCampos",
-      "fecharSemSalvar",
       "voltarParaVoiceCallStatus",
     ]);
   });
@@ -114,18 +110,18 @@ describe("ConsultaDeCliente", () => {
     expect(r).toMatchObject({ tipo: "ok", multiplos: true });
   });
 
-  it("telefone do cadastro diferente do Callee: cliente errado, e ainda fecha sem salvar", async () => {
+  it("telefone do cadastro diferente do Callee: cliente errado, e ainda volta para a Voice Call Status", async () => {
     const p = new PaginaFalsa(1, { ...COMPLETO, phone: "011911111111" });
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
       tipo: "telefone_divergente",
     });
-    expect(p.chamadas.slice(-2)).toEqual(["fecharSemSalvar", "voltarParaVoiceCallStatus"]);
+    expect(p.chamadas.at(-1)).toBe("voltarParaVoiceCallStatus");
   });
 
-  it("falha durante a leitura: repassa o erro e fecha a edição sem salvar", async () => {
+  it("falha durante a leitura: repassa o erro e volta para a Voice Call Status", async () => {
     const p = new PaginaFalsa(1, COMPLETO, "lerCampos");
     await expect(new ConsultaDeCliente(p).find("011900000101")).rejects.toThrow(/navegação/);
-    expect(p.chamadas.slice(-2)).toEqual(["fecharSemSalvar", "voltarParaVoiceCallStatus"]);
+    expect(p.chamadas.at(-1)).toBe("voltarParaVoiceCallStatus");
   });
 
   it("o contrato com a página tem só ações de leitura/navegação (nada de salvar, atualizar ou excluir)", () => {
@@ -135,7 +131,6 @@ describe("ConsultaDeCliente", () => {
     expect(metodos).toEqual([
       "abrir",
       "abrirEdicaoDoPrimeiro",
-      "fecharSemSalvar",
       "lerCampos",
       "pesquisarPorTelefone",
       "voltarParaVoiceCallStatus",

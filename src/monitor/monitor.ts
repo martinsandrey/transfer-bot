@@ -13,6 +13,12 @@ export interface OpcoesMonitor {
   falhasParaAlertar: number;
   /** A cada quanto tempo limpar memória (tracker/fila). */
   limpezaMs: number;
+  /**
+   * A consulta ao cliente TROCA a página atual (menu → Customer Data List), então a tabela de chamadas não pode ser lida enquanto ela
+   * roda. Com `true`, o monitor não lê durante a consulta (sem confundir com sessão expirada) e, ao voltar, o rastreador não conta
+   * ausências nem avança confirmações. Chamadas que começam e terminam inteiramente dentro da consulta não são vistas.
+   */
+  pausarDuranteConsulta?: boolean;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -47,6 +53,7 @@ export function dormirComSinal(ms: number, sinal: AbortSignal): Promise<void> {
  */
 export class Monitor {
   private invalidasSeguidas = 0;
+  private emPausa = false;
   private todasIgnoradasSeguidas = 0;
   private falhasSeguidas = 0;
   private ultimaLimpeza = 0;
@@ -74,7 +81,15 @@ export class Monitor {
 
   /** Uma leitura. Exposto para testes. */
   async passo(agora: () => number = Date.now): Promise<void> {
-    const { reader, tracker, log, notificador } = this.deps;
+    const { reader, tracker, log, notificador, fila } = this.deps;
+    if (this.op.pausarDuranteConsulta && fila?.ocupada) {
+      this.emPausa = true; // a aba está na consulta ao cliente: não há tabela de chamadas para ler agora
+      return;
+    }
+    if (this.emPausa) {
+      this.emPausa = false;
+      tracker.marcarJanelaSemLeitura(); // voltamos de uma janela sem leitura: preserva as chamadas conhecidas
+    }
     let snapshot;
     try {
       snapshot = await reader.read();

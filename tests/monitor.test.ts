@@ -169,6 +169,59 @@ describe("Monitor", () => {
     expect(m2.notif.alertas.filter((a) => /falhou/.test(a.mensagem))).toHaveLength(1);
   });
 
+  it("durante a consulta (aba ocupada) o monitor NÃO lê a tabela nem confunde com sessão expirada; ao voltar preserva as chamadas", async () => {
+    let libera!: () => void;
+    const trava = new Promise<void>((r) => (libera = r));
+    const lento: CustomerLookup = {
+      find: async () => {
+        await trava;
+        return {
+          tipo: "ok",
+          registro: { nome: "N", cpf: "C", location: "L", age: "1", phone: "5521900000101" },
+          multiplos: false,
+        };
+      },
+    };
+    // 1: Stage 1 Agent; 2: transferência (linha do Stage 3 com o mesmo Callee); depois, leituras que NÃO devem acontecer na pausa
+    const m = montar(
+      [
+        ok([R("A", "Stage 1 Agent")], 1),
+        ok([R("C", "Stage 3 Agent")], 2),
+        ok([R("C", "Stage 3 Agent")], 3),
+        new SessaoExpiradaError(),
+      ],
+      lento,
+    );
+    const monitor = new Monitor(
+      {
+        reader: m.reader,
+        tracker: m.tracker,
+        fila: m.fila,
+        log: { debug() {}, info() {}, warn() {}, error() {} },
+        notificador: m.notif,
+      },
+      {
+        intervaloMs: 1,
+        invalidasParaAlertar: 99,
+        falhasParaAlertar: 99,
+        limpezaMs: 1e9,
+        pausarDuranteConsulta: true,
+      },
+    );
+    await monitor.passo();
+    await monitor.passo();
+    await monitor.passo(); // confirma a transferência → tarefa fica "pesquisando" (aba ocupada)
+    expect(m.fila.ocupada).toBe(true);
+    const leiturasAntes = m.reader.leituras;
+    await monitor.passo();
+    await monitor.passo();
+    expect(m.reader.leituras).toBe(leiturasAntes); // pausado: não leu nada
+    expect(m.notif.alertas.some((a) => /expirada/i.test(a.mensagem))).toBe(false);
+    libera();
+    await m.fila.drenar();
+    expect(m.fila.ocupada).toBe(false);
+  });
+
   it("linhas ignoradas por dado faltando não param nada; só alerta se TODAS forem ignoradas por muito tempo", async () => {
     const parcial: TableSnapshot = {
       readAt: 1,
