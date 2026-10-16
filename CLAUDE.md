@@ -54,6 +54,11 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
 9. **Funciona no Windows** (caminhos, encoding UTF-8, `.bat` em CRLF) e é testável no Linux.
 10. Esperas por condição, nunca `sleep` fixo como mecanismo principal. Seletores estáveis (id, name, data-*, ARIA, texto).
 
+## Fluxo de git
+
+O usuário autorizou (2026-10-16, de forma permanente) o **push direto na `main`**, sem PR e sem pedir confirmação a cada vez.
+Fazer commit, rodar lint/typecheck/testes antes, e enviar com `git push origin HEAD:main` (fast-forward; se a `main` tiver divergido, fazer merge dela antes). Manter também o branch da sessão em dia.
+
 ## Convenções
 
 TypeScript strict, ESM, imports com extensão `.js`. Testes em `tests/` (vitest). Poucas dependências, versões **exatas** (`.npmrc save-exact`).
