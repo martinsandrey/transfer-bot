@@ -78,7 +78,8 @@ Campos que não existirem no cadastro ficam vazios. `Line 1 number` é o Callbac
 - Se o endereço começa com `http://` (sem `s`), usuário e senha trafegam **sem criptografia** na rede. Prefira `https://` se existir.
 - Logs em `%LOCALAPPDATA%\TransferBot\logs`: telefones mascarados e **nenhum** dado de cliente (nome, CPF, localização, idade).
 - O programa só **lê** o site: bloqueia qualquer requisição de escrita/exclusão do cadastro e nunca clica em salvar, atualizar ou excluir.
-- Não há histórico de transferências em arquivo ou banco; o estado fica só na memória (o Telegram é o histórico).
+- Exceto pelos registros abaixo, não há histórico em arquivo ou banco: o estado fica na memória e o Telegram é o histórico.
+- **Registros das mensagens:** a pasta `registros\` (ao lado do programa) recebe `transferencias-concluidas.txt` e `ligacoes-5min.txt`, com o texto de cada mensagem enviada (em modo observação, marcada como "não enviada"). **Esses arquivos contêm dados de clientes**: não os compartilhe nem os envie ao git (a pasta já é ignorada). Mude a pasta com `PASTA_REGISTROS` ou desligue com `REGISTRAR_MENSAGENS=false`. Os arquivos só crescem; apague ou arquive de tempos em tempos.
 - A verificação do botão quadrado e qualquer 2FA são sempre feitos por você.
 
 ## Solução de problemas

@@ -110,6 +110,13 @@ export interface DepsFila {
   sender: MessageSender;
   /** Enviador do segundo grupo (ligações longas). Sem ele, tarefas `longa` não são aceitas. */
   senderLonga?: MessageSender;
+  /** Chamado quando a mensagem foi enviada (ou, em observação, mostrada): grava no registro em arquivo. */
+  registrar?: (r: {
+    tipo: TipoTarefa;
+    estado: "enviada" | "observada";
+    texto: string;
+    reaproveitada: boolean;
+  }) => void;
   log: Logger;
   notificador: Notificador;
 }
@@ -185,8 +192,19 @@ export class TaskQueue {
   private mover(t: TarefaTransferencia, novo: EstadoTarefa, motivo?: string): void {
     if (!TRANSICOES[t.estado].includes(novo))
       throw new Error(`Transição de tarefa inválida: ${t.estado} → ${novo}`);
-    if ((novo === "enviada" || novo === "observada") && t.mensagem !== undefined)
+    if ((novo === "enviada" || novo === "observada") && t.mensagem !== undefined) {
       this.guardarMensagemLonga(t, t.mensagem);
+      try {
+        this.deps.registrar?.({
+          tipo: t.tipo,
+          estado: novo,
+          texto: t.mensagem,
+          reaproveitada: t.reaproveitada === true,
+        });
+      } catch {
+        /* o registro nunca atrapalha o envio */
+      }
+    }
     t.estado = novo;
     if (motivo !== undefined) t.motivo = motivo;
     t.historico.push({ estado: novo, em: this.agora() });

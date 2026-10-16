@@ -16,6 +16,9 @@ sessoes/
 *.session
 *.sqlite
 
+# registros das mensagens (contêm dados de clientes)
+registros/
+
 # logs
 logs/
 *.log

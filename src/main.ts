@@ -17,6 +17,7 @@ import { criarConstrutor, ErroDeModelo } from "./mensagem/construtor.js";
 import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
+import { RegistroEmArquivo } from "./registro/registro-arquivo.js";
 import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
 import { EnviadorTelegram } from "./telegram/enviador-telegram.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
@@ -153,6 +154,14 @@ async function principal(): Promise<void> {
       ? "Login automático ligado: se aparecer a verificação (botão para clicar), clique você; o usuário e a senha do .env são preenchidos sozinhos, uma única vez."
       : "Login manual: faça o login na janela do navegador.",
   );
+  const registro = cfg.pastaRegistros
+    ? new RegistroEmArquivo(cfg.pastaRegistros, () =>
+        console.error(
+          `Aviso: não consegui gravar o registro de mensagens em "${cfg.pastaRegistros}". O envio continua normalmente.`,
+        ),
+      )
+    : undefined;
+  if (registro) console.log(`Registro das mensagens em: ${cfg.pastaRegistros}`);
   let sender: MessageSender = new EnviadorConsole();
   let senderLonga: MessageSender | undefined;
   let clienteTg: ClienteGramJS | undefined;
@@ -264,6 +273,7 @@ async function principal(): Promise<void> {
         construtor,
         sender,
         ...(senderLonga ? { senderLonga } : {}),
+        ...(registro ? { registrar: (r) => registro.registrar(r) } : {}),
         log,
         notificador,
       },

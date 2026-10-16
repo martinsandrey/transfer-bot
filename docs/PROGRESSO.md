@@ -145,3 +145,7 @@ Decisão do usuário: se a ligação já fez 5 min no Stage 1 e a mensagem foi *
 ## Mensagem de 5 min editável (2026-10-17)
 
 Pedido do usuário: poder **editar** a mensagem no grupo de 5 min e a versão editada ir ao grupo das transferências, sem rótulo de "encaminhada". Implementação: na transferência o programa **relê a mensagem no grupo de 5 min** (pelo ID guardado do envio, `getMessages`) e envia esse texto atual como mensagem nova ao grupo das transferências. Apagada/ilegível → usa o texto original guardado em memória e avisa. Optou-se por reler+enviar (e não pela API de encaminhar com `drop_author`) porque funciona também em grupos com conteúdo protegido e usa o mesmo caminho de envio já validado. Limite: só reflete edições feitas **até a transferência** (depois disso, a mensagem do grupo de transferências já foi enviada); se o envio de 5 min foi confirmado só pela verificação (sem ID), usa o texto original. 208 testes.
+
+## Registro em .txt (2026-10-17)
+
+`registros/transferencias-concluidas.txt` e `registros/ligacoes-5min.txt` (UTF-8, só acrescenta) recebem o texto de cada mensagem enviada (em observação, marcada como não enviada; mensagens reaproveitadas do grupo de 5 min levam a marca). Gravação desacoplada da fila (`registrar`) e à prova de falha. Config: `REGISTRAR_MENSAGENS` (padrão true), `PASTA_REGISTROS` (padrão `registros`). 213 testes.

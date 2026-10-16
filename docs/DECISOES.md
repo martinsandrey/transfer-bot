@@ -121,3 +121,7 @@ login; sem tracing/screenshots por padrão; códigos de verificação só no con
 ## D10 — Distribuição no Windows — **DECIDIDO (2026-10-16): ZIP/clone do GitHub + Node instalado**
 
 Recomendação adotada: o usuário instala o Node LTS uma vez e usa `instalar.bat`/`iniciar.bat`/`atualizar.bat` (`git pull` quando há Git; senão, ZIP novo por cima mantendo o `.env`). Motivos: uma única máquina, atualizações frequentes durante a validação, menos peso e menos alarmes de antivírus. Alternativa descartada por ora: ZIP gerado por Actions com Node portátil e `node_modules` (maior, desatualiza rápido). Sem executável único (o antivírus costuma bloquear e o Playwright precisa do navegador).
+
+## D11 — Registro das mensagens em .txt — **DECIDIDO (2026-10-17), exceção às regras 4/5**
+
+Pedido do usuário: dois arquivos de texto com todas as mensagens — `transferencias-concluidas.txt` e `ligacoes-5min.txt`. Isso contraria a regra original "sem histórico persistente" e põe dados de clientes em arquivo; foi aceito porque o programa roda só na máquina do usuário. Salvaguardas: pasta `registros/` ignorada pelo git; configurável/desligável; só acrescenta; falha de gravação nunca impede o envio; **nada disso vai para o log**; cada bloco traz data/hora e se foi enviada ou só observada. Riscos: arquivo cresce sem limite e contém dados pessoais em texto puro (proteger a pasta; considerar rotação/limpeza periódica, ainda não implementada).

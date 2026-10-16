@@ -42,11 +42,13 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
 2. **Somente leitura no site**: nunca clicar em Salvar/Save/Update/Delete ou equivalentes; nunca alterar cadastro.
 3. **Sem segurança burlada**: não contornar captcha/2FA/limites. Login automático = só preencher o formulário, **uma tentativa**;
    captcha/falha → pausa, som e espera login manual. Sem loops de tentativa.
-4. **Sem persistência de transferências**: proibido SQLite/JSON de histórico. Estado só em memória; o Telegram é o histórico.
-   Persistência local permitida: sessão (perfil do navegador, sessão do Telegram) e configuração.
+4. **Sem banco/histórico estruturado de transferências**: proibido SQLite/JSON de histórico; o estado fica em memória e o Telegram é o histórico.
+   **Exceção autorizada pelo usuário (2026-10-17):** dois arquivos de texto (`registros/transferencias-concluidas.txt` e `registros/ligacoes-5min.txt`,
+   só acrescentando) com os textos das mensagens enviadas; a pasta é ignorada pelo git, configurável (`PASTA_REGISTROS`) e desligável (`REGISTRAR_MENSAGENS=false`).
+   Persistência local permitida: sessão (perfil do navegador, sessão do Telegram), configuração e esses registros.
 5. **Segredos/PII**: nada de senha, token, api_hash, telefone ou dados de cliente no código, testes, commits ou logs.
    `.env` ignorado pelo git; `.env.example` só com placeholders. Códigos 2FA/Telegram digitados no console, nunca gravados.
-   Sessões/perfis fora do repositório. Logs mascaram telefone (`***1234`) e CPF e **nunca** registram nome, CPF, localização, idade.
+   Sessões/perfis fora do repositório. Logs mascaram telefone (`***1234`) e CPF e **nunca** registram nome, CPF, localização, idade (os registros .txt acima são a única exceção, e não são logs).
 6. **Tudo configurável sem recompilar** (URL, usuário, senha, intervalos, modo), validado na inicialização, erros em português.
 7. **Modo observação é o padrão**; envio real só com `SEND_MODE=live` **e** confirmação digitada a cada inicialização.
 8. **Identidade da chamada** = Callback Number + Start Time/Callee (distingue ligações sucessivas). Dedup por _ocorrência_, nunca só por
