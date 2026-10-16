@@ -1,12 +1,13 @@
 import { carregarConfig, ErroDeConfiguracao } from "../config/config.js";
 import { descreverFalhaDeEnvio } from "../fila/task-queue.js";
+import { normalizarTitulo } from "./cliente.js";
 import { ClienteGramJS, sessaoExiste } from "./cliente-gramjs.js";
 import { EnviadorTelegram } from "./enviador-telegram.js";
 
 const AJUDA = `
 Uso: telegram.bat <comando>
   login   faz o login da sua conta pessoal (telefone, código e senha 2FA digitados aqui; nada disso é gravado, só a sessão)
-  chats   lista suas conversas com o ID para usar em TELEGRAM_DESTINO
+  chats   lista suas conversas com o ID para usar em TELEGRAM_DESTINO (opcional: um trecho do nome para filtrar, ex.: telegram.bat chats Line)
   teste   envia UMA mensagem de teste (sem dados de cliente) para o TELEGRAM_DESTINO
 `;
 
@@ -36,7 +37,12 @@ async function principal(): Promise<void> {
       );
     } else if (comando === "chats") {
       console.log("\nID (use em TELEGRAM_DESTINO) | tipo | título");
-      for (const d of await cliente.dialogos(50)) console.log(`${d.id} | ${d.tipo} | ${d.titulo}`);
+      const filtro = normalizarTitulo(process.argv[3] ?? "");
+      const lista = (await cliente.dialogos(500)).filter((d) =>
+        normalizarTitulo(d.titulo).includes(filtro),
+      );
+      for (const d of lista) console.log(`${d.id} | ${d.tipo} | ${d.titulo}`);
+      if (lista.length === 0) console.log("(nenhuma conversa com esse trecho no nome)");
       console.log("\nPara as suas Mensagens Salvas use: TELEGRAM_DESTINO=me\n");
     } else {
       const envio = new EnviadorTelegram(cliente, {

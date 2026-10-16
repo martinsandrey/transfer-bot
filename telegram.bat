@@ -18,6 +18,7 @@ echo.
 set /p ESC=Digite 1, 2 ou 3 e Enter: 
 if "%ESC%"=="1" set CMD=login
 if "%ESC%"=="2" set CMD=chats
+if "%ESC%"=="2" set /p FILTRO=Parte do nome em letras comuns, ex. Line 1 (Enter = todas): 
 if "%ESC%"=="3" set CMD=teste
 if "%CMD%"=="" (
   echo Opcao invalida.
@@ -25,5 +26,5 @@ if "%CMD%"=="" (
   exit /b 1
 )
 :executar
-call npm run telegram -- %CMD%
+call npm run telegram -- %CMD% "%FILTRO%"
 pause
