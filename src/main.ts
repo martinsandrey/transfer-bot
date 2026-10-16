@@ -8,7 +8,7 @@ import {
   type AppConfig,
 } from "./config/config.js";
 import type { MessageSender } from "./dominio/tipos.js";
-import { TaskQueue } from "./fila/task-queue.js";
+import { TaskQueue, descreverFalhaDeEnvio } from "./fila/task-queue.js";
 import { LeitorTabelaHtml } from "./leitura/leitor-tabela.js";
 import { criarLogger } from "./log/logger.js";
 import { AdaptadorLoginDoSite } from "./login/adaptador-site.js";
@@ -169,8 +169,11 @@ async function principal(): Promise<void> {
         { apiId: apiId as number, apiHash: apiHash as string, arquivoSessao },
         { loginInterativo: false },
       );
+      await clienteTg.validarDestino(destino);
     } catch (e) {
-      console.error(`\n${e instanceof Error ? e.message : String(e)}\n`);
+      const motivo = e instanceof Error ? e.message : String(e);
+      console.error(`\nTelegram: ${descreverFalhaDeEnvio(motivo)}\n`);
+      await clienteTg?.encerrar();
       process.exitCode = 1;
       rl.close();
       return;

@@ -146,8 +146,23 @@ export class ClienteGramJS implements ClienteTelegram {
   }
 
   /** "me" = Mensagens Salvas; número = ID; @usuario/telefone/link; senão, o TÍTULO de uma das suas conversas (qualquer idioma). */
+  private readonly resolvidos = new Map<string, string | number | Api.TypeEntityLike>();
+
+  /** Resolve o destino já na inicialização (falha cedo e com motivo claro, em vez de só na primeira transferência). */
+  async validarDestino(destino: string): Promise<void> {
+    await this.entidade(destino);
+  }
+
   private async entidade(destino: string): Promise<string | number | Api.TypeEntityLike> {
     const d = destino.trim();
+    const guardado = this.resolvidos.get(d);
+    if (guardado !== undefined) return guardado;
+    const r = await this.resolver(d);
+    this.resolvidos.set(d, r);
+    return r;
+  }
+
+  private async resolver(d: string): Promise<string | number | Api.TypeEntityLike> {
     if (!destinoEhTitulo(d)) return /^-?\d+$/.test(d) ? Number(d) : d;
     const ds = await this.c.getDialogs({ limit: 500 });
     const i = escolherPorTitulo(
