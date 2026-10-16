@@ -18,6 +18,7 @@ import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
 import { criarNotificador } from "./notificador/notificador.js";
+import { BuscaSemCadastro } from "./consulta/sem-cadastro.js";
 import { BuscaSimulada, LeitorSimulado } from "./simulacao/cenario.js";
 
 const simulado = process.argv.includes("--simular");
@@ -124,7 +125,7 @@ async function principal(): Promise<void> {
 
   // ---- modo real (parcial): detecção de transferências; consulta ao cliente e Telegram ainda não existem ----
   console.log(
-    "ATENÇÃO: nesta versão o programa só DETECTA transferências (consulta ao cliente e Telegram ainda não implementados).",
+    "ATENÇÃO: a consulta ao cadastro do cliente e o envio ao Telegram ainda não existem. Ao detectar uma transferência, o programa mostra aqui a mensagem preparada (só com o telefone do cliente e o Callback Number; NAME, CPF, Location e Age ficam em branco) e NÃO envia nada.",
   );
   if (cfg.site.loginAutomatico) {
     console.log(
@@ -167,8 +168,34 @@ async function principal(): Promise<void> {
       .catch(() => console.warn("Não consegui abrir o endereço configurado em SITE_URL."));
     await garantir();
     ajuda();
+    const fila = new TaskQueue(
+      {
+        lookup: new BuscaSemCadastro(),
+        construtor,
+        sender: new EnviadorConsole(),
+        log,
+        notificador,
+      },
+      {
+        modo: "observacao",
+        maxTentativasConsulta: 1,
+        maxTentativasEnvio: 1,
+        backoffMs: 200,
+        ttlTarefasMs: 3_600_000,
+        previa: (t) => {
+          const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+          console.log(
+            `
+===== TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada =====
+${t}
+===== NÃO ENVIADA (Telegram não conectado; NAME/CPF/Location/Age em branco: cadastro ainda não consultado) =====
+`,
+          );
+        },
+      },
+    );
     const monitor = new Monitor(
-      { reader: leitor, tracker, fila: null, log, notificador, aoPerderSessao: garantir },
+      { reader: leitor, tracker, fila, log, notificador, aoPerderSessao: garantir },
       opMonitor,
     );
     rl.on("line", (l) => {

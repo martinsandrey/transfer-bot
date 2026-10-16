@@ -162,13 +162,11 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: mascararTelefone(ev.callback),
       });
-      if (!fila) {
-        notificador.alerta(
-          "aviso",
-          "Transferência detectada (a consulta ao cliente ainda não está disponível nesta versão).",
-        );
-        return;
-      }
+      notificador.alerta(
+        "aviso",
+        `Transferência detectada (funcionário ${mascararTelefone(ev.callback)}).`,
+      );
+      if (!fila) return;
       if (fila.enqueue(ev)) void fila.drenar();
     } else if (ev.tipo === "aviso") {
       log.warn("Aviso do rastreador", {

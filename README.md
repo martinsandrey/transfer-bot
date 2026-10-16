@@ -23,7 +23,7 @@ Programa para Windows que monitora a tabela de chamadas de um sistema web, detec
 
 - **`simular.bat`** — roda um cenário **fictício** (não acessa o site) para ver o programa funcionando.
 - **`iniciar.bat`** — abre uma janela do Edge **exclusiva do bot** (não mexe no seu Edge pessoal). Faça o login nela e abra a tela da tabela
-  de chamadas. O programa passa a monitorar e avisa (com som) quando detecta uma transferência. Para parar: `Ctrl+C` ou digite `sair`.
+  de chamadas. O programa passa a monitorar. Quando detecta uma transferência, avisa com som e **mostra no console a mensagem preparada** (por enquanto só com `Ph` e `Line 1 number`; `NAME`, `CPF`, `Location` e `Age` ficam em branco, porque a consulta ao cadastro ainda não existe). Nada é enviado. Para parar: `Ctrl+C` ou digite `sair`.
 - **`recon.bat`** — ferramenta de reconhecimento do site (gera um relatório **anonimizado** para o desenvolvimento). Roteiro: [`docs/RECONHECIMENTO.md`](docs/RECONHECIMENTO.md).
 
 ## Como trocar URL, usuário e senha
