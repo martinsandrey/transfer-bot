@@ -16,6 +16,8 @@ import { criarConstrutor, ErroDeModelo } from "./mensagem/construtor.js";
 import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
+import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
+import { EnviadorTelegram } from "./telegram/enviador-telegram.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
 import { criarNotificador } from "./notificador/notificador.js";
 import { ConsultaDeCliente } from "./consulta/consulta-cliente.js";
@@ -63,10 +65,8 @@ async function principal(): Promise<void> {
     return;
   }
 
-  if (cfg.modo === "live") {
-    console.error(
-      "\nSEND_MODE=live ainda não pode ser usado: o envio ao Telegram não foi implementado (Fase 5).\nUse SEND_MODE=observacao.\n",
-    );
+  if (cfg.modo === "live" && simulado) {
+    console.error("\nA simulação nunca envia de verdade. Use SEND_MODE=observacao.\n");
     process.exitCode = 1;
     return;
   }
@@ -136,12 +136,56 @@ async function principal(): Promise<void> {
 
   // ---- modo real: detecção + consulta ao cadastro (somente leitura); o Telegram ainda não existe ----
   console.log(
-    "ATENÇÃO: o envio ao Telegram ainda não existe. Ao detectar uma transferência, o programa consulta o cliente na Customer Data List (só leitura), mostra aqui a mensagem preparada e NÃO envia nada.",
+    cfg.modo === "live"
+      ? "MODO ENVIO REAL: ao detectar uma transferência, o programa consulta o cliente (só leitura) e ENVIA a mensagem pelo Telegram."
+      : "Modo observação: ao detectar uma transferência, o programa consulta o cliente (só leitura), mostra aqui a mensagem preparada e NÃO envia nada.",
   );
   if (cfg.site.loginAutomatico) {
     console.log(
       "Aviso: o login automático ainda não está disponível (depende da evidência do site). O login será manual.",
     );
+  }
+  let sender: MessageSender = new EnviadorConsole();
+  let clienteTg: ClienteGramJS | undefined;
+  if (cfg.modo === "live") {
+    const { apiId, apiHash, destino, timeoutEnvioMs, arquivoSessao } = cfg.telegram;
+    const resposta = await new Promise<string>((r) =>
+      rl.question(
+        `\nENVIO REAL ativado. As mensagens serão enviadas para "${destino}" no Telegram.\nDigite ENVIAR (em maiúsculas) para confirmar, ou qualquer outra coisa para cancelar: `,
+        r,
+      ),
+    );
+    if (resposta.trim() !== "ENVIAR") {
+      console.log("Cancelado. Nada foi enviado. Para só observar, use SEND_MODE=observacao.");
+      rl.close();
+      return;
+    }
+    try {
+      clienteTg = await ClienteGramJS.conectar(
+        { apiId: apiId as number, apiHash: apiHash as string, arquivoSessao },
+        { loginInterativo: false },
+      );
+    } catch (e) {
+      console.error(`\n${e instanceof Error ? e.message : String(e)}\n`);
+      process.exitCode = 1;
+      rl.close();
+      return;
+    }
+    const telegram = new EnviadorTelegram(clienteTg, {
+      destino,
+      timeoutEnvioMs,
+      esperaMaximaFloodMs: 60_000,
+    });
+    sender = {
+      send: async (texto, chave) => {
+        const r = await telegram.send(texto, chave);
+        const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+        if (r.tipo === "enviada") console.log(`[${hora}] Mensagem enviada ao Telegram.`);
+        return r;
+      },
+      verify: (chave) => telegram.verify(chave),
+    };
+    console.log("Telegram conectado.");
   }
   const host = await iniciarNavegador(cfg);
   host.contexto.on("close", encerrar);
@@ -196,14 +240,14 @@ async function principal(): Promise<void> {
           },
         ),
         construtor,
-        sender: new EnviadorConsole(),
+        sender,
         log,
         notificador,
       },
       {
-        modo: "observacao",
+        modo: cfg.modo,
         maxTentativasConsulta: 2,
-        maxTentativasEnvio: 1,
+        maxTentativasEnvio: 2,
         backoffMs: 200,
         ttlTarefasMs: 3_600_000,
         previa: (t) => {
@@ -232,6 +276,7 @@ ${t}
     if (!sinal.signal.aborted) console.error("Erro:", e instanceof Error ? e.message : e);
   } finally {
     rl.close();
+    await clienteTg?.encerrar();
     await host.encerrar();
   }
 }

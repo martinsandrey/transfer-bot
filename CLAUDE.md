@@ -14,7 +14,7 @@ Desenvolvimento na nuvem (Linux), sem acesso ao site real: tudo é testado com s
 
 ## Fases (uma por vez; só avançar com aprovação explícita do usuário)
 
-1 Investigação/arquitetura (**feita**; Fase 2 em andamento — ver PROGRESSO) · 2 Navegador/login/leitura · 3 Monitoramento e fila (simulado) ·
+1 Investigação/arquitetura (**feita**; fases 2–5 implementadas, validação [WIN] em andamento — ver PROGRESSO) · 2 Navegador/login/leitura · 3 Monitoramento e fila (simulado) ·
 4 Customer Data List + mensagem · 5 Telegram · 6 Integração e E2E · 7 Instalação Windows. Detalhes: `docs/PLANO_DE_FASES.md`.
 Ao fim de cada fase: testes verdes, commit, push no branch da sessão, atualizar `docs/PROGRESSO.md`, relatório curto, **parar**.
 

@@ -49,14 +49,14 @@ Marcações no código `TODO(confirmar)` apontam para itens daqui. Respostas gan
 
 ## Dependem de decisão do usuário (Fases 5–7)
 
-| ID    | Dúvida                                                                                                         | Fase |
-| ----- | -------------------------------------------------------------------------------------------------------------- | ---- |
-| P-TG2 | Destino: chat privado, grupo ou canal? Chat de teste disponível?                                               | 5    |
-| P-TG3 | Volume esperado de mensagens (por hora/dia) e horários                                                         | 5    |
-| P-TG4 | Se conta pessoal: aceita criar `api_id`/`api_hash` em my.telegram.org e fazer login por código/2FA no console? | 5    |
-| P-ED1 | Edge permitido (ver P-W1)                                                                                      | 2    |
-| P-D1  | Distribuição (Fase 7): ZIP do GitHub + Node instalado, ou pacote com Node portátil? (recomendação na Fase 7)   | 7    |
-| P-S1  | Fuso horário do `Start Time` e do computador                                                                   | 2    |
+| ID    | Dúvida                                                                                                       | Fase |
+| ----- | ------------------------------------------------------------------------------------------------------------ | ---- |
+| P-TG2 | Destino: chat privado, grupo ou canal? Chat de teste disponível?                                             | 5    |
+| P-TG3 | Volume esperado de mensagens (por hora/dia) e horários                                                       | 5    |
+| P-TG4 | (respondida: conta pessoal, GramJS) — falta o usuário criar api_id/api_hash e fazer o login                  | 5    |
+| P-ED1 | Edge permitido (ver P-W1)                                                                                    | 2    |
+| P-D1  | Distribuição (Fase 7): ZIP do GitHub + Node instalado, ou pacote com Node portátil? (recomendação na Fase 7) | 7    |
+| P-S1  | Fuso horário do `Start Time` e do computador                                                                 | 2    |
 
 ## Suposições atualmente marcadas como TODO(confirmar)
 

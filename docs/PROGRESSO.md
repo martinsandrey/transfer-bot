@@ -111,3 +111,7 @@ Capturas `clientes`/`resultado`/`edicao`/`rede` recebidas. Registrado em `docs/E
 ## Stage 4 e Stage 3 Ringing (2026-10-16)
 
 Usuário: **Stage 4 não exige nenhuma ação** (agora ignorado em silêncio, sem aviso nem tarefa). Não se sabe se existe "Stage 3 Ringing"; o rastreador já cobre os dois caminhos (1→3 direto, ou 3 Ringing → 3 Agent: a transferência sai ao chegar em "Stage 3 Agent").
+
+## Fase 5 — Telegram (2026-10-16)
+
+Opção B (GramJS, conta pessoal) — ver DECISOES D9. `ClienteTelegram` (contrato) + `ClienteGramJS` (real, login guiado no console, sessão fora do repo) + `EnviadorTelegram` (`MessageSender`: sucesso→enviada; FLOOD_WAIT curto espera e repete uma vez, longo→falhou; falha definitiva→falhou; timeout/erro→**incerta** e nunca reenvia sozinho; `verify` confere as últimas mensagens do destino). Comandos `telegram.bat login | chats | teste`. `SEND_MODE=live` liberado no modo real, com `TELEGRAM_API_ID/HASH` obrigatórios e confirmação digitada `ENVIAR` a cada inicialização. 154 testes (cliente falso). **[WIN] pendente:** criar api_id/api_hash, `telegram.bat login`, `chats`, `teste`; depois um teste real com `TELEGRAM_DESTINO=me`.

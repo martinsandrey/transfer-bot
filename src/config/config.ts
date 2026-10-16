@@ -27,6 +27,14 @@ export interface AppConfig {
   navegador: NavegadorEscolhido;
   pastas: { dados: string; perfilNavegador: string; logs: string };
   arquivoMensagem: string;
+  telegram: {
+    apiId: number | undefined;
+    apiHash: string | undefined;
+    /** "me" (Mensagens Salvas, padrão seguro), @usuario ou ID numérico do chat. */
+    destino: string;
+    timeoutEnvioMs: number;
+    arquivoSessao: string;
+  };
   nivelLog: "debug" | "info" | "warn" | "error";
 }
 
@@ -108,6 +116,20 @@ const esquema = z.object({
   ),
   PASTA_DADOS: textoOpcional,
   ARQUIVO_MENSAGEM: z.preprocess(vazioParaUndefined, z.string().default("config/mensagem.txt")),
+  TELEGRAM_API_ID: z.preprocess(
+    (v) => {
+      const t = vazioParaUndefined(v);
+      return t !== undefined && /^\d+$/.test(String(t)) ? Number(t) : t;
+    },
+    z
+      .number({ error: "TELEGRAM_API_ID: informe só números (vem de my.telegram.org)." })
+      .int()
+      .positive()
+      .optional(),
+  ),
+  TELEGRAM_API_HASH: textoOpcional,
+  TELEGRAM_DESTINO: z.preprocess(vazioParaUndefined, z.string().default("me")),
+  TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
   NIVEL_LOG: z.preprocess(
     (v) => vazioParaUndefined(v) ?? "info",
     z.enum(["debug", "info", "warn", "error"], {
@@ -146,6 +168,11 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       "LOGIN_AUTOMATICO=true exige SITE_USUARIO e SITE_SENHA preenchidos (ou use LOGIN_AUTOMATICO=false para entrar manualmente).",
     );
   }
+  if (c.SEND_MODE === "live" && (c.TELEGRAM_API_ID === undefined || !c.TELEGRAM_API_HASH)) {
+    problemas.push(
+      'SEND_MODE=live exige TELEGRAM_API_ID e TELEGRAM_API_HASH (crie em https://my.telegram.org, "API development tools").',
+    );
+  }
   if (problemas.length) throw new ErroDeConfiguracao(problemas);
 
   const dados = resolve(expandirCaminho(c.PASTA_DADOS ?? pastaDadosPadrao(bruto), bruto));
@@ -169,6 +196,13 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
     navegador: c.NAVEGADOR,
     pastas: { dados, perfilNavegador: join(dados, "perfil-navegador"), logs: join(dados, "logs") },
     arquivoMensagem: c.ARQUIVO_MENSAGEM,
+    telegram: {
+      apiId: c.TELEGRAM_API_ID,
+      apiHash: c.TELEGRAM_API_HASH,
+      destino: c.TELEGRAM_DESTINO,
+      timeoutEnvioMs: c.TIMEOUT_ENVIO_TELEGRAM_MS,
+      arquivoSessao: join(dados, "telegram", "sessao.txt"),
+    },
     nivelLog: c.NIVEL_LOG,
   };
 }

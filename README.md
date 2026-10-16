@@ -4,7 +4,7 @@ Programa para Windows que monitora a tabela de chamadas de um sistema web, detec
 (`Stage 1 Agent` → `Stage 3 Agent`), consulta o cliente e prepara a mensagem para o Telegram.
 
 > **Estado atual (em desenvolvimento):** detecção de transferências, fila, montagem da mensagem e modo simulado estão prontos.
-> **Ainda não existem:** consulta real ao cadastro do cliente (precisa da evidência do site), login automático e envio ao Telegram.
+> **Ainda não existe:** login automático no site (o login é manual). A consulta ao cadastro e o envio ao Telegram existem, mas o envio real só liga com `SEND_MODE=live`.
 > Por isso, hoje o programa **nunca envia nada**: `SEND_MODE=observacao` é o único modo aceito.
 > Andamento detalhado em [`docs/PROGRESSO.md`](docs/PROGRESSO.md); regras do projeto em [`CLAUDE.md`](CLAUDE.md).
 
@@ -39,7 +39,15 @@ Edite `config\mensagem.txt` (também pelo `configurar.bat`). Use exatamente os m
 ## Modo observação e envio real
 
 Hoje só existe o modo **observação** (padrão): o programa detecta, consulta e **mostra a prévia no console**, sem enviar. O envio real
-(`SEND_MODE=live`) só será liberado depois da integração com o Telegram e exigirá confirmação digitada a cada inicialização.
+(`SEND_MODE=live`) exige `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` no `.env`, o login do Telegram feito antes e uma confirmação digitada (`ENVIAR`) a cada inicialização.
+
+## Telegram (conta pessoal)
+
+1. Em https://my.telegram.org → "API development tools", crie o app e copie `api_id` e `api_hash` para o `.env` (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH`). Trate o `api_hash` como senha.
+2. `telegram.bat login` — digite telefone, código e (se tiver) a senha 2FA. Só a sessão é salva, na pasta de dados do usuário (fora do projeto); ela dá acesso à conta, não a compartilhe.
+3. `telegram.bat chats` — mostra os IDs das conversas; ponha o escolhido em `TELEGRAM_DESTINO` (o padrão `me` são as suas Mensagens Salvas, ideal para testar).
+4. `telegram.bat teste` — envia uma mensagem de teste (sem dados de cliente).
+5. Só então use `SEND_MODE=live`.
 
 ## Segurança e privacidade
 

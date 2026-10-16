@@ -1,0 +1,151 @@
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname } from "node:path";
+import { createInterface } from "node:readline";
+import { Api, TelegramClient } from "telegram";
+import { FloodWaitError } from "telegram/errors/index.js";
+import { StringSession } from "telegram/sessions/index.js";
+import {
+  FalhaTelegram,
+  FloodWaitTelegram,
+  type ClienteTelegram,
+  type Dialogo,
+  type MensagemRecente,
+} from "./cliente.js";
+
+export interface CredenciaisTelegram {
+  apiId: number;
+  apiHash: string;
+  /** Arquivo da sessão (dá acesso TOTAL à conta: fica fora do repositório, na pasta de dados do usuário). */
+  arquivoSessao: string;
+}
+
+/** Pergunta no console. Com `oculto`, não ecoa o que é digitado (senha 2FA). Nada digitado aqui é gravado. */
+function perguntar(texto: string, oculto = false): Promise<string> {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    if (oculto) {
+      const saida = rl as unknown as { _writeToOutput: (s: string) => void };
+      saida._writeToOutput = (s: string): void => {
+        if (s.includes(texto)) process.stdout.write(s);
+      };
+    }
+    rl.question(texto, (r) => {
+      rl.close();
+      if (oculto) process.stdout.write("\n");
+      resolve(r.trim());
+    });
+  });
+}
+
+export function sessaoExiste(arquivo: string): boolean {
+  return existsSync(arquivo) && readFileSync(arquivo, "utf8").trim() !== "";
+}
+
+function traduzir(e: unknown): Error {
+  if (e instanceof FloodWaitError) return new FloodWaitTelegram(e.seconds);
+  const msg = e instanceof Error ? e.message : String(e);
+  if (
+    /CHAT_WRITE_FORBIDDEN|USER_BANNED|PEER_ID_INVALID|USERNAME_NOT_OCCUPIED|CHANNEL_PRIVATE|Cannot find any entity/i.test(
+      msg,
+    )
+  ) {
+    return new FalhaTelegram(`destino_invalido_ou_sem_permissao`);
+  }
+  if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(msg)) {
+    return new FalhaTelegram("sessao_invalida_refaca_o_login");
+  }
+  return e instanceof Error ? e : new Error(msg);
+}
+
+export class ClienteGramJS implements ClienteTelegram {
+  private constructor(
+    private readonly c: TelegramClient,
+    private readonly cred: CredenciaisTelegram,
+  ) {}
+
+  /**
+   * Conecta com a sessão salva. Se não houver (ou `forcarLogin`), faz o login guiado: telefone, código e senha 2FA digitados
+   * no console (nunca gravados); só o texto da sessão é salvo em `arquivoSessao`.
+   */
+  static async conectar(
+    cred: CredenciaisTelegram,
+    opcoes: { loginInterativo: boolean },
+  ): Promise<ClienteGramJS> {
+    const existente = sessaoExiste(cred.arquivoSessao)
+      ? readFileSync(cred.arquivoSessao, "utf8").trim()
+      : "";
+    if (existente === "" && !opcoes.loginInterativo) {
+      throw new FalhaTelegram(
+        "Telegram sem login. Rode o comando de login do Telegram (telegram.bat login).",
+      );
+    }
+    const c = new TelegramClient(new StringSession(existente), cred.apiId, cred.apiHash, {
+      connectionRetries: 5,
+      useWSS: false,
+    });
+    await c.start({
+      phoneNumber: () => perguntar("Telefone da conta do Telegram (com +55...): "),
+      phoneCode: () => perguntar("Código recebido no Telegram: "),
+      password: () => perguntar("Senha de verificação em duas etapas (2FA): ", true),
+      onError: (e) => {
+        console.error("Erro no login do Telegram:", e.message);
+        return Promise.resolve(true); // para o login: sem tentativas em loop
+      },
+    });
+    const cliente = new ClienteGramJS(c, cred);
+    cliente.salvarSessao();
+    // Carrega as conversas para o destino numérico (ID de grupo/contato) poder ser resolvido.
+    await c.getDialogs({ limit: 200 }).catch(() => undefined);
+    return cliente;
+  }
+
+  private salvarSessao(): void {
+    mkdirSync(dirname(this.cred.arquivoSessao), { recursive: true });
+    writeFileSync(this.cred.arquivoSessao, String(this.c.session.save()), {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    try {
+      chmodSync(this.cred.arquivoSessao, 0o600);
+    } catch {
+      /* Windows: permissões vêm da pasta do usuário */
+    }
+  }
+
+  async enviar(destino: string, texto: string): Promise<{ id: number; data: number }> {
+    try {
+      const m = await this.c.sendMessage(this.entidade(destino), {
+        message: texto,
+        parseMode: undefined,
+      });
+      return { id: m.id, data: m.date };
+    } catch (e) {
+      throw traduzir(e);
+    }
+  }
+
+  async mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]> {
+    const ms = await this.c.getMessages(this.entidade(destino), { limit: limite });
+    return ms.map((m) => ({ id: m.id, texto: m.message, data: m.date }));
+  }
+
+  async dialogos(limite: number): Promise<Dialogo[]> {
+    const ds = await this.c.getDialogs({ limit: limite });
+    return ds.map((d) => ({
+      id: String(d.id),
+      titulo: d.title ?? "(sem título)",
+      tipo: d.isChannel ? "canal" : d.isGroup ? "grupo" : "privado",
+    }));
+  }
+
+  async encerrar(): Promise<void> {
+    await this.c.disconnect().catch(() => undefined);
+    await this.c.destroy().catch(() => undefined);
+  }
+
+  /** "me" = Mensagens Salvas; número = ID; senão @usuario/link. */
+  private entidade(destino: string): string | number | Api.TypeEntityLike {
+    const d = destino.trim();
+    return /^-?\d+$/.test(d) ? Number(d) : d;
+  }
+}

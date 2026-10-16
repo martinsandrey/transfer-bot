@@ -252,3 +252,21 @@ describe("varredura da saída", () => {
     expect(varrerTexto("a.json", '"x": "joao.silva"', ["joao.silva"])).toHaveLength(1);
   });
 });
+
+describe("config do Telegram", () => {
+  it("live exige api_id e api_hash; padrão de destino é 'me'", async () => {
+    const { validarConfig } = await import("../src/config/config.js");
+    const base = { SITE_URL: "http://x.invalid/" };
+    expect(validarConfig(base).telegram.destino).toBe("me");
+    expect(() => validarConfig({ ...base, SEND_MODE: "live" })).toThrow(/TELEGRAM_API_ID/);
+    expect(
+      validarConfig({
+        ...base,
+        SEND_MODE: "live",
+        TELEGRAM_API_ID: "123",
+        TELEGRAM_API_HASH: "abc",
+      }).telegram.apiId,
+    ).toBe(123);
+    expect(() => validarConfig({ ...base, TELEGRAM_API_ID: "abc" })).toThrow(/TELEGRAM_API_ID/);
+  });
+});

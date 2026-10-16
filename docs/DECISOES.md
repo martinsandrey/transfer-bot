@@ -77,7 +77,11 @@ Nenhum banco, nenhum JSON de histórico. Estado em memória (ocorrências, taref
 navegador, sessão do Telegram (quando houver), `.env` e modelo de mensagem. O Telegram é o histórico. Consequência assumida:
 reinício = nova linha de base; transferências com o bot fechado não são recuperadas.
 
-## D9 — Levantamento das opções de Telegram — **PARCIAL: conta pessoal exigida (2026-10-15); falta escolher A ou B na Fase 5** (nada instalado ou implementado)
+## D9 — Telegram — **DECIDIDO (2026-10-16): conta pessoal com GramJS (opção B)**
+
+Usuário autorizou seguir a Fase 5; escolhida a B por não ter dependência nativa no Windows (sem DLL/MSVC) e menor atrito. `telegram` 2.26.22 (versão exata). Sessão em arquivo `sessao.txt` (modo 0600) na pasta de dados; códigos/2FA só no console. Destino configurável (`TELEGRAM_DESTINO`, padrão `me`). Se um dia a B der problema, trocar por A é só outra implementação de `ClienteTelegram`.
+
+### Levantamento original
 
 Versões (npm, 2026-10-15): `telegram` (GramJS) 2.26.22 (último publish 2026-07-14); `tdl` 8.1.0 (2026-03-10);
 `prebuilt-tdlib` 0.1008067.0 (2026-08-26; binários `@prebuilt-tdlib/win32-x64` etc.); `grammy` 1.46.0 (Bot API).
