@@ -496,6 +496,11 @@ export class CallTracker {
       comStage3.add(r.calleeNumber);
       if (st.sub === "agent") comAgent.add(r.calleeNumber);
     }
+    // Linhas de Stage 3 incompletas (dado faltando) também provam que o Stage 3 continua na tabela.
+    for (const p of s.stage3Parciais ?? []) {
+      comStage3.add(p.calleeNumber);
+      if (p.agent) comAgent.add(p.calleeNumber);
+    }
     const espera = this.op.esperaCallbackMs ?? 3000;
     for (const [callee, sg] of this.seguimentos) {
       if (comAgent.has(callee)) sg.atendida = true;

@@ -27,6 +27,11 @@ export interface TableSnapshot {
    * "congela" essas chamadas (não conta ausência nem muda estado) em vez de tratá-las como sumidas.
    */
   incompleteCallbacks?: string[];
+  /**
+   * Linhas de Stage 3 com algum dado faltando (mas com Callee e Status legíveis): não viram linha normal, porém contam como
+   * "o Stage 3 ainda está lá" para o acompanhamento do atendimento (evita um CALLBACK falso).
+   */
+  stage3Parciais?: Array<{ calleeNumber: string; agent: boolean }>;
 }
 
 export interface TableReader {

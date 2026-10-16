@@ -66,6 +66,27 @@ describe("tabelaParaLinhas", () => {
       ],
     });
   });
+  it("Stage 3 com dado faltando (ex.: sem Start Time) é ignorada como linha, mas registrada como 'Stage 3 ainda presente'", () => {
+    const r = tabelaParaLinhas(
+      tabela(
+        ["Callback Number", "Callee Number", "Call Status", "Start Time"],
+        [
+          ["908301", "21 90000-0101", "Stage 3 Ringing", ""],
+          ["908302", "21 90000-0102", "Stage 3 Agent", ""],
+          ["100001", "21 90000-0103", "Stage 1 Agent", ""],
+        ],
+      ),
+    );
+    expect(r).toMatchObject({
+      ok: true,
+      rows: [],
+      ignoradas: 3,
+      stage3Parciais: [
+        { calleeNumber: "21900000101", agent: false },
+        { calleeNumber: "21900000102", agent: true },
+      ],
+    });
+  });
   it("linha com dado faltando é IGNORADA sozinha; as demais continuam valendo e a leitura segue válida", () => {
     const r = tabelaParaLinhas(
       tabela(CAB, [

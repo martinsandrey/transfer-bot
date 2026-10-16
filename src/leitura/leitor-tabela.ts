@@ -38,7 +38,13 @@ export function parseDuracao(texto: string): number | null {
 }
 
 export type ResultadoParse =
-  | { ok: true; rows: CallRow[]; ignoradas: number; callbacksIncompletos: string[] }
+  | {
+      ok: true;
+      rows: CallRow[];
+      ignoradas: number;
+      callbacksIncompletos: string[];
+      stage3Parciais: Array<{ calleeNumber: string; agent: boolean }>;
+    }
   | { ok: false; motivo: string };
 
 /** Converte a tabela bruta em linhas tipadas. Linha incompleta → leitura inválida (nunca "adivinha"). */
@@ -70,6 +76,7 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
   const necessarias = Math.max(iCb, iCe, iSt, iIn, iDu) + 1;
   const rows: CallRow[] = [];
   const incompletos = new Set<string>();
+  const stage3Parciais: Array<{ calleeNumber: string; agent: boolean }> = [];
   let ignoradas = 0;
   for (const l of t.linhas) {
     // mais células que cabeçalhos: colunas podem estar deslocadas, nunca adivinhar
@@ -85,6 +92,9 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
     if (!callback || !callee || !status || !inicio) {
       ignoradas++;
       if (callback) incompletos.add(callback);
+      // Stage 3 com dado faltando mas Callee e Status legíveis: ainda prova que o Stage 3 está na tabela.
+      if (callee && /^stage\s*3\b/i.test(status))
+        stage3Parciais.push({ calleeNumber: callee, agent: /\bagent\b/i.test(status) });
       continue;
     }
     rows.push({
@@ -95,7 +105,7 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
       callDurationSec: iDu === -1 ? null : parseDuracao(c(iDu)),
     });
   }
-  return { ok: true, rows, ignoradas, callbacksIncompletos: [...incompletos] };
+  return { ok: true, rows, ignoradas, callbacksIncompletos: [...incompletos], stage3Parciais };
 }
 
 export interface OpcoesLeitor {
@@ -180,6 +190,7 @@ export class LeitorTabelaHtml implements TableReader {
       valid: true,
       ...(r.ignoradas > 0 ? { rowsIgnored: r.ignoradas } : {}),
       ...(r.callbacksIncompletos.length ? { incompleteCallbacks: r.callbacksIncompletos } : {}),
+      ...(r.stage3Parciais.length ? { stage3Parciais: r.stage3Parciais } : {}),
     };
   }
 }

@@ -851,4 +851,30 @@ describe("Stage 3 Ringing: transferência ao tocar e CALLBACK se ninguém atende
     );
     expect(tipos(ev)).toEqual(["transferencia"]);
   });
+
+  it("linha de Stage 3 que veio incompleta (ignorada pelo leitor) não vira CALLBACK falso enquanto continua tocando", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    alimentar(t, snap([ST1(), RINGING("908301")]));
+    const incompleta = (): TableSnapshot => ({
+      ...snap([]),
+      rowsIgnored: 1,
+      stage3Parciais: [{ calleeNumber: X, agent: false }],
+    });
+    // 6 leituras seguidas com a linha do Stage 3 incompleta (ainda tocando): nada de CALLBACK
+    expect(
+      alimentar(
+        t,
+        incompleta(),
+        incompleta(),
+        incompleta(),
+        incompleta(),
+        incompleta(),
+        incompleta(),
+      ),
+    ).toEqual([]);
+    // some de vez → CALLBACK
+    expect(tipos(alimentar(t, snap([]), snap([]), snap([]), snap([])))).toEqual(["callback"]);
+  });
 });
