@@ -9,6 +9,7 @@ import {
   FloodWaitTelegram,
   destinoEhTitulo,
   escolherPorTitulo,
+  normalizarTitulo,
   type ClienteTelegram,
   type Dialogo,
   type MensagemRecente,
@@ -164,11 +165,32 @@ export class ClienteGramJS implements ClienteTelegram {
 
   private async resolver(d: string): Promise<string | number | Api.TypeEntityLike> {
     if (!destinoEhTitulo(d)) return /^-?\d+$/.test(d) ? Number(d) : d;
-    const ds = await this.c.getDialogs({ limit: 500 });
-    const i = escolherPorTitulo(
-      ds.map((x) => x.title ?? ""),
-      d,
-    );
-    return (ds[i] as (typeof ds)[number]).inputEntity;
+    const todos = await this.c.getDialogs({ limit: 500 });
+    // O Telegram pode devolver a mesma conversa mais de uma vez (ex.: arquivadas): conta uma só por ID.
+    const vistos = new Set<string>();
+    const ds = todos.filter((x) => {
+      const id = String(x.id);
+      if (vistos.has(id)) return false;
+      vistos.add(id);
+      return true;
+    });
+    try {
+      const i = escolherPorTitulo(
+        ds.map((x) => x.title ?? ""),
+        d,
+      );
+      return (ds[i] as (typeof ds)[number]).inputEntity;
+    } catch (e) {
+      if (e instanceof FalhaTelegram && e.message.includes("ambiguo")) {
+        const alvo = normalizarTitulo(d);
+        const cand = ds
+          .filter((x) => normalizarTitulo(x.title ?? "").includes(alvo))
+          .map(
+            (x) => `${String(x.id)} (${x.isChannel ? "canal" : x.isGroup ? "grupo" : "privado"})`,
+          );
+        throw new FalhaTelegram(`${e.message} [ids: ${cand.join(", ")}]`);
+      }
+      throw e;
+    }
   }
 }

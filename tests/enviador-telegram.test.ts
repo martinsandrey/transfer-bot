@@ -128,3 +128,14 @@ describe("destino por título (inclui chinês)", () => {
       expect(destinoEhTitulo(d)).toBe(false);
   });
 });
+
+describe("explicação de falha de envio", () => {
+  it("nome ambíguo lista os IDs candidatos", async () => {
+    const { descreverFalhaDeEnvio } = await import("../src/fila/task-queue.js");
+    const t = descreverFalhaDeEnvio(
+      "destino_ambiguo_varias_conversas_com_esse_nome [ids: -1001 (canal), -1002 (grupo)]",
+    );
+    expect(t).toContain("-1001 (canal), -1002 (grupo)");
+    expect(t).toContain("TELEGRAM_DESTINO");
+  });
+});
