@@ -63,7 +63,10 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
   const rows: CallRow[] = [];
   for (const l of t.linhas) {
     if (l.celulas.length !== cab.length)
-      return { ok: false, motivo: "linha_com_numero_de_celulas_diferente" };
+      return {
+        ok: false,
+        motivo: `linha_com_numero_de_celulas_diferente(cabecalhos=${cab.length},celulas=${l.celulas.length})`,
+      };
     const c = (i: number): string => l.celulas[i]?.texto ?? "";
     const callback = normalizarTelefone(c(iCb));
     const status = c(iSt).trim();
