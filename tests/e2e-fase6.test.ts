@@ -13,6 +13,7 @@ import { CallTracker } from "../src/monitor/call-tracker.js";
 import { Monitor } from "../src/monitor/monitor.js";
 import { criarNotificadorFalso } from "../src/notificador/notificador.js";
 import {
+  FalhaTelegram,
   FloodWaitTelegram,
   type ClienteTelegram,
   type MensagemRecente,
@@ -188,6 +189,16 @@ describe("E2E Fase 6 (site e Telegram simulados)", () => {
     await rodar(m, 5);
     expect(m.fila.todas[0]?.estado).toBe("enviada");
     expect(m.tg.enviadas).toHaveLength(1);
+  });
+
+  it("falha definitiva no destino: o alerta explica o motivo em português", async () => {
+    const m = montar(TRANSFERENCIA(1_000_000));
+    m.tg.comportamento = [new FalhaTelegram("destino_ambiguo_varias_conversas_com_esse_nome")];
+    await rodar(m, 5);
+    expect(m.fila.todas[0]?.estado).toBe("falhou");
+    expect(m.notif.alertas.some((a) => /mais de uma conversa com esse nome/.test(a.mensagem))).toBe(
+      true,
+    );
   });
 
   it("0 resultados: nada é enviado e há alerta", async () => {

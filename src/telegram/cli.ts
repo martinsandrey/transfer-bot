@@ -1,4 +1,5 @@
 import { carregarConfig, ErroDeConfiguracao } from "../config/config.js";
+import { descreverFalhaDeEnvio } from "../fila/task-queue.js";
 import { ClienteGramJS, sessaoExiste } from "./cliente-gramjs.js";
 import { EnviadorTelegram } from "./enviador-telegram.js";
 
@@ -50,7 +51,7 @@ async function principal(): Promise<void> {
       console.log(
         r.tipo === "enviada"
           ? `\nMensagem de teste enviada para "${t.destino}".\n`
-          : `\nO envio não foi confirmado (${r.tipo}). Confira o destino "${t.destino}".\n`,
+          : `\nO envio não foi confirmado (${r.tipo}${r.tipo === "falhou" ? ": " + descreverFalhaDeEnvio(r.motivo) : ""}). Confira o destino "${t.destino}".\n`,
       );
     }
   } finally {

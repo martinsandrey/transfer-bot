@@ -43,6 +43,21 @@ const TRANSICOES: Record<EstadoTarefa, readonly EstadoTarefa[]> = {
   ignorada: [],
 };
 
+/** Traduz o código de falha do enviador (nunca contém dados de cliente) para uma explicação em português. */
+export function descreverFalhaDeEnvio(motivo: string): string {
+  if (motivo.startsWith("flood_wait_"))
+    return `o Telegram pediu para esperar (${motivo.slice(11)}); tente de novo mais tarde.`;
+  if (motivo.includes("destino_ambiguo"))
+    return "há mais de uma conversa com esse nome. Use o ID em TELEGRAM_DESTINO (telegram.bat, opção 2).";
+  if (motivo.includes("destino_nao_encontrado"))
+    return "não achei uma conversa com esse nome entre as suas. Confira TELEGRAM_DESTINO (telegram.bat, opção 2).";
+  if (motivo.includes("destino_invalido_ou_sem_permissao"))
+    return "destino inválido ou a sua conta não tem permissão para escrever nele.";
+  if (motivo.includes("sessao_invalida"))
+    return "a sessão do Telegram não vale mais; refaça o login (telegram.bat, opção 1).";
+  return motivo;
+}
+
 export interface TarefaTransferencia {
   id: string;
   /** Resumo da ocorrência (sem telefone): chave de idempotência. */
@@ -308,9 +323,14 @@ export class TaskQueue {
           continue;
         }
         this.mover(t, "falhou", "envio_falhou");
+        this.deps.log.warn("Envio falhou", {
+          evento: "envio_falhou",
+          idCurto: t.id,
+          motivo: resultado.motivo,
+        });
         this.deps.notificador.alerta(
           "erro",
-          `Tarefa ${t.id}: o envio falhou. Nenhuma mensagem foi entregue.`,
+          `Tarefa ${t.id}: o envio falhou. Nenhuma mensagem foi entregue. Motivo: ${descreverFalhaDeEnvio(resultado.motivo)}`,
         );
         return;
       }
