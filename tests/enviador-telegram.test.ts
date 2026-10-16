@@ -139,3 +139,19 @@ describe("explicação de falha de envio", () => {
     expect(t).toContain("TELEGRAM_DESTINO");
   });
 });
+
+describe("grupo antigo (migrado) x grupo novo", () => {
+  it("grupo comum novo (migratedTo ausente ou null) NÃO é tratado como antigo", async () => {
+    const { Api } = await import("telegram");
+    const { ehGrupoAntigo } = await import("../src/telegram/cliente-gramjs.js");
+    const novo = (campos: object) =>
+      Object.assign(Object.create(Api.Chat.prototype) as object, campos);
+    expect(ehGrupoAntigo({ entity: novo({}) as never })).toBe(false);
+    expect(ehGrupoAntigo({ entity: novo({ migratedTo: null, deactivated: false }) as never })).toBe(
+      false,
+    );
+    expect(ehGrupoAntigo({ entity: novo({ migratedTo: {} }) as never })).toBe(true);
+    expect(ehGrupoAntigo({ entity: novo({ deactivated: true }) as never })).toBe(true);
+    expect(ehGrupoAntigo({ entity: {} as never })).toBe(false);
+  });
+});

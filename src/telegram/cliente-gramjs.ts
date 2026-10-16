@@ -63,9 +63,10 @@ function traduzir(e: unknown): Error {
 type Dlg = Awaited<ReturnType<TelegramClient["getDialogs"]>>[number];
 
 /** Grupo comum antigo que foi convertido em supergrupo: continua aparecendo na lista, mas não recebe mais mensagens. */
-function ehGrupoAntigo(d: Dlg): boolean {
+export function ehGrupoAntigo(d: Pick<Dlg, "entity">): boolean {
   const e = d.entity;
-  return e instanceof Api.Chat && (e.deactivated === true || e.migratedTo !== undefined);
+  // `migratedTo` pode vir `null`/`undefined` quando não houve migração: só conta se realmente existir.
+  return e instanceof Api.Chat && (e.deactivated === true || (e.migratedTo ?? null) !== null);
 }
 
 /** Supergrupo é "channel" no Telegram, mas para a pessoa é um grupo; canal de verdade é só o de transmissão. */
