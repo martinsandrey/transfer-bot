@@ -61,6 +61,8 @@ export interface OpcoesLogger {
   destino?: pino.DestinationStream;
 }
 
+const ORDEM: Record<NivelLog, number> = { debug: 10, info: 20, warn: 30, error: 40 };
+
 export function criarLogger(op: OpcoesLogger): Logger {
   let destino: pino.DestinationStream | undefined = op.destino;
   if (!destino) {
@@ -76,6 +78,7 @@ export function criarLogger(op: OpcoesLogger): Logger {
     const extra = descartados > 0 ? { camposDescartados: descartados } : {};
     const texto = mascararTexto(msg);
     base[nivel]({ ...ok, ...extra }, texto);
+    if (ORDEM[nivel] < ORDEM[op.nivel]) return; // o console respeita o mesmo nível do arquivo
     const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
     const detalhes = Object.entries(ok)
       .map(([k, v]) => `${k}=${String(v)}`)

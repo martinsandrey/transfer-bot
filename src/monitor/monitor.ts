@@ -114,12 +114,6 @@ export class Monitor {
       return;
     }
     this.invalidasSeguidas = 0;
-    if (snapshot.rowsIgnored) {
-      log.debug("Linhas ignoradas nesta leitura", {
-        evento: "linhas_ignoradas",
-        contagem: snapshot.rowsIgnored,
-      });
-    }
     // Linha com dado faltando é normal e é só ignorada; mas se TODAS as linhas vêm ignoradas por muito tempo, avise.
     if (snapshot.rows.length === 0 && (snapshot.rowsIgnored ?? 0) > 0) {
       this.todasIgnoradasSeguidas++;

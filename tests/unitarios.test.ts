@@ -92,6 +92,22 @@ describe("logger", () => {
   });
 });
 
+describe("logger: nível", () => {
+  it("o console não mostra mensagens abaixo do nível configurado", () => {
+    const linhas: string[] = [];
+    const log = criarLogger({
+      pastaLogs: "",
+      nivel: "info",
+      console: (l) => linhas.push(l),
+      destino: { write: () => undefined },
+    });
+    log.debug("detalhe interno");
+    log.info("importante");
+    expect(linhas).toHaveLength(1);
+    expect(linhas[0]).toContain("importante");
+  });
+});
+
 describe("notificador", () => {
   it("usa PowerShell no Windows e BEL nos demais", () => {
     const chamadas: string[] = [];
