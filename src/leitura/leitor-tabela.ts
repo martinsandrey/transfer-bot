@@ -103,13 +103,36 @@ export class LeitorTabelaHtml implements TableReader {
     }
   }
 
+  /** `true` depois que a tabela só foi achada pelas heurísticas (grade de div / Shadow DOM): passa a usá-las direto. */
+  private usarHeuristicas = false;
+
+  /** Procura a tabela em todos os frames da aba. Primeiro só `<table>`/ARIA (barato); se falhar, tenta as heurísticas. */
   private async localizar(): Promise<TabelaBruta | null> {
-    const bruta = await this.page.evaluate(extrairNoNavegador, { maxLinhas: 5000, indice: null });
-    const alvo = bruta.tabelas.find((t) => {
-      const cab = t.cabecalhos.map(normalizarCabecalho);
-      return cab.includes(CABECALHOS.callback) && cab.includes(CABECALHOS.status);
-    });
-    return alvo ?? null;
+    const modos = this.usarHeuristicas ? [true] : [false, true];
+    for (const heuristicas of modos) {
+      for (const frame of this.page.frames()) {
+        let bruta;
+        try {
+          bruta = await frame.evaluate(extrairNoNavegador, {
+            maxLinhas: 5000,
+            indice: null,
+            heuristicas,
+            cabecalhosConhecidos: Object.values(CABECALHOS),
+          });
+        } catch {
+          continue; // frame navegando/fechado
+        }
+        const alvo = bruta.tabelas.find((t) => {
+          const cab = t.cabecalhos.map(normalizarCabecalho);
+          return cab.includes(CABECALHOS.callback) && cab.includes(CABECALHOS.status);
+        });
+        if (alvo) {
+          this.usarHeuristicas = heuristicas;
+          return alvo;
+        }
+      }
+    }
+    return null;
   }
 
   async read(): Promise<TableSnapshot> {

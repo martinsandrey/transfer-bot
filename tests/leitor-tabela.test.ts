@@ -9,6 +9,12 @@ import {
 } from "../src/leitura/leitor-tabela.js";
 import type { TabelaBruta } from "../src/recon/pagina-dom.js";
 import { CHROMIUM_DE_TESTE, navegadorDeTeste } from "./helpers/navegador-teste.js";
+import { Anonimizador } from "../src/recon/anonimizador.js";
+import {
+  capturarSerie,
+  diagnosticarPagina,
+  escolherTabelaDeChamadas,
+} from "../src/recon/captura.js";
 import { iniciarSiteSimulado, type SiteSimulado } from "./helpers/site-simulado.js";
 
 describe("normalização", () => {
@@ -112,3 +118,70 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("LeitorTabelaHtml contra o site simulado", (
     await expect(leitor.read()).rejects.toBeInstanceOf(SessaoExpiradaError);
   });
 });
+
+describe.skipIf(!CHROMIUM_DE_TESTE)(
+  "tabela em lugares menos comuns (iframe, grade de div, Shadow DOM)",
+  () => {
+    let site: SiteSimulado;
+    let nav: HospedeNavegador;
+    beforeAll(async () => {
+      site = await iniciarSiteSimulado(300);
+      nav = await navegadorDeTeste();
+    }, 60000);
+    afterAll(async () => {
+      await nav?.encerrar();
+      await site?.fechar();
+    });
+
+    for (const caminho of ["/painel-iframe", "/grade-div", "/shadow"]) {
+      it(`LeitorTabelaHtml lê ${caminho}`, async () => {
+        await nav.abrirUrl(`${site.url}${caminho}`);
+        await nav.paginaPrincipal().waitForTimeout(800);
+        const leitor = new LeitorTabelaHtml(nav.paginaPrincipal());
+        expect(await leitor.tabelaPresente()).toBe(true);
+        let validas = 0;
+        for (let i = 0; i < 10; i++) {
+          const s = await leitor.read();
+          if (s.valid && s.rows.length >= 2 && s.rows.every((r) => /^\d+$/.test(r.callbackNumber)))
+            validas++;
+          await nav.paginaPrincipal().waitForTimeout(60);
+        }
+        expect(validas).toBeGreaterThanOrEqual(6);
+      }, 30000);
+
+      it(`recon encontra a tabela em ${caminho} (série e diagnóstico sem dados pessoais)`, async () => {
+        await nav.abrirUrl(`${site.url}${caminho}`);
+        await nav.paginaPrincipal().waitForTimeout(800);
+        const anon = new Anonimizador();
+        const alvo = await escolherTabelaDeChamadas(nav.paginaPrincipal());
+        expect(alvo).not.toBeNull();
+        const serie = await capturarSerie(nav.paginaPrincipal(), anon, {
+          duracaoMs: 1500,
+          intervaloMs: 200,
+          indiceTabela: null,
+        });
+        expect(serie.cabecalhos).toEqual([
+          "Callback Number",
+          "Callee Number",
+          "Call Status",
+          "Start Time",
+          "Call Duration",
+        ]);
+        expect(serie.snapshots.length).toBeGreaterThan(3);
+        const diag = JSON.stringify(await diagnosticarPagina(nav.paginaPrincipal(), anon));
+        expect(diag).toContain("callback number");
+        for (const n of ["5511900000001", "5521900000101", "88776655"]) {
+          expect(diag).not.toContain(n);
+          expect(JSON.stringify(serie)).not.toContain(n);
+        }
+      }, 30000);
+    }
+
+    it("diagnóstico indica Shadow DOM e iframe", async () => {
+      await nav.abrirUrl(`${site.url}/shadow`);
+      await nav.paginaPrincipal().waitForTimeout(500);
+      const d = JSON.stringify(await diagnosticarPagina(nav.paginaPrincipal(), new Anonimizador()));
+      expect(d).toContain('"emShadowDom":true');
+    });
+  },
+);

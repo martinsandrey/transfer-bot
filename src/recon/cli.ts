@@ -9,6 +9,7 @@ import {
   analisarSerie,
   capturarPagina,
   capturarSerie,
+  diagnosticarPagina,
   type TipoCaptura,
 } from "./captura.js";
 import { EscritorSaida } from "./escritor.js";
@@ -23,6 +24,7 @@ Comandos (digite e aperte Enter). Em cada um, ANTES de digitar, deixe a tela do 
   resultado  Customer Data List depois de pesquisar (tente com 1 resultado; repita com 0 e com vários)
   edicao     tela de edição de um cliente (NÃO clique em salvar; apenas abra e olhe)
   abas       acompanha as abas por alguns segundos (teste de 2ª aba e de janela minimizada)
+  diagnostico  use se o comando 'tabela' não achar a tabela: mostra ONDE ela está (frames, ancestrais), sem dados
   rede       grava o resumo do tráfego de rede observado até agora
   ajuda      mostra esta lista
   sair       grava o resumo, a revisão e fecha
@@ -109,6 +111,13 @@ async function principal(): Promise<void> {
         break;
       } else if (cmd === "rede") {
         console.log("Gravado:", saida.gravar("rede", rede.resumo()));
+      } else if (cmd === "diagnostico") {
+        const page = await escolherPagina(host.contexto.pages(), perguntar);
+        if (!page) {
+          console.log("Nenhuma aba disponível.");
+          continue;
+        }
+        console.log("Gravado:", saida.gravar("diagnostico", await diagnosticarPagina(page, anon)));
       } else if (cmd === "abas") {
         const seg = Number(
           (await perguntar("Quantos segundos acompanhar [120]? ")).trim() || "120",

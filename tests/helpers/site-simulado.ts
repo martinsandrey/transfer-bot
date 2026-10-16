@@ -95,6 +95,38 @@ atualizar(); setInterval(atualizar, ${periodoMs});
 </script></body></html>`;
 }
 
+const SCRIPT_LINHAS = `
+async function dados() { const r = await fetch('/api/chamadas'); return (await r.json()).linhas; }
+const CAB = ['Callback Number','Callee Number','Call Status','Start Time','Call Duration'];
+const celulas = (d) => [d.cb, d.ce, d.status, d.inicio, d.duracao];
+`;
+
+/** Variante: mesma tabela, mas dentro de um iframe. */
+const PAGINA_IFRAME = `<!doctype html><title>Painel</title><h1>Painel</h1><iframe src="/chamadas" style="width:100%;height:400px"></iframe>`;
+
+/** Variante: grade feita só de div (sem <table>), com cabeçalho e linhas irmãos. */
+function paginaDiv(periodoMs: number): string {
+  return `<!doctype html><title>Grade</title><div id="grade"></div><script>${SCRIPT_LINHAS}
+async function atualizar() {
+  const g = document.getElementById('grade'); const ls = await dados();
+  g.innerHTML = '<div class="linha cab">' + CAB.map(c => '<div class="cel">' + c + '</div>').join('') + '</div>' +
+    ls.map(d => '<div class="linha">' + celulas(d).map(c => '<div class="cel">' + c + '</div>').join('') + '</div>').join('');
+}
+atualizar(); setInterval(atualizar, ${periodoMs});</script>`;
+}
+
+/** Variante: tabela dentro de um Shadow DOM aberto. */
+function paginaShadow(periodoMs: number): string {
+  return `<!doctype html><title>Shadow</title><div id="host"></div><script>${SCRIPT_LINHAS}
+const raiz = document.getElementById('host').attachShadow({ mode: 'open' });
+async function atualizar() {
+  const ls = await dados();
+  raiz.innerHTML = '<table><thead><tr>' + CAB.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>' +
+    ls.map(d => '<tr>' + celulas(d).map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+}
+atualizar(); setInterval(atualizar, ${periodoMs});</script>`;
+}
+
 export interface SiteSimulado {
   url: string;
   fechar(): Promise<void>;
@@ -108,6 +140,17 @@ export async function iniciarSiteSimulado(passoMs = 300): Promise<SiteSimulado> 
       const tick = Math.floor((Date.now() - t0) / passoMs);
       res.writeHead(200, { "content-type": "application/json" });
       res.end(JSON.stringify({ tick, linhas: linhasNoTick(tick) }));
+    } else if (caminho === "/painel-iframe") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(PAGINA_IFRAME);
+    } else if (caminho === "/grade-div" || caminho === "/shadow") {
+      t0 = Date.now();
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(
+        caminho === "/grade-div"
+          ? paginaDiv(Math.round(passoMs / 2))
+          : paginaShadow(Math.round(passoMs / 2)),
+      );
     } else if (caminho === "/chamadas") {
       t0 = Date.now();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });

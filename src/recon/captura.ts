@@ -1,9 +1,11 @@
-import type { Page } from "playwright";
+import type { Frame, Page } from "playwright";
 import type { Anonimizador } from "./anonimizador.js";
 import { normalizarCabecalho, politicaDaColuna, formaDoValor } from "./anonimizador.js";
 import {
   extrairNoNavegador,
   lerContadorMutacoes,
+  diagnosticarNoNavegador,
+  type OpcoesExtracao,
   type PaginaBruta,
   type TabelaBruta,
 } from "./pagina-dom.js";
@@ -84,13 +86,72 @@ export function sanearPagina(anon: Anonimizador, bruta: PaginaBruta, tipo: TipoC
   };
 }
 
+/** Cabeçalhos informados pelo usuário; usados só para localizar a tabela (não são dados de clientes). */
+export const CABECALHOS_CONHECIDOS = [
+  "Callback Number",
+  "Callee Number",
+  "Call Status",
+  "Start Time",
+  "Call Duration",
+];
+
+export function opcoesExtracao(
+  parcial: Pick<OpcoesExtracao, "maxLinhas" | "indice">,
+): OpcoesExtracao {
+  return { ...parcial, heuristicas: true, cabecalhosConhecidos: CABECALHOS_CONHECIDOS };
+}
+
 export async function capturarPagina(
   page: Page,
   anon: Anonimizador,
   tipo: TipoCaptura,
 ): Promise<unknown> {
-  const bruta = await page.evaluate(extrairNoNavegador, { maxLinhas: 8, indice: null });
-  return sanearPagina(anon, bruta, tipo);
+  const principal = await page
+    .mainFrame()
+    .evaluate(extrairNoNavegador, opcoesExtracao({ maxLinhas: 8, indice: null }));
+  const saida = sanearPagina(anon, principal, tipo) as Record<string, unknown>;
+  const outros: unknown[] = [];
+  for (const f of page.frames()) {
+    if (f === page.mainFrame()) continue;
+    try {
+      const bruta = await f.evaluate(
+        extrairNoNavegador,
+        opcoesExtracao({ maxLinhas: 8, indice: null }),
+      );
+      outros.push(sanearPagina(anon, bruta, tipo));
+    } catch {
+      outros.push({ erro: "frame_inacessivel" });
+    }
+  }
+  return { ...saida, frames: outros };
+}
+
+/** Diz ONDE aparecem os cabeçalhos conhecidos (frames, Shadow DOM, ancestrais). Sem valores de células. */
+export async function diagnosticarPagina(page: Page, anon: Anonimizador): Promise<unknown> {
+  const resultados: unknown[] = [];
+  for (const [i, f] of page.frames().entries()) {
+    try {
+      const d = await f.evaluate(diagnosticarNoNavegador, CABECALHOS_CONHECIDOS);
+      resultados.push({
+        frame: i === 0 ? "principal" : `subframe ${i}`,
+        caminho: padraoCaminho(d.frame),
+        totais: d.totais,
+        achados: d.achados.map((a) => ({
+          ...a,
+          frame: i === 0 ? "principal" : `subframe ${i}`,
+          cadeia: a.cadeia.map((c) => ({
+            tag: c.tag,
+            id: anon.limparAtributo("id", c.id),
+            classes: anon.limparAtributo("class", c.classes),
+            role: c.role,
+          })),
+        })),
+      });
+    } catch {
+      resultados.push({ frame: `subframe ${i}`, erro: "frame_inacessivel" });
+    }
+  }
+  return { frames: resultados };
 }
 
 // ------------------------------------------------------------------ série temporal
@@ -118,12 +179,28 @@ export interface OpcoesSerie {
   agora?: () => number;
 }
 
-export async function escolherTabelaDeChamadas(page: Page): Promise<number | null> {
-  const bruta = await page.evaluate(extrairNoNavegador, { maxLinhas: 0, indice: null });
-  const alvo = bruta.tabelas.find((t) =>
-    t.cabecalhos.some((h) => normalizarCabecalho(h) === "callback number"),
-  );
-  return alvo ? alvo.indice : null;
+export interface TabelaLocalizada {
+  frame: Frame;
+  indice: number;
+}
+
+/** Procura (em todos os frames) a tabela que tem o cabeçalho "Callback Number". */
+export async function escolherTabelaDeChamadas(page: Page): Promise<TabelaLocalizada | null> {
+  for (const frame of page.frames()) {
+    try {
+      const bruta = await frame.evaluate(
+        extrairNoNavegador,
+        opcoesExtracao({ maxLinhas: 0, indice: null }),
+      );
+      const alvo = bruta.tabelas.find((t) =>
+        t.cabecalhos.some((h) => normalizarCabecalho(h) === "callback number"),
+      );
+      if (alvo) return { frame, indice: alvo.indice };
+    } catch {
+      /* frame fechado/navegando: tenta o próximo */
+    }
+  }
+  return null;
 }
 
 export async function capturarSerie(
@@ -133,18 +210,27 @@ export async function capturarSerie(
 ): Promise<SerieCapturada> {
   const pausar = op.pausar ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   const agora = op.agora ?? Date.now;
-  const indice = op.indiceTabela ?? (await escolherTabelaDeChamadas(page));
-  if (indice === null)
-    throw new Error('Não encontrei uma tabela com a coluna "Callback Number" nesta página.');
+  const alvo =
+    op.indiceTabela !== null
+      ? { frame: page.mainFrame(), indice: op.indiceTabela }
+      : await escolherTabelaDeChamadas(page);
+  if (alvo === null)
+    throw new Error(
+      'Não encontrei uma tabela com a coluna "Callback Number" nesta aba. Rode o comando "diagnostico" e me envie o resultado.',
+    );
+  const { frame, indice } = alvo;
 
   const snapshots: SnapshotSerie[] = [];
   let cabecalhos: string[] = [];
   const t0 = agora();
-  await page.evaluate(lerContadorMutacoes); // instala o contador
+  await frame.evaluate(lerContadorMutacoes); // instala o contador
   for (let i = 0; agora() - t0 < op.duracaoMs; i++) {
     const inicioLeitura = agora();
-    const bruta = await page.evaluate(extrairNoNavegador, { maxLinhas: 5000, indice });
-    const mut = await page.evaluate(lerContadorMutacoes);
+    const bruta = await frame.evaluate(
+      extrairNoNavegador,
+      opcoesExtracao({ maxLinhas: 5000, indice }),
+    );
+    const mut = await frame.evaluate(lerContadorMutacoes);
     const tabela = bruta.tabelas[0];
     if (tabela) {
       cabecalhos = tabela.cabecalhos;

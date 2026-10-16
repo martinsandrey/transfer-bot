@@ -8,6 +8,10 @@ export interface OpcoesExtracao {
   maxLinhas: number;
   /** Se informado, devolve só a tabela com esse índice. */
   indice: number | null;
+  /** Também procura grades feitas de `div` (sem <table>) a partir dos cabeçalhos conhecidos e entra em Shadow DOM aberto. */
+  heuristicas: boolean;
+  /** Textos de cabeçalho informados pelo usuário (usados só nas heurísticas). */
+  cabecalhosConhecidos: string[];
 }
 
 export interface CelulaBruta {
@@ -122,38 +126,130 @@ export function extrairNoNavegador(op: OpcoesExtracao): PaginaBruta {
   }
 
   // ---- tabelas ----
-  const seletorTabelas = "table, [role=table], [role=grid], [role=treegrid]";
-  const candidatos = Array.from(document.querySelectorAll(seletorTabelas));
-  const tabelas: TabelaBruta[] = [];
-  candidatos.forEach((t, indice) => {
-    if (op.indice !== null && op.indice !== indice) return;
-    const linhasEl = Array.from(t.querySelectorAll("tbody tr, [role=row]")).filter(
-      (r) =>
-        !r.querySelector("th, [role=columnheader]") ||
-        r.querySelector("td, [role=cell], [role=gridcell]"),
+  const normalizar = (t: string): string =>
+    t
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  function raizes(): ParentNode[] {
+    const todas: ParentNode[] = [document];
+    if (!op.heuristicas) return todas;
+    const fila: ParentNode[] = [document];
+    while (fila.length) {
+      const no = fila.pop() as ParentNode;
+      for (const el of Array.from(no.querySelectorAll("*"))) {
+        const sr = el.shadowRoot;
+        if (sr) {
+          todas.push(sr);
+          fila.push(sr);
+        }
+      }
+    }
+    return todas;
+  }
+  function consultar(sel: string): Element[] {
+    return raizes().flatMap((r) => Array.from(r.querySelectorAll(sel)));
+  }
+
+  interface Candidata {
+    tipo: string;
+    raiz: Element;
+    cabecalhos: string[];
+    linhasEl: Element[];
+    celulasDe: (r: Element) => Element[];
+  }
+  const celulasPadrao = (r: Element): Element[] =>
+    Array.from(r.querySelectorAll("td, [role=cell], [role=gridcell]"));
+
+  function candidatasPadrao(): Candidata[] {
+    return consultar("table, [role=table], [role=grid], [role=treegrid]").map((t) => ({
+      tipo:
+        t.tagName.toLowerCase() +
+        (t.getAttribute("role") ? `[role=${t.getAttribute("role")}]` : ""),
+      raiz: t,
+      cabecalhos: cabecalhosDe(t),
+      linhasEl: Array.from(t.querySelectorAll("tbody tr, [role=row]")).filter(
+        (r) =>
+          !r.querySelector("th, [role=columnheader]") ||
+          r.querySelector("td, [role=cell], [role=gridcell]"),
+      ),
+      celulasDe: celulasPadrao,
+    }));
+  }
+
+  /** Heurística: acha a "linha de cabeçalho" como o menor ancestral que contém 3+ cabeçalhos conhecidos distintos. */
+  function candidatasDiv(): Candidata[] {
+    const conhecidos = new Set(op.cabecalhosConhecidos.map(normalizar));
+    const folhas = consultar("*").filter(
+      (el) => el.children.length === 0 && conhecidos.has(normalizar(el.textContent ?? "")),
     );
-    const linhas: LinhaBruta[] = linhasEl.slice(0, op.maxLinhas).map((r) => ({
+    const vistos = new Set<Element>();
+    const saida: Candidata[] = [];
+    for (const f of folhas) {
+      let a: Element | null = f.parentElement;
+      while (a) {
+        const distintos = new Set(
+          folhas.filter((x) => a?.contains(x)).map((x) => normalizar(x.textContent ?? "")),
+        );
+        if (distintos.size >= 3) break;
+        a = a.parentElement;
+      }
+      if (!a || vistos.has(a) || a.children.length < 3) continue;
+      vistos.add(a);
+      const cabecalho = a;
+      const cabecalhos = Array.from(cabecalho.children).map((c) =>
+        limpo((c as HTMLElement).innerText ?? c.textContent),
+      );
+      const pai = cabecalho.parentElement;
+      let linhasEl: Element[] = [];
+      if (pai) {
+        const irmaos = Array.from(pai.children).filter(
+          (x) => x !== cabecalho && x.tagName === cabecalho.tagName,
+        );
+        if (irmaos.length && irmaos[0]?.children.length === cabecalhos.length) linhasEl = irmaos;
+        else {
+          const seguinte = pai.nextElementSibling;
+          const filhos = seguinte ? Array.from(seguinte.children) : [];
+          if (filhos.length && filhos[0]?.children.length === cabecalhos.length) linhasEl = filhos;
+        }
+      }
+      saida.push({
+        tipo: "grade_div(heuristica)",
+        raiz: pai ?? cabecalho,
+        cabecalhos,
+        linhasEl,
+        celulasDe: (r) => Array.from(r.children),
+      });
+    }
+    return saida;
+  }
+
+  const candidatas = [...candidatasPadrao(), ...(op.heuristicas ? candidatasDiv() : [])];
+  const tabelas: TabelaBruta[] = [];
+  candidatas.forEach((c, indice) => {
+    if (op.indice !== null && op.indice !== indice) return;
+    const linhas: LinhaBruta[] = c.linhasEl.slice(0, op.maxLinhas).map((r) => ({
       atributos: atributosDe(r),
-      celulas: Array.from(r.querySelectorAll("td, [role=cell], [role=gridcell]")).map((c) => {
-        const h = c as HTMLElement;
-        const visivelTxt = limpo(h.innerText ?? c.textContent);
-        const todo = limpo(c.textContent);
+      celulas: c.celulasDe(r).map((cel) => {
+        const h = cel as HTMLElement;
+        const visivelTxt = limpo(h.innerText ?? cel.textContent);
+        const todo = limpo(cel.textContent);
         return {
           texto: visivelTxt,
           textoOculto: todo !== visivelTxt ? todo : null,
-          atributos: atributosDe(c),
-          esqueleto: esqueleto(c),
+          atributos: atributosDe(cel),
+          esqueleto: esqueleto(cel),
         };
       }),
     }));
     tabelas.push({
       indice,
-      tipo:
-        t.tagName.toLowerCase() +
-        (t.getAttribute("role") ? `[role=${t.getAttribute("role")}]` : ""),
-      atributos: atributosDe(t),
-      cabecalhos: cabecalhosDe(t),
-      totalLinhas: linhasEl.length,
+      tipo: c.tipo,
+      atributos: atributosDe(c.raiz),
+      cabecalhos: c.cabecalhos,
+      totalLinhas: c.linhasEl.length,
       linhas,
     });
   });
@@ -251,4 +347,95 @@ export function lerContadorMutacoes(): { mutacoes: number; visibilidade: string;
   const n = w.__reconMut.n;
   w.__reconMut.n = 0;
   return { mutacoes: n, visibilidade: document.visibilityState, foco: document.hasFocus() };
+}
+
+export interface AchadoDiagnostico {
+  texto: string;
+  frame: string;
+  emShadowDom: boolean;
+  visivel: boolean;
+  tag: string;
+  ehTh: boolean;
+  cadeia: Array<{ tag: string; id: string; classes: string; role: string }>;
+  irmaos: string[];
+}
+export interface DiagnosticoBruto {
+  frame: string;
+  totais: {
+    tables: number;
+    roleTables: number;
+    roleRows: number;
+    iframes: number;
+    hostsShadow: number;
+  };
+  achados: AchadoDiagnostico[];
+}
+
+/** Descreve ONDE aparecem os textos de cabeçalho (estrutura apenas; nenhum valor de célula). */
+export function diagnosticarNoNavegador(textos: string[]): DiagnosticoBruto {
+  const normalizar = (t: string): string =>
+    t
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  const alvos = textos.map(normalizar);
+  const raizes: Array<{ raiz: ParentNode; shadow: boolean }> = [{ raiz: document, shadow: false }];
+  const fila: ParentNode[] = [document];
+  while (fila.length) {
+    const no = fila.pop() as ParentNode;
+    for (const el of Array.from(no.querySelectorAll("*"))) {
+      if (el.shadowRoot) {
+        raizes.push({ raiz: el.shadowRoot, shadow: true });
+        fila.push(el.shadowRoot);
+      }
+    }
+  }
+  const achados: AchadoDiagnostico[] = [];
+  for (const { raiz, shadow } of raizes) {
+    for (const el of Array.from(raiz.querySelectorAll("*"))) {
+      if (achados.length >= 40) break;
+      if (el.children.length !== 0) continue;
+      const t = normalizar(el.textContent ?? "");
+      if (!t || t.length > 40 || !alvos.some((a) => t === a || t.includes(a))) continue;
+      const cadeia: AchadoDiagnostico["cadeia"] = [];
+      let a: Element | null = el;
+      for (let i = 0; a && i < 8; i++) {
+        cadeia.push({
+          tag: a.tagName.toLowerCase(),
+          id: a.id,
+          classes: (a.getAttribute("class") ?? "").slice(0, 80),
+          role: a.getAttribute("role") ?? "",
+        });
+        a = a.parentElement ?? (a.getRootNode() as ShadowRoot).host ?? null;
+      }
+      const pai = el.parentElement;
+      achados.push({
+        texto: t,
+        frame: "",
+        emShadowDom: shadow,
+        visivel: !!((el as HTMLElement).offsetWidth || (el as HTMLElement).offsetHeight),
+        tag: el.tagName.toLowerCase(),
+        ehTh: el.tagName === "TH" || el.closest("th") !== null,
+        cadeia,
+        irmaos: pai
+          ? Array.from(pai.children)
+              .slice(0, 8)
+              .map((c) => c.tagName.toLowerCase())
+          : [],
+      });
+    }
+  }
+  return {
+    frame: location.pathname,
+    totais: {
+      tables: document.querySelectorAll("table").length,
+      roleTables: document.querySelectorAll("[role=table], [role=grid], [role=treegrid]").length,
+      roleRows: document.querySelectorAll("[role=row]").length,
+      iframes: document.querySelectorAll("iframe").length,
+      hostsShadow: raizes.length - 1,
+    },
+    achados,
+  };
 }
