@@ -29,6 +29,8 @@ export interface AppConfig {
   navegador: NavegadorEscolhido;
   pastas: { dados: string; perfilNavegador: string; logs: string };
   arquivoMensagem: string;
+  /** Notificações do Windows (toast) para erros e avisos relevantes. */
+  notificacoes: { windows: boolean; informativas: boolean };
   /** Pasta dos .txt com as mensagens (transferências concluídas e ligações de 5 min). `undefined` = não registrar. */
   pastaRegistros: string | undefined;
   telegram: {
@@ -127,6 +129,8 @@ const esquema = z.object({
   ),
   PASTA_DADOS: textoOpcional,
   ARQUIVO_MENSAGEM: z.preprocess(vazioParaUndefined, z.string().default("config/mensagem.txt")),
+  NOTIFICAR_WINDOWS: booleano("NOTIFICAR_WINDOWS", true),
+  NOTIFICAR_TRANSFERENCIAS: booleano("NOTIFICAR_TRANSFERENCIAS", false),
   REGISTRAR_MENSAGENS: booleano("REGISTRAR_MENSAGENS", true),
   PASTA_REGISTROS: z.preprocess(vazioParaUndefined, z.string().default("registros")),
   TELEGRAM_API_ID: z.preprocess(
@@ -213,6 +217,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
     navegador: c.NAVEGADOR,
     pastas: { dados, perfilNavegador: join(dados, "perfil-navegador"), logs: join(dados, "logs") },
     arquivoMensagem: c.ARQUIVO_MENSAGEM,
+    notificacoes: { windows: c.NOTIFICAR_WINDOWS, informativas: c.NOTIFICAR_TRANSFERENCIAS },
     pastaRegistros: c.REGISTRAR_MENSAGENS
       ? resolve(expandirCaminho(c.PASTA_REGISTROS, bruto))
       : undefined,

@@ -22,6 +22,7 @@ import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
 import { EnviadorTelegram } from "./telegram/enviador-telegram.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
 import { criarNotificador } from "./notificador/notificador.js";
+import { criarToastWindows } from "./notificador/toast-windows.js";
 import { ConsultaDeCliente } from "./consulta/consulta-cliente.js";
 import {
   instalarBloqueioDeEscrita,
@@ -39,7 +40,23 @@ Comandos durante a execução (digite e Enter):
 `);
 }
 
+/** `testar-notificacao.bat`: mostra duas notificações de exemplo para você conferir se o Windows as exibe. */
+async function testarNotificacao(): Promise<void> {
+  const n = criarNotificador({ toast: criarToastWindows() });
+  console.log("Enviando notificações de teste ao Windows...");
+  n.alerta("erro", "TESTE: assim aparece um erro (ex.: envio que falhou).");
+  await new Promise((r) => setTimeout(r, 1500));
+  n.alerta("aviso", "TESTE: assim aparece um aviso relevante (ex.: login necessário).", {
+    windows: true,
+  });
+  await new Promise((r) => setTimeout(r, 3000));
+  console.log(
+    '\nSe nenhuma notificação apareceu: abra Configurações > Sistema > Notificações, ligue "Notificações" e o modo "Não incomodar"/Assistente de foco desligado (e confira a permissão do "Windows PowerShell").',
+  );
+}
+
 async function principal(): Promise<void> {
+  if (process.argv.includes("--teste-notificacao")) return testarNotificacao();
   let cfg: AppConfig;
   try {
     cfg = simulado
@@ -79,7 +96,10 @@ async function principal(): Promise<void> {
     nivel: cfg.nivelLog,
     ...(simulado ? {} : { nivelConsole: "error" as const }),
   });
-  const notificador = criarNotificador();
+  const notificador = criarNotificador({
+    ...(cfg.notificacoes.windows && !simulado ? { toast: criarToastWindows() } : {}),
+    toastInformativos: cfg.notificacoes.informativas,
+  });
   // Rede de segurança: uma promessa rejeitada e esquecida nunca derruba o programa; fica registrada no log.
   process.on("unhandledRejection", (motivo) => {
     log.error("Promessa rejeitada sem tratamento", {
@@ -272,7 +292,8 @@ async function principal(): Promise<void> {
             timeoutMs: cfg.timeouts.consultaMs,
           }),
           (e) => {
-            console.error(
+            notificador.alerta(
+              "erro",
               "Não consegui voltar para a Voice Call Status. Clique nela no menu da esquerda.",
             );
             log.error("falha ao voltar", { erro: e instanceof Error ? e.message : String(e) });
@@ -328,7 +349,12 @@ ${t}
           : `Atenção: ${t.id} estava na fila e NÃO foi processada.`,
       );
   } catch (e) {
-    if (!sinal.signal.aborted) console.error("Erro:", e instanceof Error ? e.message : e);
+    if (!sinal.signal.aborted) {
+      notificador.alerta(
+        "erro",
+        `O programa parou por um erro: ${e instanceof Error ? e.message : String(e)}`,
+      );
+    }
   } finally {
     rl.close();
     await clienteTg?.encerrar();
@@ -338,5 +364,9 @@ ${t}
 
 principal().catch((e: unknown) => {
   console.error("Erro inesperado:", e instanceof Error ? e.message : e);
+  criarNotificador({ toast: criarToastWindows() }).alerta(
+    "erro",
+    `O programa parou por um erro inesperado: ${e instanceof Error ? e.message : String(e)}`,
+  );
   process.exitCode = 1;
 });

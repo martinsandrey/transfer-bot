@@ -17,6 +17,7 @@
     "recon": "npm run build && node dist/recon/cli.js",
     "simular": "npm run build && node dist/main.js --simular",
     "telegram": "npm run build && node dist/telegram/cli.js",
+    "testar-notificacao": "npm run build && node dist/main.js --teste-notificacao",
     "start": "npm run build && node dist/main.js"
   },
   "devDependencies": {

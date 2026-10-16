@@ -368,6 +368,7 @@ export class TaskQueue {
       this.deps.notificador.alerta(
         "aviso",
         `Tarefa ${t.id}: ninguém atendeu, mas a mensagem de transferência dessa ligação não foi enviada; o CALLBACK não foi enviado.`,
+        { windows: true },
       );
       return;
     }

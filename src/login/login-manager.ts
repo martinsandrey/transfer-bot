@@ -90,6 +90,7 @@ export class GerenciadorLogin {
         this.notificador.alerta(
           "aviso",
           "Se aparecer uma verificação (botão para clicar) na janela do navegador, clique nela. Depois o login é preenchido sozinho.",
+          { windows: true },
         );
         ultimoAviso = this.agora();
       }
@@ -116,6 +117,7 @@ export class GerenciadorLogin {
         this.notificador.alerta(
           "aviso",
           "Faça o login manualmente na janela do navegador. O bot está pausado.",
+          { windows: true },
         );
         ultimoAviso = this.agora();
       }

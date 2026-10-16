@@ -141,6 +141,7 @@ export class Monitor {
         notificador.alerta(
           "aviso",
           `A tabela está ilegível há ${this.invalidasSeguidas} leituras (${snapshot.invalidReason ?? "motivo desconhecido"}). O layout do site pode ter mudado.`,
+          { windows: true },
         );
       }
       return;
@@ -177,6 +178,7 @@ export class Monitor {
     notificador.alerta(
       "aviso",
       "Monitoramento retomado. Transferências ocorridas durante a pausa NÃO foram detectadas.",
+      { windows: true },
     );
   }
 
@@ -205,6 +207,7 @@ export class Monitor {
       notificador.alerta(
         "aviso",
         `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+        { windows: "informativo" },
       );
       if (!fila) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
@@ -217,6 +220,7 @@ export class Monitor {
       notificador.alerta(
         "aviso",
         `NINGUÉM ATENDEU (CALLBACK): cliente ${mascararTelefone(ev.callee)}, funcionário ${mascararTelefone(ev.callback)}.`,
+        { windows: "informativo" },
       );
       if (!fila) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
@@ -229,6 +233,7 @@ export class Monitor {
       notificador.alerta(
         "aviso",
         `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+        { windows: "informativo" },
       );
       if (!fila) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);

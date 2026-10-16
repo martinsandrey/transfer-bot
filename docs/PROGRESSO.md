@@ -158,3 +158,7 @@ Riscos conhecidos: ligação atendida e encerrada inteira durante uma pausa de c
 ## Rodada de robustez e testes (2026-10-17)
 
 Novos: fuzz do rastreador, caos na fila+Telegram, falhas do site na consulta, resiliência do monitor, mensagens estranhas (252 testes no total). Melhorias: reenvio automático após conferir que a mensagem não chegou; reconferência quando não há rede; monitor à prova de exceção; `unhandledRejection` registrado; reconexão do Telegram antes de operar. Ideias de próximas melhorias em `docs/IDEIAS.md`.
+
+## Notificações do Windows (2026-10-17)
+
+Toast do Windows via PowerShell (sem dependências; texto em base64; reserva por balão da bandeja), acionado pelo `Notificador`: todo alerta `erro` e os `aviso` marcados `{ windows: true }` (login/verificação esperando, monitoramento retomado com janela cega, tabela ilegível, CALLBACK não enviado); informativos (transferência detectada, CALLBACK, ligação de 5 min) só com `NOTIFICAR_TRANSFERENCIAS=true`. Sem repetição em 2 min, máx. 4/min (excedente vira "mais N avisos"), texto mascarado, nunca lança erro, só Windows. Programa parado por erro também notifica. `testar-notificacao.bat` mostra duas notificações de teste. **[WIN] pendente:** confirmar que o Windows as exibe (Assistente de foco/permissões). 264 testes.

@@ -44,9 +44,22 @@ Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está 
 | `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`     | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado. |
 | `VALIDADE_MENSAGEM_MIN`                          | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).               |
 | `JANELA_TRANSFERENCIA_SEG`                       | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                      |
+| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`  | Notificações do Windows (padrão: ligadas; as informativas, desligadas).                   |
 | `NAVEGADOR`                                      | `msedge` (padrão) ou `chromium`.                                                          |
 
 Ao trocar a URL, o navegador pode pedir novo login.
+
+## Notificações do Windows
+
+O programa mostra uma **notificação do Windows** (canto da tela) quando algo relevante acontece, para você perceber mesmo sem olhar o console:
+
+- **Erros** (sempre): envio que falhou, mensagem velha demais, envio incerto, cliente não encontrado ou telefone diferente, consulta que travou, sessão do site expirada, falha ao voltar para a Voice Call Status, erro inesperado ou programa parado.
+- **Avisos relevantes:** login ou verificação (botão quadrado) esperando você, monitoramento retomado depois de uma pausa (transferências nesse intervalo não foram vistas), tabela ilegível, CALLBACK que não pôde ser enviado.
+- Cada transferência detectada, CALLBACK e ligação de 5 min **não** notificam por padrão (use `NOTIFICAR_TRANSFERENCIAS=true` se quiser).
+- Sem repetição: a mesma mensagem não volta em 2 minutos e há no máximo 4 por minuto (o resto vira "mais N avisos").
+- As notificações não trazem dados de clientes (telefones saem mascarados).
+
+Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparecem duas notificações de teste). Se não aparecerem: Configurações → Sistema → Notificações, deixe as notificações ligadas, desligue o "Não incomodar"/Assistente de foco e confira o item "Windows PowerShell". Para desligar de vez: `NOTIFICAR_WINDOWS=false`.
 
 ## Transferência ao tocar e CALLBACK
 

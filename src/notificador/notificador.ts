@@ -1,10 +1,22 @@
 import { spawn } from "node:child_process";
+import type { Toast } from "./toast-windows.js";
 
 export type NivelAlerta = "info" | "aviso" | "erro";
 
+/**
+ * Quando o alerta também vira notificação do Windows (além do console e do som):
+ * - `erro`: sempre (algo deu errado e merece atenção);
+ * - `aviso`: só com `windows: true` (relevante e que pede ação ou muda o que o programa está fazendo);
+ * - `windows: "informativo"`: só se o usuário ligou as notificações informativas (ex.: cada transferência detectada);
+ * - `windows: false`: nunca.
+ */
+export interface OpcoesAlerta {
+  windows?: boolean | "informativo";
+}
+
 export interface Notificador {
-  /** Alerta sonoro (quando `aviso`/`erro`) e mensagem no console. Nunca lança exceção. */
-  alerta(nivel: NivelAlerta, mensagem: string): void;
+  /** Alerta sonoro (quando `aviso`/`erro`), mensagem no console e, se for relevante, notificação do Windows. Nunca lança exceção. */
+  alerta(nivel: NivelAlerta, mensagem: string, opcoes?: OpcoesAlerta): void;
 }
 
 type Spawn = typeof spawn;
@@ -15,6 +27,10 @@ const SOM_POWERSHELL: Record<Exclude<NivelAlerta, "info">, string> = {
 };
 
 export interface OpcoesNotificador {
+  /** Função que mostra a notificação do Windows (ver `criarToastWindows`). Sem ela, não há notificações. */
+  toast?: Toast;
+  /** Também notifica os alertas "informativos" (cada transferência, CALLBACK, ligação de 5 min). Padrão: não. */
+  toastInformativos?: boolean;
   plataforma?: NodeJS.Platform;
   spawnFn?: Spawn;
   escrever?: (texto: string) => void;
@@ -30,11 +46,24 @@ export function criarNotificador(op: OpcoesNotificador = {}): Notificador {
   const escrever = op.escrever ?? ((t: string) => process.stdout.write(t));
 
   return {
-    alerta(nivel, mensagem) {
+    alerta(nivel, mensagem, opcoes) {
       const marca = nivel === "erro" ? "[ERRO]" : nivel === "aviso" ? "[AVISO]" : "[INFO]";
       const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
       escrever(`${hora} ${marca} ${mensagem}\n`);
       if (nivel === "info") return;
+      try {
+        const w = opcoes?.windows;
+        const notificar =
+          w === false
+            ? false
+            : w === "informativo"
+              ? op.toastInformativos === true
+              : nivel === "erro" || w === true;
+        if (notificar && op.toast)
+          op.toast(nivel === "erro" ? "Transfer Bot — ERRO" : "Transfer Bot — atenção", mensagem);
+      } catch {
+        /* a notificação nunca atrapalha o resto */
+      }
       try {
         if (plataforma === "win32") {
           const filho = spawnFn(
@@ -59,8 +88,12 @@ export function criarNotificador(op: OpcoesNotificador = {}): Notificador {
 
 /** Notificador para testes: guarda os alertas. */
 export function criarNotificadorFalso(): Notificador & {
-  alertas: Array<{ nivel: NivelAlerta; mensagem: string }>;
+  alertas: Array<{ nivel: NivelAlerta; mensagem: string; opcoes?: OpcoesAlerta }>;
 } {
-  const alertas: Array<{ nivel: NivelAlerta; mensagem: string }> = [];
-  return { alertas, alerta: (nivel, mensagem) => void alertas.push({ nivel, mensagem }) };
+  const alertas: Array<{ nivel: NivelAlerta; mensagem: string; opcoes?: OpcoesAlerta }> = [];
+  return {
+    alertas,
+    alerta: (nivel, mensagem, opcoes) =>
+      void alertas.push({ nivel, mensagem, ...(opcoes ? { opcoes } : {}) }),
+  };
 }
