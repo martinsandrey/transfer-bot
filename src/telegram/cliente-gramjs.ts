@@ -7,6 +7,8 @@ import { StringSession } from "telegram/sessions/index.js";
 import {
   FalhaTelegram,
   FloodWaitTelegram,
+  destinoEhTitulo,
+  escolherPorTitulo,
   type ClienteTelegram,
   type Dialogo,
   type MensagemRecente,
@@ -114,7 +116,7 @@ export class ClienteGramJS implements ClienteTelegram {
 
   async enviar(destino: string, texto: string): Promise<{ id: number; data: number }> {
     try {
-      const m = await this.c.sendMessage(this.entidade(destino), {
+      const m = await this.c.sendMessage(await this.entidade(destino), {
         message: texto,
         parseMode: undefined,
       });
@@ -125,7 +127,7 @@ export class ClienteGramJS implements ClienteTelegram {
   }
 
   async mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]> {
-    const ms = await this.c.getMessages(this.entidade(destino), { limit: limite });
+    const ms = await this.c.getMessages(await this.entidade(destino), { limit: limite });
     return ms.map((m) => ({ id: m.id, texto: m.message, data: m.date }));
   }
 
@@ -143,9 +145,15 @@ export class ClienteGramJS implements ClienteTelegram {
     await this.c.destroy().catch(() => undefined);
   }
 
-  /** "me" = Mensagens Salvas; número = ID; senão @usuario/link. */
-  private entidade(destino: string): string | number | Api.TypeEntityLike {
+  /** "me" = Mensagens Salvas; número = ID; @usuario/telefone/link; senão, o TÍTULO de uma das suas conversas (qualquer idioma). */
+  private async entidade(destino: string): Promise<string | number | Api.TypeEntityLike> {
     const d = destino.trim();
-    return /^-?\d+$/.test(d) ? Number(d) : d;
+    if (!destinoEhTitulo(d)) return /^-?\d+$/.test(d) ? Number(d) : d;
+    const ds = await this.c.getDialogs({ limit: 500 });
+    const i = escolherPorTitulo(
+      ds.map((x) => x.title ?? ""),
+      d,
+    );
+    return (ds[i] as (typeof ds)[number]).inputEntity;
   }
 }

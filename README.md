@@ -45,7 +45,7 @@ Hoje só existe o modo **observação** (padrão): o programa detecta, consulta 
 
 1. Em https://my.telegram.org → "API development tools", crie o app e copie `api_id` e `api_hash` para o `.env` (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH`). Trate o `api_hash` como senha.
 2. `telegram.bat login` (ou abra o `telegram.bat` e escolha 1) — digite telefone, código e (se tiver) a senha 2FA. Só a sessão é salva, na pasta de dados do usuário (fora do projeto); ela dá acesso à conta, não a compartilhe.
-3. `telegram.bat chats` — mostra os IDs das conversas; ponha o escolhido em `TELEGRAM_DESTINO` (o padrão `me` são as suas Mensagens Salvas, ideal para testar).
+3. `telegram.bat chats` — mostra os IDs das conversas; ponha o nome exato do canal (aceita chinês) ou o ID em `TELEGRAM_DESTINO` (o padrão `me` são as suas Mensagens Salvas, ideal para testar).
 4. `telegram.bat teste` — envia uma mensagem de teste (sem dados de cliente).
 5. Só então use `SEND_MODE=live`.
 

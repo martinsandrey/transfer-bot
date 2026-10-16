@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   FalhaTelegram,
   FloodWaitTelegram,
+  destinoEhTitulo,
+  escolherPorTitulo,
   type ClienteTelegram,
   type MensagemRecente,
 } from "../src/telegram/cliente.js";
@@ -106,5 +108,23 @@ describe("EnviadorTelegram", () => {
     c.falhaNaLeitura = true;
     expect(await e.verify("c")).toBe("indeterminado");
     expect(await e.verify("desconhecida")).toBe("indeterminado");
+  });
+});
+
+describe("destino por título (inclui chinês)", () => {
+  const titulos = ["Família", "启航 Line 1 transfer一线送单（印度尼西亚）", "启航 Line 2 transfer"];
+  it("reconhece título em chinês, ignorando caixa/espaços e largura de caracteres", () => {
+    expect(destinoEhTitulo("启航 Line 1 transfer一线送单（印度尼西亚）")).toBe(true);
+    expect(escolherPorTitulo(titulos, "启航 Line 1 transfer一线送单（印度尼西亚）")).toBe(1);
+    expect(escolherPorTitulo(titulos, "启航  line 1 TRANSFER一线送单(印度尼西亚)")).toBe(1);
+  });
+  it("aceita um trecho único; recusa ambíguo ou inexistente", () => {
+    expect(escolherPorTitulo(titulos, "Line 1")).toBe(1);
+    expect(() => escolherPorTitulo(titulos, "启航")).toThrow(/ambiguo/);
+    expect(() => escolherPorTitulo(titulos, "xyz")).toThrow(/nao_encontrado/);
+  });
+  it("me, ID, @usuario e link não são títulos", () => {
+    for (const d of ["me", "-1001234567890", "@alguem", "+5511999990000", "https://t.me/x"])
+      expect(destinoEhTitulo(d)).toBe(false);
   });
 });

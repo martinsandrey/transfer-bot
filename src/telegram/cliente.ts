@@ -44,3 +44,29 @@ export class FalhaTelegram extends Error {
     this.name = "FalhaTelegram";
   }
 }
+
+/** Compara títulos ignorando maiúsculas, espaços repetidos e formas equivalentes de caracteres (largura total/CJK). */
+export function normalizarTitulo(t: string): string {
+  return t.normalize("NFKC").replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+/** O destino é um título de conversa (e não "me", ID numérico, @usuario, telefone ou link)? */
+export function destinoEhTitulo(destino: string): boolean {
+  const d = destino.trim();
+  return !(d === "me" || /^-?\d+$/.test(d) || /^[@+]/.test(d) || /^(https?:\/\/|t\.me\/)/i.test(d));
+}
+
+/** Índice do diálogo cujo título é o destino. Exato (normalizado) tem prioridade; senão, único que contém o texto. */
+export function escolherPorTitulo(titulos: readonly string[], destino: string): number {
+  const alvo = normalizarTitulo(destino);
+  const exatos = titulos.flatMap((t, i) => (normalizarTitulo(t) === alvo ? [i] : []));
+  if (exatos.length === 1) return exatos[0] as number;
+  if (exatos.length > 1) throw new FalhaTelegram("destino_ambiguo_varias_conversas_com_esse_nome");
+  const parciais = titulos.flatMap((t, i) => (normalizarTitulo(t).includes(alvo) ? [i] : []));
+  if (parciais.length === 1) return parciais[0] as number;
+  throw new FalhaTelegram(
+    parciais.length > 1
+      ? "destino_ambiguo_varias_conversas_com_esse_nome"
+      : "destino_nao_encontrado_entre_suas_conversas",
+  );
+}
