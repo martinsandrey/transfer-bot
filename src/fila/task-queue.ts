@@ -47,8 +47,10 @@ const TRANSICOES: Record<EstadoTarefa, readonly EstadoTarefa[]> = {
 export function descreverFalhaDeEnvio(motivo: string): string {
   if (motivo.startsWith("flood_wait_"))
     return `o Telegram pediu para esperar (${motivo.slice(11)}); tente de novo mais tarde.`;
-  if (motivo.includes("destino_ambiguo"))
-    return "há mais de uma conversa com esse nome. Use o ID em TELEGRAM_DESTINO (telegram.bat, opção 2).";
+  if (motivo.includes("destino_ambiguo")) {
+    const ids = /\[ids: ([^\]]*)\]/.exec(motivo)?.[1];
+    return `há mais de uma conversa com esse nome${ids ? ` (IDs: ${ids})` : ""}. Use o ID certo em TELEGRAM_DESTINO (telegram.bat, opção 2).`;
+  }
   if (motivo.includes("destino_nao_encontrado"))
     return "não achei uma conversa com esse nome entre as suas. Confira TELEGRAM_DESTINO (telegram.bat, opção 2).";
   if (motivo.includes("destino_invalido_ou_sem_permissao"))
