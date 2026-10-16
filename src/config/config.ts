@@ -35,6 +35,8 @@ export interface AppConfig {
     timeoutEnvioMs: number;
     arquivoSessao: string;
   };
+  /** Minutos; 0 = a mensagem nunca expira. */
+  validadeMensagemMin: number;
   nivelLog: "debug" | "info" | "warn" | "error";
 }
 
@@ -130,6 +132,7 @@ const esquema = z.object({
   TELEGRAM_API_HASH: textoOpcional,
   TELEGRAM_DESTINO: z.preprocess(vazioParaUndefined, z.string().default("me")),
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
+  VALIDADE_MENSAGEM_MIN: inteiro("VALIDADE_MENSAGEM_MIN", 15, 0, 100000),
   NIVEL_LOG: z.preprocess(
     (v) => vazioParaUndefined(v) ?? "info",
     z.enum(["debug", "info", "warn", "error"], {
@@ -203,6 +206,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       timeoutEnvioMs: c.TIMEOUT_ENVIO_TELEGRAM_MS,
       arquivoSessao: join(dados, "telegram", "sessao.txt"),
     },
+    validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,
     nivelLog: c.NIVEL_LOG,
   };
 }

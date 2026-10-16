@@ -9,7 +9,7 @@ O prompt original está em `docs/prompt-inicial.md`. **Idioma: português do Bra
 Programa para **Windows 10/11** (executado pelo usuário, localmente) que abre um navegador dedicado (Playwright),
 monitora a tabela de chamadas de um website, detecta transferências (`Stage 1 Agent` → `Stage 3 Agent`),
 consulta o cliente na Customer Data List (somente leitura), monta uma mensagem a partir de `config/mensagem.txt`
-e a entrega a um `MessageSender` (Telegram — **forma ainda não decidida**; hoje só console/simulação).
+e a entrega a um `MessageSender` (Telegram, conta pessoal via GramJS; padrão = só console em modo observação).
 Desenvolvimento na nuvem (Linux), sem acesso ao site real: tudo é testado com simulações.
 
 ## Fases (uma por vez; só avançar com aprovação explícita do usuário)
@@ -28,7 +28,7 @@ npm test             # vitest run
 npm run format       # prettier --write (format:check no CI)
 npm run build        # tsc -p tsconfig.build.json
 npm run simular      # cenário fictício completo (sem site, sem navegador)
-npm start            # modo real (hoje: só detecta transferências)
+npm start            # modo real (observação por padrão; envio com SEND_MODE=live)
 npm run recon        # (Fase 2) ferramenta de reconhecimento: rodar no Windows, ver docs/RECONHECIMENTO.md
 ```
 

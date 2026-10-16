@@ -34,7 +34,7 @@ const TRANSICOES: Record<EstadoTarefa, readonly EstadoTarefa[]> = {
   detectada: ["na_fila", "ignorada"],
   na_fila: ["pesquisando", "ignorada"],
   pesquisando: ["pronta", "ignorada", "falhou"],
-  pronta: ["enviando", "observada", "falhou"],
+  pronta: ["enviando", "observada", "falhou", "ignorada"],
   enviando: ["enviada", "incerta", "falhou"],
   enviada: [],
   observada: [],
@@ -65,6 +65,8 @@ export interface OpcoesFila {
   maxTentativasEnvio: number;
   backoffMs: number;
   ttlTarefasMs: number;
+  /** Mensagem mais velha que isso (desde a detecção) não é mais enviada (o Telegram pode ter ficado fora do ar). 0/ausente = não expira. */
+  validadeMensagemMs?: number;
   /** Pausa entre uma tarefa e a próxima, para o monitor voltar a ler a tabela de chamadas entre as consultas (padrão 3 s). */
   pausaEntreTarefasMs?: number;
   agora?: () => number;
@@ -158,9 +160,19 @@ export class TaskQueue {
     return this.drenando;
   }
 
+  private parando = false;
+
+  /** Encerramento limpo: termina a tarefa em andamento (sem pegar outra) e devolve as tarefas que ficaram sem conclusão. */
+  async encerrar(): Promise<TarefaTransferencia[]> {
+    this.parando = true;
+    await this.drenando;
+    return this.todas.filter((t) => t.estado === "incerta" || t.estado === "na_fila");
+  }
+
   private async laco(): Promise<void> {
     let primeira = true;
     for (;;) {
+      if (this.parando) return;
       const proxima = this.todas.find((t) => t.estado === "na_fila");
       if (!proxima) return;
       if (primeira === false) await this.dormir(this.op.pausaEntreTarefasMs ?? 3000);
@@ -227,7 +239,25 @@ export class TaskQueue {
       this.mover(t, "observada");
       return;
     }
+    if (this.expirou(t)) {
+      this.mover(t, "ignorada", "mensagem_expirada");
+      this.avisarExpirada(t);
+      return;
+    }
     await this.enviar(t);
+  }
+
+  private expirou(t: TarefaTransferencia): boolean {
+    const v = this.op.validadeMensagemMs ?? 0;
+    const inicio = t.historico[0]?.em ?? this.agora();
+    return v > 0 && this.agora() - inicio > v;
+  }
+
+  private avisarExpirada(t: TarefaTransferencia): void {
+    this.deps.notificador.alerta(
+      "erro",
+      `Tarefa ${t.id}: a mensagem ficou velha demais para ser útil e NÃO foi enviada (${Math.round((this.op.validadeMensagemMs ?? 0) / 60000)} min).`,
+    );
   }
 
   private async pesquisar(t: TarefaTransferencia): Promise<ResultadoBusca | null> {
@@ -256,6 +286,11 @@ export class TaskQueue {
   private async enviar(t: TarefaTransferencia): Promise<void> {
     this.mover(t, "enviando");
     while (t.mensagem !== undefined) {
+      if (t.tentativasEnvio > 0 && this.expirou(t)) {
+        this.mover(t, "falhou", "mensagem_expirada"); // as tentativas anteriores falharam sem enviar nada
+        this.avisarExpirada(t);
+        return;
+      }
       t.tentativasEnvio++;
       let resultado;
       try {

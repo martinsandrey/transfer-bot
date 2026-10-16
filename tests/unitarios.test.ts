@@ -195,6 +195,31 @@ describe("login", () => {
     expect(await g.garantirLogin(new AbortController().signal)).toBe("logado_manual");
     expect(envios).toHaveLength(1);
   });
+  it("verificação na tela (desconhecido): espera a pessoa, avisa, e só então preenche uma vez", async () => {
+    const { g, envios, notif } = montar(
+      ["desconhecido", "desconhecido", "desconhecido", "nao_logado", "logado"],
+      {
+        auto: true,
+      },
+    );
+    expect(await g.garantirLogin(new AbortController().signal)).toBe("logado_automatico");
+    expect(envios).toHaveLength(1);
+    expect(notif.alertas.some((a) => /verificação/.test(a.mensagem))).toBe(true);
+  });
+  it("se a pessoa fizer o login durante a verificação, não preenche nada", async () => {
+    const { g, envios } = montar(["desconhecido", "desconhecido", "logado"], { auto: true });
+    expect(await g.garantirLogin(new AbortController().signal)).toBe("logado_manual");
+    expect(envios).toHaveLength(0);
+  });
+  it("depois de uma tentativa automática que falhou, nunca tenta de novo sozinho", async () => {
+    const { g, envios } = montar(
+      ["nao_logado", "nao_logado", "logado", "nao_logado", "nao_logado", "logado"],
+      { auto: true, erroAoPreencher: true },
+    );
+    await g.garantirLogin(new AbortController().signal);
+    await g.garantirLogin(new AbortController().signal);
+    expect(envios).toHaveLength(1);
+  });
   it("sem automático: nunca envia formulário", async () => {
     const { g, envios } = montar(["nao_logado", "nao_logado", "logado"], { auto: false });
     expect(await g.garantirLogin(new AbortController().signal)).toBe("logado_manual");

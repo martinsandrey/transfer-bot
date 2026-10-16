@@ -107,3 +107,8 @@ Nenhum dado pessoal aqui. (Aviso: os arquivos enviados continham **nomes reais d
 - Linha de resultado: checkbox `checkboxes[]` + links de texto exato **`Edit`** e **`Delete`** (o Edit é o de texto "Edit"; nunca clicar em Delete).
 - Formulário de edição: tabela com pares rótulo/campo (`Name：`, `ID Number：`, `Date of Birth：`, `Mobile Phone：`, `Phone：`, `Address：` …); o botão de envio do formulário também se chama "Edit" (submit para `update.php`) — **nunca clicar**; há um botão "Back" que também não usamos.
 - Falsos positivos do aviso de revisão: `Login Identity： NNNNN` é a identificação do operador logado no cabeçalho (sem dados de cliente); a linha 4621 é só a paginação ("Shared N Page N Entries").
+
+**Captcha e login (informado pelo usuário em 2026-10-16)**
+
+- Ao abrir o site aparece uma verificação em que basta **clicar num botão quadrado** (nada a ler). Depois vem o formulário de login (`username`, `password`, botão `submit`; `verify_key` e `done` escondidos, o primeiro preenchido por script da página). Regra do projeto mantida: **a pessoa clica na verificação**; o programa não a contorna. Depois que o formulário aparece, o login automático preenche usuário/senha do `.env` **uma única vez**.
+- Ainda não temos captura da tela de verificação nem do formulário; os seletores usados vêm dos nomes dos campos do POST (`username`, `password`, `submit`). Se o preenchimento falhar no site real, rodar o recon do login.

@@ -4,7 +4,7 @@ Programa para Windows que monitora a tabela de chamadas de um sistema web, detec
 (`Stage 1 Agent` → `Stage 3 Agent`), consulta o cliente e prepara a mensagem para o Telegram.
 
 > **Estado atual (em desenvolvimento):** detecção de transferências, fila, montagem da mensagem e modo simulado estão prontos.
-> **Ainda não existe:** login automático no site (o login é manual). A consulta ao cadastro e o envio ao Telegram existem, mas o envio real só liga com `SEND_MODE=live`.
+> O envio real ao Telegram só liga com `SEND_MODE=live`. O login automático (opcional) preenche usuário e senha do `.env`, mas **a verificação do botão quadrado é sempre você quem clica**.
 > Por isso, hoje o programa **nunca envia nada**: `SEND_MODE=observacao` é o único modo aceito.
 > Andamento detalhado em [`docs/PROGRESSO.md`](docs/PROGRESSO.md); regras do projeto em [`CLAUDE.md`](CLAUDE.md).
 

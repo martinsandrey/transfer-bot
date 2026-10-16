@@ -46,12 +46,22 @@ export class GerenciadorLogin {
     return this.op.dormir ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
   }
 
+  /** Depois de UMA tentativa automática que não deu certo, o programa nunca mais tenta sozinho (evita bloquear a conta). */
+  private autoJaTentou = false;
+
   async garantirLogin(sinal: AbortSignal): Promise<ResultadoLogin> {
-    const estado = await this.adaptador.detectar();
+    let estado = await this.adaptador.detectar();
     if (estado === "logado") return "ja_logado";
 
     const { usuario, senha } = this.op;
-    if (this.op.loginAutomatico && usuario && senha && estado === "nao_logado") {
+    const querAuto = this.op.loginAutomatico && !!usuario && !!senha && !this.autoJaTentou;
+    if (querAuto && estado !== "nao_logado") {
+      // Ainda não há formulário de login na tela (ex.: verificação "clique no botão"): quem resolve é a PESSOA; o programa não mexe nisso.
+      estado = await this.aguardarFormulario(sinal);
+      if (estado === "logado") return "logado_manual";
+    }
+    if (querAuto && usuario && senha && estado === "nao_logado") {
+      this.autoJaTentou = true;
       this.log.info("Tentando login automático (única tentativa)", { evento: "login_auto" });
       try {
         await this.adaptador.preencherEEnviar(usuario, senha);
@@ -70,6 +80,24 @@ export class GerenciadorLogin {
 
     await this.aguardarLoginManual(sinal);
     return "logado_manual";
+  }
+
+  /** Espera aparecer o formulário de login (ou a sessão já estar ativa), avisando para resolver a verificação na janela. */
+  private async aguardarFormulario(sinal: AbortSignal): Promise<EstadoSessao> {
+    let ultimoAviso = Number.NEGATIVE_INFINITY;
+    while (!sinal.aborted) {
+      if (this.agora() - ultimoAviso >= this.op.intervaloAvisoMs) {
+        this.notificador.alerta(
+          "aviso",
+          "Se aparecer uma verificação (botão para clicar) na janela do navegador, clique nela. Depois o login é preenchido sozinho.",
+        );
+        ultimoAviso = this.agora();
+      }
+      const e = await this.adaptador.detectar();
+      if (e === "logado" || e === "nao_logado") return e;
+      await this.dormir(this.op.intervaloVerificacaoMs);
+    }
+    throw new Error("Espera de login manual cancelada.");
   }
 
   private async aguardarLogado(limiteMs: number, sinal: AbortSignal): Promise<boolean> {

@@ -11,7 +11,8 @@ import type { MessageSender } from "./dominio/tipos.js";
 import { TaskQueue } from "./fila/task-queue.js";
 import { LeitorTabelaHtml } from "./leitura/leitor-tabela.js";
 import { criarLogger } from "./log/logger.js";
-import { GerenciadorLogin, type AdaptadorLogin } from "./login/login-manager.js";
+import { AdaptadorLoginDoSite } from "./login/adaptador-site.js";
+import { GerenciadorLogin } from "./login/login-manager.js";
 import { criarConstrutor, ErroDeModelo } from "./mensagem/construtor.js";
 import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
@@ -140,11 +141,11 @@ async function principal(): Promise<void> {
       ? "MODO ENVIO REAL: ao detectar uma transferência, o programa consulta o cliente (só leitura) e ENVIA a mensagem pelo Telegram."
       : "Modo observação: ao detectar uma transferência, o programa consulta o cliente (só leitura), mostra aqui a mensagem preparada e NÃO envia nada.",
   );
-  if (cfg.site.loginAutomatico) {
-    console.log(
-      "Aviso: o login automático ainda não está disponível (depende da evidência do site). O login será manual.",
-    );
-  }
+  console.log(
+    cfg.site.loginAutomatico
+      ? "Login automático ligado: se aparecer a verificação (botão para clicar), clique você; o usuário e a senha do .env são preenchidos sozinhos, uma única vez."
+      : "Login manual: faça o login na janela do navegador.",
+  );
   let sender: MessageSender = new EnviadorConsole();
   let clienteTg: ClienteGramJS | undefined;
   if (cfg.modo === "live") {
@@ -192,17 +193,16 @@ async function principal(): Promise<void> {
   const leitor = new LeitorTabelaHtml(host.paginaPrincipal(), {
     tolerarSemTabela: Math.max(3, Math.ceil(5000 / cfg.monitor.intervaloMs)),
   });
-  const adaptador: AdaptadorLogin = {
-    detectar: async () => ((await leitor.tabelaPresente()) ? "logado" : "nao_logado"),
-    preencherEEnviar: () => Promise.reject(new Error("login automático indisponível")),
-  };
+  const adaptador = new AdaptadorLoginDoSite(host.paginaPrincipal(), leitor, {
+    timeoutMs: cfg.timeouts.navegacaoMs,
+  });
   const login = new GerenciadorLogin(
     adaptador,
     {
-      loginAutomatico: false,
-      usuario: undefined,
-      senha: undefined,
-      esperaAposEnvioMs: 0,
+      loginAutomatico: cfg.site.loginAutomatico,
+      usuario: cfg.site.usuario,
+      senha: cfg.site.senha,
+      esperaAposEnvioMs: 20_000,
       intervaloVerificacaoMs: 1000,
       intervaloAvisoMs: 30_000,
     },
@@ -210,9 +210,7 @@ async function principal(): Promise<void> {
     notificador,
   );
   const garantir = async (): Promise<void> => {
-    console.log(
-      "Faça o login na janela do navegador e abra a tela com a tabela de chamadas. Aguardando a tabela aparecer...",
-    );
+    console.log("Aguardando o login e a tabela de chamadas...");
     await login.garantirLogin(sinal.signal);
     console.log("Tabela encontrada.");
   };
@@ -246,9 +244,10 @@ async function principal(): Promise<void> {
       },
       {
         modo: cfg.modo,
+        validadeMensagemMs: cfg.validadeMensagemMin * 60_000,
         maxTentativasConsulta: 2,
         maxTentativasEnvio: 2,
-        backoffMs: 200,
+        backoffMs: 5000,
         ttlTarefasMs: 3_600_000,
         previa: (t) => {
           const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
@@ -256,7 +255,7 @@ async function principal(): Promise<void> {
             `
 ===== TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada =====
 ${t}
-===== NÃO ENVIADA (Telegram não conectado) =====
+===== NÃO ENVIADA (modo observação) =====
 `,
           );
         },
@@ -272,6 +271,13 @@ ${t}
         console.log("Ocorrências acompanhadas:", tracker.ocorrenciasAtivas);
     });
     await monitor.executar(sinal.signal);
+    const pendentes = await fila.encerrar();
+    for (const t of pendentes)
+      console.log(
+        t.estado === "incerta"
+          ? `Atenção: ${t.id} ficou com envio INCERTO; confira o destino no Telegram antes de reiniciar.`
+          : `Atenção: ${t.id} estava na fila e NÃO foi processada.`,
+      );
   } catch (e) {
     if (!sinal.signal.aborted) console.error("Erro:", e instanceof Error ? e.message : e);
   } finally {
