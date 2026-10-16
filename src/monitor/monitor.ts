@@ -173,7 +173,19 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `TRANSFERÊNCIA detectada: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+      );
+      if (!fila) return;
+      if (fila.enqueue(ev)) void fila.drenar();
+    } else if (ev.tipo === "callback") {
+      log.info("Ninguém atendeu o Stage 3", {
+        evento: "callback",
+        idCurto: ev.ocorrencia,
+        callbackMascarado: mascararTelefone(ev.callback),
+      });
+      notificador.alerta(
+        "aviso",
+        `NINGUÉM ATENDEU (CALLBACK): cliente ${mascararTelefone(ev.callee)}, funcionário ${mascararTelefone(ev.callback)}.`,
       );
       if (!fila) return;
       if (fila.enqueue(ev)) void fila.drenar();

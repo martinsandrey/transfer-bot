@@ -1,4 +1,4 @@
-import type { MessageSender, ResultadoEnvio } from "../dominio/tipos.js";
+import type { MessageSender, OpcoesEnvio, ResultadoEnvio } from "../dominio/tipos.js";
 
 /** Enviador de console (simulação): apenas imprime. O Telegram real será outra implementação (Fase 5). */
 export class EnviadorConsole implements MessageSender {
@@ -11,13 +11,13 @@ export class EnviadorConsole implements MessageSender {
 
 /** Enviador programável para testes. */
 export class EnviadorFalso implements MessageSender {
-  readonly enviados: Array<{ texto: string; chave: string }> = [];
+  readonly enviados: Array<{ texto: string; chave: string; opcoes?: OpcoesEnvio | undefined }> = [];
   constructor(
     private readonly respostas: Array<ResultadoEnvio | Error> = [],
     public verificacao: "entregue" | "nao_encontrada" | "indeterminado" | null = null,
   ) {}
-  async send(texto: string, chave: string): Promise<ResultadoEnvio> {
-    this.enviados.push({ texto, chave });
+  async send(texto: string, chave: string, opcoes?: OpcoesEnvio): Promise<ResultadoEnvio> {
+    this.enviados.push({ texto, chave, opcoes });
     const r = this.respostas.shift() ?? { tipo: "enviada", confirmacao: "ok" };
     if (r instanceof Error) throw r;
     return r;

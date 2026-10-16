@@ -14,6 +14,7 @@ const ev = (chave = "k1", cb = "5511900000001", callee = "5521900000101"): Trans
   ocorrencia: "o1",
   chave,
   vinculo: `v-${chave}`,
+  fase: "agent",
   callback: cb,
   callee,
 });
@@ -484,6 +485,73 @@ describe("TaskQueue", () => {
       fila.enqueue(transf("V6", "T6b"));
       await fila.drenar();
       expect(m.busca.chamadas).toHaveLength(2); // 1 da longa + 1 da segunda transferência (sem reaproveitar)
+    });
+  });
+
+  describe("CALLBACK (ninguém atendeu o Stage 3)", () => {
+    type Cb = Extract<EventoTracker, { tipo: "callback" }>;
+    const cb = (vinc: string, chave = "C-" + vinc): Cb => ({
+      tipo: "callback",
+      ocorrencia: "o1",
+      chave,
+      vinculo: vinc,
+      callback: "5511900000001",
+      callee: "5521900000101",
+    });
+
+    it("responde à mensagem de transferência já enviada, com o texto CALLBACK, sem consultar o cadastro", async () => {
+      const m = montar({ op: { pausaEntreTarefasMs: 0 } });
+      m.fila.enqueue({ ...ev("t1"), vinculo: "VC" });
+      m.fila.enqueue(cb("VC"));
+      await m.fila.drenar();
+      expect(estados(m.fila)).toEqual(["enviada", "enviada"]);
+      expect(m.busca.chamadas).toHaveLength(1);
+      const [t, c] = m.sender.enviados;
+      expect(c?.texto).toBe("CALLBACK");
+      expect(c?.opcoes?.responderA).toBe("ok"); // a confirmação do envio da transferência
+      expect(c?.opcoes?.reserva).toContain("Line 1 number: 5511900000001");
+      expect(t?.opcoes).toBeUndefined();
+    });
+
+    it("se a mensagem de transferência NÃO foi enviada (falhou), o CALLBACK não é enviado", async () => {
+      const sender = new EnviadorFalso([{ tipo: "falhou", motivo: "x", reenviavel: false }]);
+      const m = montar({ sender, op: { pausaEntreTarefasMs: 0 } });
+      m.fila.enqueue({ ...ev("t1"), vinculo: "VD" });
+      m.fila.enqueue(cb("VD"));
+      await m.fila.drenar();
+      expect(estados(m.fila)).toEqual(["falhou", "ignorada"]);
+      expect(sender.enviados).toHaveLength(1);
+      expect(m.notif.alertas.some((a) => /CALLBACK não foi enviado/.test(a.mensagem))).toBe(true);
+    });
+
+    it("sem transferência anterior para essa ligação: não envia", async () => {
+      const m = montar({ op: { pausaEntreTarefasMs: 0 } });
+      m.fila.enqueue(cb("VZ"));
+      await m.fila.drenar();
+      expect(estados(m.fila)).toEqual(["ignorada"]);
+      expect(m.sender.enviados).toHaveLength(0);
+    });
+
+    it("modo observação: mostra a prévia do CALLBACK", async () => {
+      const m = montar({ modo: "observacao", op: { pausaEntreTarefasMs: 0 } });
+      m.fila.enqueue({ ...ev("t1"), vinculo: "VO" });
+      m.fila.enqueue(cb("VO"));
+      await m.fila.drenar();
+      expect(estados(m.fila)).toEqual(["observada", "observada"]);
+      expect(m.previas).toHaveLength(2);
+    });
+
+    it("sem o ID da mensagem original (confirmada só pela verificação): manda o texto completo, sem resposta", async () => {
+      const sender = new EnviadorFalso([{ tipo: "incerta", motivo: "timeout_no_envio" }]);
+      sender.verificacao = "entregue";
+      const m = montar({ sender, op: { pausaEntreTarefasMs: 0 } });
+      m.fila.enqueue({ ...ev("t1"), vinculo: "VV" });
+      m.fila.enqueue(cb("VV"));
+      await m.fila.drenar();
+      const c = sender.enviados[1];
+      expect(c?.opcoes).toBeUndefined();
+      expect(c?.texto).toContain("CALLBACK");
+      expect(c?.texto).toContain("Line 1 number: 5511900000001");
     });
   });
 });

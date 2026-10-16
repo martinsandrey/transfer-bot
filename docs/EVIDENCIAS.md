@@ -119,3 +119,8 @@ Nenhum dado pessoal aqui. (Aviso: os arquivos enviados continham **nomes reais d
 - Também há transferência com a linha já surgindo direto em `Stage 3 Agent` (sem Ringing) — os dois caminhos acontecem.
 - Transições vistas: `(novo)→1 Ringing`, `1 Ringing→1 Agent`, `1 Agent→sumiu`, `1 Ringing→sumiu`, `1 Manual Call→sumiu`, `3 Ringing→3 Agent`, `3 Agent→sumiu` e **uma** `1 Agent→2 Agent` (Stage 2 existe; significado ainda desconhecido). Não apareceu Stage 4 no dia.
 - Nota: execuções de `simular.bat` gravam no mesmo arquivo de log (aparecem como transferências fictícias com `***0001`).
+
+**Regras do usuário para Stage 3 Ringing e CALLBACK (2026-10-17)**
+
+- Ringing = telefone tocando; Agent = alguém atendeu. A mensagem de transferência sai **ao aparecer o Stage 3 Ringing** (não só no Agent). Se atender, mantém (nada mais é enviado). Se o Stage 3 tocar e a ligação **sumir sem ninguém atender**, envia "CALLBACK" **como resposta** à mensagem de transferência, no mesmo grupo. Espera de 3 s antes de concluir (`CALLBACK_ESPERA_SEG`). Só se a mensagem de transferência foi enviada.
+- Segundo o usuário, enquanto existe um Stage 3 Ringing o Stage 1 Agent já perdeu a ligação (no log, a linha do Stage 1 some ~3 s depois do Stage 3 surgir).

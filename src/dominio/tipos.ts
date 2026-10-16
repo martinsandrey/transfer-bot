@@ -63,9 +63,16 @@ export type ResultadoEnvio =
   | { tipo: "incerta"; motivo: string }
   | { tipo: "falhou"; motivo: string; reenviavel: boolean };
 
+export interface OpcoesEnvio {
+  /** `confirmacao` de uma mensagem já enviada ao mesmo destino: a nova é enviada COMO RESPOSTA a ela. */
+  responderA?: string;
+  /** Texto a enviar (sem resposta) se não for possível responder à mensagem (ex.: ela foi apagada). */
+  reserva?: string;
+}
+
 export interface MessageSender {
   /** `chave` identifica a ocorrência (idempotência). Lançar exceção = resultado desconhecido (tratado como incerto). */
-  send(texto: string, chave: string): Promise<ResultadoEnvio>;
+  send(texto: string, chave: string, opcoes?: OpcoesEnvio): Promise<ResultadoEnvio>;
   verify?(chave: string): Promise<"entregue" | "nao_encontrada" | "indeterminado">;
   /**
    * Lê o texto ATUAL de uma mensagem já enviada (a `confirmacao` do envio). Serve para reaproveitar uma mensagem que a pessoa pode

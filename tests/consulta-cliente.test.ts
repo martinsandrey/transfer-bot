@@ -172,6 +172,7 @@ describe("ConsultaDeCliente", () => {
       ocorrencia: "o1",
       chave: "k",
       vinculo: "v-k",
+      fase: "agent",
       callback: "908112",
       callee: "011900000101",
     });

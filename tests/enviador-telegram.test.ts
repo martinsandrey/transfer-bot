@@ -15,7 +15,9 @@ class ClienteFalso implements ClienteTelegram {
   respostas: Array<"ok" | Error | "trava"> = [];
   recentes: MensagemRecente[] = [];
   falhaNaLeitura = false;
-  async enviar(_d: string, texto: string) {
+  respondeuA: Array<number | undefined> = [];
+  async enviar(_d: string, texto: string, responderAId?: number) {
+    this.respondeuA.push(responderAId);
     this.enviadas.push(texto);
     const r = this.respostas.shift() ?? "ok";
     if (r instanceof Error) throw r;
@@ -168,5 +170,36 @@ describe("reler mensagem enviada (edição feita no grupo)", () => {
     c.texto = null;
     expect(await e.reler("telegram:7")).toBe("apagada");
     expect(await e.reler("console")).toBeNull();
+  });
+});
+
+describe("enviar como resposta (CALLBACK)", () => {
+  it("responde à mensagem indicada", async () => {
+    const c = new ClienteFalso();
+    const r = await criar(c).send("CALLBACK", "k", {
+      responderA: "telegram:42",
+      reserva: "CALLBACK\nPh: 1",
+    });
+    expect(r.tipo).toBe("enviada");
+    expect(c.respondeuA).toEqual([42]);
+    expect(c.enviadas).toEqual(["CALLBACK"]);
+  });
+
+  it("mensagem original apagada: nada foi enviado e o texto de reserva sai sem resposta", async () => {
+    const c = new ClienteFalso();
+    c.respostas = [new FalhaTelegram("resposta_invalida")];
+    const r = await criar(c).send("CALLBACK", "k", {
+      responderA: "telegram:42",
+      reserva: "CALLBACK\nPh: 1",
+    });
+    expect(r.tipo).toBe("enviada");
+    expect(c.respondeuA).toEqual([42, undefined]);
+    expect(c.enviadas.at(-1)).toBe("CALLBACK\nPh: 1"); // (a 1ª tentativa, recusada, também fica registrada no falso)
+  });
+
+  it("confirmação que não é do Telegram (ex.: console): envia normal, sem resposta", async () => {
+    const c = new ClienteFalso();
+    await criar(c).send("CALLBACK", "k", { responderA: "console" });
+    expect(c.respondeuA).toEqual([undefined]);
   });
 });

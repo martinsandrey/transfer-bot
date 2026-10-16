@@ -1,4 +1,4 @@
-import type { MessageSender, ResultadoEnvio } from "../dominio/tipos.js";
+import type { MessageSender, OpcoesEnvio, ResultadoEnvio } from "../dominio/tipos.js";
 import { FalhaTelegram, FloodWaitTelegram, type ClienteTelegram } from "./cliente.js";
 
 export interface OpcoesEnviadorTelegram {
@@ -51,19 +51,27 @@ export class EnviadorTelegram implements MessageSender {
     this.agora = op.agora ?? (() => Math.floor(Date.now() / 1000));
   }
 
-  async send(texto: string, chave: string): Promise<ResultadoEnvio> {
-    this.pendentes.set(chave, { texto, desde: this.agora() - 5 });
-    for (let tentativa = 1; ; tentativa++) {
+  async send(texto: string, chave: string, opcoes?: OpcoesEnvio): Promise<ResultadoEnvio> {
+    let respostaA = /^telegram:(\d+)$/.exec(opcoes?.responderA ?? "")?.[1];
+    let corpo = texto;
+    this.pendentes.set(chave, { texto: corpo, desde: this.agora() - 5 });
+    let esperouFlood = false;
+    for (;;) {
       try {
         const r = await comPrazo(
-          this.cliente.enviar(this.op.destino, texto),
+          this.cliente.enviar(
+            this.op.destino,
+            corpo,
+            respostaA === undefined ? undefined : Number(respostaA),
+          ),
           this.op.timeoutEnvioMs,
         );
         this.pendentes.delete(chave);
         return { tipo: "enviada", confirmacao: `telegram:${r.id}` };
       } catch (e) {
         if (e instanceof FloodWaitTelegram) {
-          if (tentativa === 1 && e.segundos * 1000 <= this.op.esperaMaximaFloodMs) {
+          if (!esperouFlood && e.segundos * 1000 <= this.op.esperaMaximaFloodMs) {
+            esperouFlood = true;
             await this.dormir(e.segundos * 1000 + 500);
             continue;
           }
@@ -71,6 +79,13 @@ export class EnviadorTelegram implements MessageSender {
           return { tipo: "falhou", motivo: `flood_wait_${e.segundos}s`, reenviavel: false };
         }
         if (e instanceof FalhaTelegram) {
+          if (e.message === "resposta_invalida" && respostaA !== undefined) {
+            // A mensagem a que se ia responder não existe mais (nada foi enviado): manda o texto de reserva, sem resposta.
+            respostaA = undefined;
+            corpo = opcoes?.reserva ?? texto;
+            this.pendentes.set(chave, { texto: corpo, desde: this.agora() - 5 });
+            continue;
+          }
           this.pendentes.delete(chave);
           return { tipo: "falhou", motivo: e.message, reenviavel: e.reenviavel };
         }

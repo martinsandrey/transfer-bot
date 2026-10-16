@@ -149,3 +149,8 @@ Pedido do usuário: poder **editar** a mensagem no grupo de 5 min e a versão ed
 ## Registro em .txt (2026-10-17)
 
 `registros/transferencias-concluidas.txt` e `registros/ligacoes-5min.txt` (UTF-8, só acrescenta) recebem o texto de cada mensagem enviada (em observação, marcada como não enviada; mensagens reaproveitadas do grupo de 5 min levam a marca). Gravação desacoplada da fila (`registrar`) e à prova de falha. Config: `REGISTRAR_MENSAGENS` (padrão true), `PASTA_REGISTROS` (padrão `registros`). 213 testes.
+
+## Stage 3 Ringing e CALLBACK (2026-10-17)
+
+Transferência agora sai ao **tocar** (Stage 3 Ringing) ou ao atender direto; o rastreador acompanha por Callee se algum Stage 3 vira Agent. Tocou e sumiu sem atender → evento `callback` após `CALLBACK_ESPERA_SEG` (3 s) sem nenhuma linha de Stage 3 do mesmo Callee (toque que passa a outro agente não conta); na fila vira tarefa `callback` que **responde** "CALLBACK" à mensagem de transferência (reply no Telegram; reserva: texto "CALLBACK + Ph + Line 1 number" sem resposta se a original foi apagada ou o ID é desconhecido), só se a transferência foi enviada. Janela sem leitura (consulta) reinicia o relógio dos 3 s. CALLBACK também vai ao registro `transferencias-concluidas.txt`. 231 testes.
+Riscos conhecidos: ligação atendida e encerrada inteira durante uma pausa de consulta (~10 s) pode gerar CALLBACK falso; linha de Stage 3 com dados faltando é ignorada pelo leitor e pode parecer "sumiu".

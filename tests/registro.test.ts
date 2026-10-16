@@ -20,6 +20,7 @@ const T = (chave: string): Extract<EventoTracker, { tipo: "transferencia" }> => 
   ocorrencia: "o",
   chave,
   vinculo: `v${chave}`,
+  fase: "agent",
   callback: "100001",
   callee: "011900000001",
 });

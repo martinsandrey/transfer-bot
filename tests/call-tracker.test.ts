@@ -40,7 +40,9 @@ function alimentar(t: CallTracker, ...snaps: TableSnapshot[]): EventoTracker[] {
 }
 const tipos = (e: EventoTracker[]): string[] =>
   e.map((x) =>
-    x.tipo === "transferencia" || x.tipo === "ligacao_longa" ? x.tipo : `${x.tipo}:${x.codigo}`,
+    x.tipo === "transferencia" || x.tipo === "ligacao_longa" || x.tipo === "callback"
+      ? x.tipo
+      : `${x.tipo}:${x.codigo}`,
   );
 
 describe("interpretarStatus", () => {
@@ -122,11 +124,23 @@ describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => 
     ]);
   });
 
-  it("Stage 1 Agent → Stage 3 em outro complemento (ex.: Ringing) → transferência só quando chegar a Stage 3 Agent", () => {
+  it("Stage 1 Agent → Stage 3 Ringing (mesma linha) → transferência já ao tocar; depois Agent não repete", () => {
     const t = tracker({ leiturasConfirmacao: 1 });
     alimentar(t, snap([linha("A", S1)]));
-    expect(alimentar(t, snap([linha("A", "Stage 3 Ringing")]))).toEqual([]);
-    expect(tipos(alimentar(t, snap([linha("A", S3)])))).toEqual(["transferencia"]);
+    const ev = alimentar(t, snap([linha("A", "Stage 3 Ringing")]));
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(ev[0]).toMatchObject({ fase: "ringing" });
+    expect(
+      alimentar(
+        t,
+        snap([linha("A", S3)]),
+        snap([linha("A", S3)]),
+        snap([]),
+        snap([]),
+        snap([]),
+        snap([]),
+      ),
+    ).toEqual([]);
   });
 
   it("Ringing → Stage 3 Agent sem nunca ter sido Stage 1 Agent: inesperado, sem tarefa", () => {
@@ -698,6 +712,143 @@ describe("transferência durante janela sem leitura (consulta ao cadastro)", () 
       ...t.ingest(em([A("Stage 3 Agent", "908301")], 302_000)),
       ...t.ingest(em([A("Stage 3 Agent", "908301")], 303_000)),
     ];
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+});
+
+describe("Stage 3 Ringing: transferência ao tocar e CALLBACK se ninguém atender", () => {
+  const X = "CX"; // mesmo Callee em todas as linhas da mesma ligação
+  const ST1 = (cb = "100001") => linha(cb, S1, "T1", X);
+  const RINGING = (cb: string) => linha(cb, "Stage 3 Ringing", "U1", X);
+  const AGENT3 = (cb: string) => linha(cb, S3, "U1", X);
+  const mk = () => tracker({ leiturasConfirmacao: 1, esperaCallbackMs: 3000 });
+
+  it("linha nova em Stage 3 Ringing (o Stage 1 ainda na tabela) → transferência ao tocar, com o Callback do Stage 1", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]), snap([ST1()]));
+    const ev = alimentar(t, snap([ST1(), RINGING("908301")]));
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(ev[0]).toMatchObject({ callback: "100001", callee: X, fase: "ringing" });
+  });
+
+  it("tocou e foi atendido (Agent): uma única mensagem e nenhum CALLBACK", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(
+      t,
+      snap([ST1(), RINGING("908301")]),
+      snap([RINGING("908301")]),
+      snap([AGENT3("908301")]),
+      snap([AGENT3("908301")]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("tocou e sumiu sem atender: CALLBACK depois da espera (3 s), uma única vez", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(
+      t,
+      snap([ST1(), RINGING("908301")]),
+      snap([RINGING("908301")]),
+      snap([]), // 1 s sem Stage 3
+      snap([]), // 2 s
+      snap([]), // 3 s → CALLBACK
+      snap([]),
+      snap([]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia", "callback"]);
+    expect(ev[1]).toMatchObject({ callback: "100001", callee: X });
+    expect((ev[1] as { vinculo: string }).vinculo).toBe((ev[0] as { vinculo: string }).vinculo);
+  });
+
+  it("o toque passa para outro agente dentro da espera: sem CALLBACK; atendido depois: nada mais", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(
+      t,
+      snap([ST1(), RINGING("908301")]),
+      snap([RINGING("908301")]),
+      snap([]), // o 1º agente parou de tocar
+      snap([RINGING("908302")]), // outro agente começa a tocar (mesmo Callee)
+      snap([RINGING("908302")]),
+      snap([AGENT3("908302")]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("outro agente só começa a tocar DEPOIS da espera: CALLBACK já saiu; o novo toque não gera outra transferência", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(
+      t,
+      snap([ST1(), RINGING("908301")]),
+      snap([RINGING("908301")]),
+      snap([]),
+      snap([]),
+      snap([]), // CALLBACK
+      snap([RINGING("908302")]),
+      snap([AGENT3("908302")]),
+      snap([]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia", "callback"]);
+  });
+
+  it("direto em Stage 3 Agent (sem Ringing): transferência (fase agent) e nunca CALLBACK", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(
+      t,
+      snap([AGENT3("908301")]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(ev[0]).toMatchObject({ fase: "agent" });
+  });
+
+  it("janela sem leitura (consulta ao cadastro) não vira CALLBACK na hora: o relógio de 3 s recomeça", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    alimentar(t, snap([ST1(), RINGING("908301")]));
+    t.marcarJanelaSemLeitura();
+    relogio += 20_000; // a aba ficou 20 s na consulta
+    expect(alimentar(t, snap([]))).toEqual([]); // 1ª leitura depois da pausa: ainda não conclui nada
+    expect(alimentar(t, snap([]), snap([]))).toEqual([]);
+    expect(tipos(alimentar(t, snap([])))).toEqual(["callback"]);
+  });
+
+  it("transferência que ainda não tocou nem atendeu em outra ligação (Callee diferente) não se mistura", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1(), linha("100002", S1, "T2", "CY")]));
+    const ev = alimentar(
+      t,
+      snap([ST1(), linha("100002", S1, "T2", "CY"), RINGING("908301")]),
+      snap([linha("100002", S1, "T2", "CY"), AGENT3("908301")]),
+      snap([linha("100002", S1, "T2", "CY")]),
+      snap([linha("100002", S1, "T2", "CY")]),
+      snap([linha("100002", S1, "T2", "CY")]),
+    );
     expect(tipos(ev)).toEqual(["transferencia"]);
   });
 });

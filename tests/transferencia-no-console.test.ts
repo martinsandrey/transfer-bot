@@ -45,6 +45,7 @@ describe("modo real provisório: mensagem preparada e exibida, sem cadastro e se
       ocorrencia: "o1",
       chave: "k",
       vinculo: "v-k",
+      fase: "agent",
       callback: "908112",
       callee: "011941445986",
     });

@@ -2,6 +2,7 @@ import type {
   CustomerLookup,
   CustomerRecord,
   MessageSender,
+  OpcoesEnvio,
   ResultadoBusca,
 } from "../dominio/tipos.js";
 import type { Logger } from "../log/logger.js";
@@ -60,7 +61,7 @@ export function descreverFalhaDeEnvio(motivo: string): string {
   return motivo;
 }
 
-export type TipoTarefa = "transferencia" | "longa";
+export type TipoTarefa = "transferencia" | "longa" | "callback";
 
 export interface TarefaTransferencia {
   id: string;
@@ -68,6 +69,9 @@ export interface TarefaTransferencia {
   vinculo: string;
   /** Confirmação do envio (ex.: `telegram:123`), usada para reler a mensagem se ela for editada depois. */
   confirmacao?: string;
+  /** CALLBACK: `confirmacao` da mensagem de transferência a que se responde, e o texto de reserva se ela não existir mais. */
+  respostaA?: string;
+  reserva?: string;
   /** Esta tarefa reaproveitou a mensagem já enviada ao grupo de 5 min (não consultou o cadastro). */
   reaproveitada?: boolean;
   /** `transferencia` = grupo das transferências; `longa` = ligação que atingiu o tempo mínimo em Stage 1 (segundo grupo). */
@@ -153,9 +157,10 @@ export class TaskQueue {
 
   /** Cria a tarefa (idempotente por `chave`: segunda chamada devolve `null`). */
   enqueue(
-    ev: Extract<EventoTracker, { tipo: "transferencia" | "ligacao_longa" }>,
+    ev: Extract<EventoTracker, { tipo: "transferencia" | "ligacao_longa" | "callback" }>,
   ): TarefaTransferencia | null {
-    const tipo: TipoTarefa = ev.tipo === "ligacao_longa" ? "longa" : "transferencia";
+    const tipo: TipoTarefa =
+      ev.tipo === "ligacao_longa" ? "longa" : ev.tipo === "callback" ? "callback" : "transferencia";
     if (tipo === "longa" && !this.deps.senderLonga && this.op.modo === "live") return null;
     for (const t of this.tarefas.values()) if (t.chave === ev.chave) return null;
     const t: TarefaTransferencia = {
@@ -194,6 +199,11 @@ export class TaskQueue {
       throw new Error(`Transição de tarefa inválida: ${t.estado} → ${novo}`);
     if ((novo === "enviada" || novo === "observada") && t.mensagem !== undefined) {
       this.guardarMensagemLonga(t, t.mensagem);
+      if (t.tipo === "transferencia")
+        this.transferidas.set(t.vinculo, {
+          ...(t.confirmacao !== undefined ? { confirmacao: t.confirmacao } : {}),
+          em: this.agora(),
+        });
       try {
         this.deps.registrar?.({
           tipo: t.tipo,
@@ -245,6 +255,9 @@ export class TaskQueue {
     { texto: string; em: number; confirmacao?: string }
   >();
 
+  /** Mensagens de transferência já enviadas (ou prévias), por ligação: o CALLBACK responde a elas. */
+  private readonly transferidas = new Map<string, { confirmacao?: string; em: number }>();
+
   private guardarMensagemLonga(t: TarefaTransferencia, texto: string): void {
     if (t.tipo !== "longa") return;
     this.mensagensLongas.set(t.vinculo, {
@@ -293,6 +306,7 @@ export class TaskQueue {
 
   private async processar(t: TarefaTransferencia): Promise<void> {
     this.mover(t, "pesquisando");
+    if (t.tipo === "callback") return this.processarCallback(t);
     const reaproveitada = await this.mensagemReaproveitavel(t);
     if (reaproveitada !== undefined) {
       // A ligação já fez 5 min em Stage 1 e a mensagem foi ao grupo de 5 min: reenvia o MESMO texto, sem consultar o cadastro.
@@ -321,6 +335,11 @@ export class TaskQueue {
     await this.enviar(t);
   }
 
+  private opcoesDe(t: TarefaTransferencia): OpcoesEnvio | undefined {
+    if (t.tipo !== "callback" || t.respostaA === undefined) return undefined;
+    return { responderA: t.respostaA, ...(t.reserva !== undefined ? { reserva: t.reserva } : {}) };
+  }
+
   private senderDe(t: TarefaTransferencia): MessageSender {
     return t.tipo === "longa" && this.deps.senderLonga ? this.deps.senderLonga : this.deps.sender;
   }
@@ -339,6 +358,39 @@ export class TaskQueue {
   }
 
   /** Consulta o cadastro e monta a mensagem. `false` = a tarefa já terminou (sem cliente, divergente, falha). */
+  /** CALLBACK: responde à mensagem de transferência desta ligação (só se ela foi enviada). Não consulta o cadastro. */
+  private async processarCallback(t: TarefaTransferencia): Promise<void> {
+    const feita = this.transferidas.get(t.vinculo);
+    if (!feita) {
+      this.mover(t, "ignorada", "sem_mensagem_de_transferencia");
+      this.deps.notificador.alerta(
+        "aviso",
+        `Tarefa ${t.id}: ninguém atendeu, mas a mensagem de transferência dessa ligação não foi enviada; o CALLBACK não foi enviado.`,
+      );
+      return;
+    }
+    const reserva = `CALLBACK\nPh: ${t.callee}\nLine 1 number: ${t.callback}`;
+    if (feita.confirmacao !== undefined) {
+      t.mensagem = "CALLBACK";
+      t.respostaA = feita.confirmacao;
+      t.reserva = reserva;
+    } else {
+      t.mensagem = reserva; // não temos o ID da mensagem original: manda o texto completo, sem resposta
+    }
+    this.mover(t, "pronta");
+    if (this.op.modo === "observacao") {
+      this.op.previa?.(t.mensagem, t.tipo);
+      this.mover(t, "observada");
+      return;
+    }
+    if (this.expirou(t)) {
+      this.mover(t, "ignorada", "mensagem_expirada");
+      this.avisarExpirada(t);
+      return;
+    }
+    await this.enviar(t);
+  }
+
   private async prepararMensagem(t: TarefaTransferencia): Promise<boolean> {
     const busca = await this.pesquisar(t);
     if (!busca) return false;
@@ -444,7 +496,7 @@ export class TaskQueue {
       t.tentativasEnvio++;
       let resultado;
       try {
-        resultado = await this.senderDe(t).send(t.mensagem, t.chave);
+        resultado = await this.senderDe(t).send(t.mensagem, t.chave, this.opcoesDe(t));
       } catch {
         resultado = { tipo: "incerta", motivo: "excecao_no_envio" } as const; // não sabemos se saiu
       }
@@ -513,7 +565,7 @@ export class TaskQueue {
       this.mover(t, "enviando", "reenvio_manual");
       let r;
       try {
-        r = await this.senderDe(t).send(t.mensagem, t.chave);
+        r = await this.senderDe(t).send(t.mensagem, t.chave, this.opcoesDe(t));
       } catch {
         r = { tipo: "incerta", motivo: "excecao_no_envio" } as const;
       }
@@ -538,6 +590,10 @@ export class TaskQueue {
         n++;
       }
     }
+    const memoria = this.op.memoriaMensagemLongaMs ?? 3 * 3_600_000;
+    for (const [k, g] of this.mensagensLongas)
+      if (agora - g.em > memoria) this.mensagensLongas.delete(k);
+    for (const [k, g] of this.transferidas) if (agora - g.em > memoria) this.transferidas.delete(k);
     return n;
   }
 }

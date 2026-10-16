@@ -54,6 +54,8 @@ function traduzir(e: unknown): Error {
   ) {
     return new FalhaTelegram(`destino_invalido_ou_sem_permissao`);
   }
+  if (/REPLY_MESSAGE_ID_INVALID|MESSAGE_ID_INVALID/i.test(msg))
+    return new FalhaTelegram("resposta_invalida");
   if (/AUTH_KEY|SESSION_REVOKED|USER_DEACTIVATED/i.test(msg)) {
     return new FalhaTelegram("sessao_invalida_refaca_o_login");
   }
@@ -130,11 +132,16 @@ export class ClienteGramJS implements ClienteTelegram {
     }
   }
 
-  async enviar(destino: string, texto: string): Promise<{ id: number; data: number }> {
+  async enviar(
+    destino: string,
+    texto: string,
+    responderAId?: number,
+  ): Promise<{ id: number; data: number }> {
     try {
       const m = await this.c.sendMessage(await this.entidade(destino), {
         message: texto,
         parseMode: undefined,
+        ...(responderAId !== undefined ? { replyTo: responderAId } : {}),
       });
       return { id: m.id, data: m.date };
     } catch (e) {

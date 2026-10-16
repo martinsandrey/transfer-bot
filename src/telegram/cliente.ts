@@ -17,8 +17,12 @@ export interface Dialogo {
 }
 
 export interface ClienteTelegram {
-  /** Envia texto simples ao destino ("me" = Mensagens Salvas, @usuario, ou ID numérico). Devolve o ID da mensagem enviada. */
-  enviar(destino: string, texto: string): Promise<{ id: number; data: number }>;
+  /** Envia texto simples ao destino ("me" = Mensagens Salvas, @usuario, ou ID numérico). Com `responderAId`, como resposta a essa mensagem. Devolve o ID da mensagem enviada. */
+  enviar(
+    destino: string,
+    texto: string,
+    responderAId?: number,
+  ): Promise<{ id: number; data: number }>;
   /** Últimas mensagens do destino (para verificar se um envio incerto chegou). */
   mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]>;
   /** Texto atual (já editado, se foi) de uma mensagem do destino; `null` se a mensagem não existe mais (apagada). */

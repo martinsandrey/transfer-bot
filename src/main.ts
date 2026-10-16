@@ -96,6 +96,7 @@ async function principal(): Promise<void> {
     ausenciaMaxLeituras: cfg.monitor.ausenciaMaxLeituras,
     ttlOcorrenciasMs: cfg.monitor.ttlOcorrenciasMin * 60_000,
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
+    esperaCallbackMs: cfg.monitor.callbackEsperaMs,
     // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
     ...(!simulado && cfg.telegram.destinoLonga
       ? { duracaoLongaSeg: cfg.duracaoLongaMin * 60 }
@@ -289,7 +290,9 @@ async function principal(): Promise<void> {
           const titulo =
             tipo === "longa"
               ? `LIGAÇÃO DE ${cfg.duracaoLongaMin} MIN (STAGE 1) ${hora} — mensagem do 2º grupo`
-              : `TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada`;
+              : tipo === "callback"
+                ? `CALLBACK (ninguém atendeu) ${hora} — resposta à mensagem de transferência`
+                : `TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada`;
           console.log(
             `
 ===== ${titulo} =====

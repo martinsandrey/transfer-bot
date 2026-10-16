@@ -1,7 +1,7 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 
-export type TipoRegistro = "transferencia" | "longa";
+export type TipoRegistro = "transferencia" | "longa" | "callback";
 
 export interface RegistroDeMensagem {
   tipo: TipoRegistro;
@@ -15,6 +15,7 @@ export interface RegistroDeMensagem {
 export const NOME_ARQUIVO: Record<TipoRegistro, string> = {
   transferencia: "transferencias-concluidas.txt",
   longa: "ligacoes-5min.txt",
+  callback: "transferencias-concluidas.txt", // o CALLBACK fica junto das transferências, marcado
 };
 
 /**
@@ -36,7 +37,12 @@ export class RegistroEmArquivo {
       const d = this.agora();
       const carimbo = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}:${String(d.getSeconds()).padStart(2, "0")}`;
       const rotulo = r.estado === "enviada" ? "ENVIADA" : "OBSERVAÇÃO (não enviada)";
-      const nota = r.reaproveitada ? " | mensagem do grupo de 5 min" : "";
+      const nota =
+        r.tipo === "callback"
+          ? " | CALLBACK (ninguém atendeu)"
+          : r.reaproveitada
+            ? " | mensagem do grupo de 5 min"
+            : "";
       const bloco = `===== ${carimbo} | ${rotulo}${nota} =====\n${r.texto}\n\n`;
       appendFileSync(join(this.pasta, NOME_ARQUIVO[r.tipo]), bloco, { encoding: "utf8" });
     } catch (e) {

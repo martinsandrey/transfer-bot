@@ -46,7 +46,9 @@ class TelegramFalso implements ClienteTelegram {
   comportamento: Array<"ok" | "trava_mas_entrega" | "trava_sem_entregar" | Error> = [];
   recentes: MensagemRecente[] = [];
   leituraFalha = false;
-  async enviar(_d: string, texto: string) {
+  respondeuA: Array<number | undefined> = [];
+  async enviar(_d: string, texto: string, responderAId?: number) {
+    this.respondeuA.push(responderAId);
     const c = this.comportamento.shift() ?? "ok";
     if (c instanceof Error) throw c;
     if (c === "trava_mas_entrega") this.recentes.push({ id: 9, texto, data: 2_000_000_000 });
@@ -262,6 +264,55 @@ describe("E2E: ligação de 5 min vai ao 2º grupo; transferência ao 1º", () =
     expect(m.tg.enviadas).toHaveLength(1);
     expect(m.fila.todas.find((x) => x.tipo === "longa")?.estado).toBe("falhou");
     expect(m.fila.todas.find((x) => x.tipo === "transferencia")?.estado).toBe("enviada");
+  });
+});
+
+describe("E2E: Stage 3 Ringing → mensagem ao tocar; sem atender → CALLBACK como resposta", () => {
+  const S1 = (t: number) => snap([R("100001", "Stage 1 Agent", CALLEE, "T1")], t);
+  const toca = (t: number, com1 = false) =>
+    snap(
+      [
+        ...(com1 ? [R("100001", "Stage 1 Agent", CALLEE, "T1")] : []),
+        R("908301", "Stage 3 Ringing", CALLEE, "U1"),
+      ],
+      t,
+    );
+  it("tocou e ninguém atendeu: a mensagem sai ao tocar e depois vem o CALLBACK respondendo a ela", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      S1(t0),
+      S1(t0 + 1000),
+      toca(t0 + 2000, true),
+      toca(t0 + 3000),
+      snap([], t0 + 4000),
+      snap([], t0 + 5000),
+      snap([], t0 + 6000),
+      snap([], t0 + 7000),
+    ]);
+    await rodar(m, 8);
+    expect(m.tg.enviadas).toHaveLength(2);
+    expect(m.tg.enviadas[0]).toContain("Line 1 number: 100001");
+    expect(m.tg.enviadas[1]).toBe("CALLBACK");
+    expect(m.tg.respondeuA).toEqual([undefined, 1]); // respondeu à 1ª mensagem (ID 1)
+    expect(m.consultas).toBe(1);
+  });
+
+  it("tocou e foi atendido: só a mensagem de transferência", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      S1(t0),
+      S1(t0 + 1000),
+      toca(t0 + 2000, true),
+      toca(t0 + 3000),
+      snap([R("908301", "Stage 3 Agent", CALLEE, "U1")], t0 + 4000),
+      snap([R("908301", "Stage 3 Agent", CALLEE, "U1")], t0 + 5000),
+      snap([], t0 + 6000),
+      snap([], t0 + 7000),
+      snap([], t0 + 8000),
+      snap([], t0 + 9000),
+    ]);
+    await rodar(m, 10);
+    expect(m.tg.enviadas).toHaveLength(1);
   });
 });
 

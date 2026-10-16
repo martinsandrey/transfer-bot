@@ -57,6 +57,17 @@ export type EventoTracker =
       callee: string;
       /** Identifica a ligação de origem (Stage 1); igual ao `vinculo` da `ligacao_longa` da MESMA ligação. Só em memória (tem telefone). */
       vinculo: string;
+      /** `ringing`: o Stage 3 ainda está tocando (ninguém atendeu ainda); `agent`: já foi atendido. */
+      fase: "ringing" | "agent";
+    }
+  /** O Stage 3 tocou e a ligação sumiu sem ninguém atender (Stage 3 Agent nunca apareceu para o mesmo Callee). */
+  | {
+      tipo: "callback";
+      ocorrencia: string;
+      chave: string;
+      callback: string;
+      callee: string;
+      vinculo: string;
     }
   /** Ligação que atingiu o tempo mínimo (ex.: 5 min) AINDA em Stage 1 (nunca depois de transferida). */
   | {
@@ -82,6 +93,8 @@ export interface OpcoesTracker {
    * TODO(confirmar) (P5): padrão provisório = Start Time + Callee Number (texto cru); ajustar com a evidência do recon.
    */
   discriminador?: (row: CallRow) => string;
+  /** Quanto tempo (ms) sem nenhuma linha de Stage 3 do mesmo Callee, depois de ter tocado sem atender, antes de emitir `callback` (padrão 3000). */
+  esperaCallbackMs?: number;
   /** Duração (segundos) que uma ligação em Stage 1 precisa atingir para gerar `ligacao_longa`. Ausente/0 = desligado. */
   duracaoLongaSeg?: number;
   /** Diário de status (só para diagnóstico, sem telefones): chamado quando uma ocorrência surge, muda de status confirmado ou some. */
@@ -112,8 +125,6 @@ interface Ocorrencia {
   ausencias: number;
   /** Já esteve (confirmada) em "Stage 1 Agent": pré-requisito para uma transferência. */
   viuStage1Agent: boolean;
-  /** Passou de Stage 1 Agent para um Stage 3 que ainda não é "Agent" (ex.: Ringing): a transferência sai quando chegar a Agent. */
-  aguardaStage3Agent: boolean;
   callee: string;
   /** Linha nova em Stage 3 ligada (pelo Callee) a uma linha de Stage 1 Agent: aguarda N leituras para virar transferência. */
   origemPendente: OrigemStage1 | null;
@@ -138,6 +149,11 @@ export class CallTracker {
   private readonly origens = new Map<string, OrigemStage1>();
   /** Callee Number → instante em que já vimos uma chamada em Stage 3 (evita avisos repetidos para a mesma chamada). */
   private readonly stage3Conhecidos = new Map<string, number>();
+  /** Stage 3 já transferidos (por Callee) cujo atendimento está sendo acompanhado. */
+  private readonly seguimentos = new Map<
+    string,
+    { vinculo: string; callback: string; ocId: string; atendida: boolean; ultimoStage3: number }
+  >();
   private anomaliasAtivas = new Set<string>();
   private precisaBaseline = true;
   private janelaCega = false;
@@ -153,6 +169,7 @@ export class CallTracker {
     this.ativas.clear();
     this.origens.clear();
     this.stage3Conhecidos.clear();
+    this.seguimentos.clear();
     this.anomaliasAtivas = new Set();
     this.precisaBaseline = true;
   }
@@ -240,7 +257,6 @@ export class CallTracker {
           baseline,
           ausencias: 0,
           viuStage1Agent: status.numero === 1 && status.sub === "agent",
-          aguardaStage3Agent: false,
           callee: row.calleeNumber,
           origemPendente: null,
           leiturasNoStatus: 1,
@@ -290,6 +306,7 @@ export class CallTracker {
         }
       }
     }
+    if (!baseline) this.acompanharAtendimento(s, cega, eventos);
     return eventos;
   }
 
@@ -367,9 +384,9 @@ export class CallTracker {
     if (
       oc.origemPendente &&
       st.numero === 3 &&
-      st.sub === "agent" &&
       oc.leiturasNoStatus >= this.op.leiturasConfirmacao
     ) {
+      // O Stage 3 já está tocando (Ringing) ou atendido (Agent): a mensagem de transferência sai agora.
       const o = oc.origemPendente;
       oc.origemPendente = null;
       this.stage3Conhecidos.set(oc.callee, agora);
@@ -381,6 +398,7 @@ export class CallTracker {
         oc,
         agora,
         eventos,
+        st.sub === "agent" ? "agent" : "ringing",
       );
     }
   }
@@ -407,21 +425,7 @@ export class CallTracker {
       if (para.numero === 3) eventos.push(this.aviso("sequencia_inesperada", oc));
       return;
     }
-    if (de.numero === para.numero) {
-      if (para.numero === 3 && para.sub === "agent" && oc.aguardaStage3Agent) {
-        oc.aguardaStage3Agent = false;
-        this.emitirTransferencia(
-          oc.callback,
-          oc.discriminador,
-          oc.id,
-          row.calleeNumber,
-          oc,
-          agora,
-          eventos,
-        );
-      }
-      return; // Ringing → Agent etc.: normal
-    }
+    if (de.numero === para.numero) return; // Ringing → Agent etc.: normal
     if (de.numero === 4 || para.numero === 4) return; // Stage 4: o usuário pediu para não fazer nada (sem tarefa, sem aviso)
     if (de.numero === 1 && para.numero === 2) return; // não é do interesse
     if (de.numero === 1 && para.numero === 3) {
@@ -429,17 +433,16 @@ export class CallTracker {
         eventos.push(this.aviso("sequencia_inesperada", oc)); // nunca foi "Stage 1 Agent"
         return;
       }
-      if (para.sub === "agent")
-        this.emitirTransferencia(
-          oc.callback,
-          oc.discriminador,
-          oc.id,
-          row.calleeNumber,
-          oc,
-          agora,
-          eventos,
-        );
-      else oc.aguardaStage3Agent = true;
+      this.emitirTransferencia(
+        oc.callback,
+        oc.discriminador,
+        oc.id,
+        row.calleeNumber,
+        oc,
+        agora,
+        eventos,
+        para.sub === "agent" ? "agent" : "ringing",
+      );
       return;
     }
     eventos.push(this.aviso("sequencia_inesperada", oc));
@@ -453,6 +456,7 @@ export class CallTracker {
     ocAviso: Ocorrencia,
     agora: number,
     eventos: EventoTracker[],
+    fase: "ringing" | "agent",
   ): void {
     const chave = `${callbackOrigem}|${discriminadorOrigem}`;
     if (this.emitidas.has(chave)) {
@@ -469,7 +473,54 @@ export class CallTracker {
       callback: callbackOrigem,
       callee,
       vinculo: chave,
+      fase,
     });
+    // A partir daqui acompanha se alguém atende esse Stage 3 (senão, sai o CALLBACK).
+    this.seguimentos.set(callee, {
+      vinculo: chave,
+      callback: callbackOrigem,
+      ocId,
+      atendida: fase === "agent",
+      ultimoStage3: agora,
+    });
+  }
+
+  /** Atualiza o acompanhamento dos Stage 3 já transferidos e emite `callback` quando tocou e sumiu sem atender. */
+  private acompanharAtendimento(s: TableSnapshot, cega: boolean, eventos: EventoTracker[]): void {
+    if (this.seguimentos.size === 0) return;
+    const comStage3 = new Set<string>();
+    const comAgent = new Set<string>();
+    for (const r of s.rows) {
+      const st = interpretarStatusDetalhado(r.callStatus);
+      if (st.numero !== 3) continue;
+      comStage3.add(r.calleeNumber);
+      if (st.sub === "agent") comAgent.add(r.calleeNumber);
+    }
+    const espera = this.op.esperaCallbackMs ?? 3000;
+    for (const [callee, sg] of this.seguimentos) {
+      if (comAgent.has(callee)) sg.atendida = true;
+      if (comStage3.has(callee) || cega) sg.ultimoStage3 = s.readAt;
+      if (sg.atendida) {
+        // atendida: nada mais a fazer; esquece quando a linha some
+        if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 > 60_000)
+          this.seguimentos.delete(callee);
+        continue;
+      }
+      if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 >= espera) {
+        const chave = `C|${sg.vinculo}`;
+        this.seguimentos.delete(callee);
+        if (this.emitidas.has(chave)) continue;
+        this.emitidas.set(chave, s.readAt);
+        eventos.push({
+          tipo: "callback",
+          ocorrencia: sg.ocId,
+          chave: createHash("sha256").update(chave).digest("hex").slice(0, 12),
+          callback: sg.callback,
+          callee,
+          vinculo: sg.vinculo,
+        });
+      }
+    }
   }
 
   private aviso(codigo: CodigoAviso, oc: Ocorrencia): EventoTracker {

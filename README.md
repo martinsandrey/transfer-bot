@@ -48,6 +48,13 @@ Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está 
 
 Ao trocar a URL, o navegador pode pedir novo login.
 
+## Transferência ao tocar e CALLBACK
+
+- A mensagem de transferência sai **assim que o Stage 3 aparece tocando** (`Stage 3 Ringing`), sem esperar alguém atender. Se o Stage 3 já aparecer atendido (`Stage 3 Agent`), sai do mesmo jeito.
+- Se alguém atende (aparece `Stage 3 Agent` para o mesmo cliente), **não sai mais nada**.
+- Se o Stage 3 tocou e a ligação sumiu **sem ninguém atender**, o programa espera `CALLBACK_ESPERA_SEG` segundos (padrão 3, para o toque poder passar a outro agente) e **responde "CALLBACK"** à mensagem de transferência no mesmo grupo. Só acontece se a mensagem de transferência foi enviada; se a original foi apagada, envia "CALLBACK" com o telefone e o Line 1 number.
+- O CALLBACK também é registrado em `registros\transferencias-concluidas.txt`, marcado.
+
 ## Segundo grupo (ligações longas)
 
 Com `TELEGRAM_DESTINO_5MIN` preenchido (nome do grupo ou ID, como no `TELEGRAM_DESTINO`), o programa também envia **a mesma mensagem** (mesmo modelo) para esse grupo quando uma ligação chega a `DURACAO_LONGA_MIN` minutos (padrão 5) **ainda em Stage 1**.
