@@ -177,6 +177,18 @@ export class Monitor {
       );
       if (!fila) return;
       if (fila.enqueue(ev)) void fila.drenar();
+    } else if (ev.tipo === "ligacao_longa") {
+      log.info("Ligação longa detectada", {
+        evento: "ligacao_longa",
+        idCurto: ev.ocorrencia,
+        callbackMascarado: mascararTelefone(ev.callback),
+      });
+      notificador.alerta(
+        "aviso",
+        `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+      );
+      if (!fila) return;
+      if (fila.enqueue(ev)) void fila.drenar();
     } else if (ev.tipo === "aviso") {
       log.warn("Aviso do rastreador", {
         evento: "aviso",

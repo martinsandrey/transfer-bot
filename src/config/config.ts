@@ -32,9 +32,13 @@ export interface AppConfig {
     apiHash: string | undefined;
     /** "me" (Mensagens Salvas, padrão seguro), @usuario ou ID numérico do chat. */
     destino: string;
+    /** Segundo grupo (ligações que atingem `duracaoLongaMin` ainda em Stage 1). Vazio = função desligada. */
+    destinoLonga: string | undefined;
     timeoutEnvioMs: number;
     arquivoSessao: string;
   };
+  /** Minutos de duração (em Stage 1) que disparam a mensagem do segundo grupo. */
+  duracaoLongaMin: number;
   /** Minutos; 0 = a mensagem nunca expira. */
   validadeMensagemMin: number;
   nivelLog: "debug" | "info" | "warn" | "error";
@@ -131,6 +135,8 @@ const esquema = z.object({
   ),
   TELEGRAM_API_HASH: textoOpcional,
   TELEGRAM_DESTINO: z.preprocess(vazioParaUndefined, z.string().default("me")),
+  TELEGRAM_DESTINO_5MIN: textoOpcional,
+  DURACAO_LONGA_MIN: inteiro("DURACAO_LONGA_MIN", 5, 1, 600),
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
   VALIDADE_MENSAGEM_MIN: inteiro("VALIDADE_MENSAGEM_MIN", 15, 0, 100000),
   NIVEL_LOG: z.preprocess(
@@ -203,9 +209,11 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       apiId: c.TELEGRAM_API_ID,
       apiHash: c.TELEGRAM_API_HASH,
       destino: c.TELEGRAM_DESTINO,
+      destinoLonga: c.TELEGRAM_DESTINO_5MIN,
       timeoutEnvioMs: c.TIMEOUT_ENVIO_TELEGRAM_MS,
       arquivoSessao: join(dados, "telegram", "sessao.txt"),
     },
+    duracaoLongaMin: c.DURACAO_LONGA_MIN,
     validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,
     nivelLog: c.NIVEL_LOG,
   };

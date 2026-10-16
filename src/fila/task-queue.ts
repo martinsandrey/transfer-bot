@@ -60,8 +60,12 @@ export function descreverFalhaDeEnvio(motivo: string): string {
   return motivo;
 }
 
+export type TipoTarefa = "transferencia" | "longa";
+
 export interface TarefaTransferencia {
   id: string;
+  /** `transferencia` = grupo das transferências; `longa` = ligação que atingiu o tempo mínimo em Stage 1 (segundo grupo). */
+  tipo: TipoTarefa;
   /** Resumo da ocorrência (sem telefone): chave de idempotência. */
   chave: string;
   estado: EstadoTarefa;
@@ -89,13 +93,15 @@ export interface OpcoesFila {
   agora?: () => number;
   dormir?: (ms: number) => Promise<void>;
   /** Prévia no console (modo observação). Pode conter dados do cliente: nunca vai para o log. */
-  previa?: (texto: string) => void;
+  previa?: (texto: string, tipo: TipoTarefa) => void;
 }
 
 export interface DepsFila {
   lookup: CustomerLookup;
   construtor: ConstrutorDeMensagem;
   sender: MessageSender;
+  /** Enviador do segundo grupo (ligações longas). Sem ele, tarefas `longa` não são aceitas. */
+  senderLonga?: MessageSender;
   log: Logger;
   notificador: Notificador;
 }
@@ -131,10 +137,15 @@ export class TaskQueue {
   }
 
   /** Cria a tarefa (idempotente por `chave`: segunda chamada devolve `null`). */
-  enqueue(ev: Extract<EventoTracker, { tipo: "transferencia" }>): TarefaTransferencia | null {
+  enqueue(
+    ev: Extract<EventoTracker, { tipo: "transferencia" | "ligacao_longa" }>,
+  ): TarefaTransferencia | null {
+    const tipo: TipoTarefa = ev.tipo === "ligacao_longa" ? "longa" : "transferencia";
+    if (tipo === "longa" && !this.deps.senderLonga && this.op.modo === "live") return null;
     for (const t of this.tarefas.values()) if (t.chave === ev.chave) return null;
     const t: TarefaTransferencia = {
       id: `t${++this.seq}`,
+      tipo,
       chave: ev.chave,
       estado: "detectada",
       callback: ev.callback,
@@ -252,7 +263,7 @@ export class TaskQueue {
     this.mover(t, "pronta");
 
     if (this.op.modo === "observacao") {
-      this.op.previa?.(t.mensagem);
+      this.op.previa?.(t.mensagem, t.tipo);
       this.mover(t, "observada");
       return;
     }
@@ -262,6 +273,10 @@ export class TaskQueue {
       return;
     }
     await this.enviar(t);
+  }
+
+  private senderDe(t: TarefaTransferencia): MessageSender {
+    return t.tipo === "longa" && this.deps.senderLonga ? this.deps.senderLonga : this.deps.sender;
   }
 
   private expirou(t: TarefaTransferencia): boolean {
@@ -311,7 +326,7 @@ export class TaskQueue {
       t.tentativasEnvio++;
       let resultado;
       try {
-        resultado = await this.deps.sender.send(t.mensagem, t.chave);
+        resultado = await this.senderDe(t).send(t.mensagem, t.chave);
       } catch {
         resultado = { tipo: "incerta", motivo: "excecao_no_envio" } as const; // não sabemos se saiu
       }
@@ -343,8 +358,9 @@ export class TaskQueue {
 
   /** Nunca reenvia sozinho: verifica quando possível; senão alerta e espera decisão manual. */
   private async tratarIncerta(t: TarefaTransferencia, motivo: string): Promise<void> {
-    const v = this.deps.sender.verify
-      ? await this.deps.sender.verify(t.chave).catch(() => "indeterminado" as const)
+    const sender = this.senderDe(t);
+    const v = sender.verify
+      ? await sender.verify(t.chave).catch(() => "indeterminado" as const)
       : "indeterminado";
     if (v === "entregue") {
       this.mover(t, "enviada", "confirmada_na_verificacao");
@@ -378,7 +394,7 @@ export class TaskQueue {
       this.mover(t, "enviando", "reenvio_manual");
       let r;
       try {
-        r = await this.deps.sender.send(t.mensagem, t.chave);
+        r = await this.senderDe(t).send(t.mensagem, t.chave);
       } catch {
         r = { tipo: "incerta", motivo: "excecao_no_envio" } as const;
       }

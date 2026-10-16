@@ -50,6 +50,8 @@ export type CodigoAviso =
 
 export type EventoTracker =
   | { tipo: "transferencia"; ocorrencia: string; chave: string; callback: string; callee: string }
+  /** Ligação que atingiu o tempo mínimo (ex.: 5 min) AINDA em Stage 1 (nunca depois de transferida). */
+  | { tipo: "ligacao_longa"; ocorrencia: string; chave: string; callback: string; callee: string }
   | { tipo: "aviso"; codigo: CodigoAviso; ocorrencia: string; callbackMascarado: string }
   | { tipo: "anomalia"; codigo: "callback_duplicado"; callbackMascarado: string };
 
@@ -65,6 +67,8 @@ export interface OpcoesTracker {
    * TODO(confirmar) (P5): padrão provisório = Start Time + Callee Number (texto cru); ajustar com a evidência do recon.
    */
   discriminador?: (row: CallRow) => string;
+  /** Duração (segundos) que uma ligação em Stage 1 precisa atingir para gerar `ligacao_longa`. Ausente/0 = desligado. */
+  duracaoLongaSeg?: number;
   /** Diário de status (só para diagnóstico, sem telefones): chamado quando uma ocorrência surge, muda de status confirmado ou some. */
   aoMudarStatus?: (info: { id: string; de: string; para: string }) => void;
   /**
@@ -100,6 +104,8 @@ interface Ocorrencia {
   origemPendente: OrigemStage1 | null;
   /** Leituras seguidas com o status confirmado atual. */
   leiturasNoStatus: number;
+  /** `ligacao_longa` já emitida (ou ocorrência que já nasceu longa na linha de base: não conta). */
+  longaEmitida: boolean;
 }
 
 export const discriminadorPadrao = (r: CallRow): string => `${r.startTime}|${r.calleeNumber}`;
@@ -221,6 +227,7 @@ export class CallTracker {
           callee: row.calleeNumber,
           origemPendente: null,
           leiturasNoStatus: 1,
+          longaEmitida: baseline && this.longa(row.callDurationSec),
         };
         this.ativas.set(cb, oc);
         this.op.aoMudarStatus?.({ id: oc.id, de: "(novo)", para: status.chave });
@@ -316,8 +323,27 @@ export class CallTracker {
   }
 
   /** Mantém origens/Stage 3 conhecidos atualizados e confirma a transferência por Callee depois de N leituras. */
+  private longa(duracaoSeg: number | null | undefined): boolean {
+    const limite = this.op.duracaoLongaSeg ?? 0;
+    return limite > 0 && duracaoSeg != null && Number.isFinite(duracaoSeg) && duracaoSeg >= limite;
+  }
+
   private aposLeitura(oc: Ocorrencia, row: CallRow, agora: number, eventos: EventoTracker[]): void {
     const st = oc.confirmado;
+    if (!oc.longaEmitida && st.numero === 1 && this.longa(row.callDurationSec)) {
+      oc.longaEmitida = true;
+      const chave = `L|${oc.callback}|${oc.discriminador}`;
+      if (!this.emitidas.has(chave)) {
+        this.emitidas.set(chave, agora);
+        eventos.push({
+          tipo: "ligacao_longa",
+          ocorrencia: oc.id,
+          chave: createHash("sha256").update(chave).digest("hex").slice(0, 12),
+          callback: oc.callback,
+          callee: row.calleeNumber,
+        });
+      }
+    }
     if (st.numero === 1 && st.sub === "agent") this.registrarOrigem(oc, agora);
     if (st.numero === 3 && !oc.origemPendente) this.stage3Conhecidos.set(oc.callee, agora);
     if (

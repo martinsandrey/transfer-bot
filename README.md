@@ -34,18 +34,28 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
 
 Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está em `.env.example`); não precisa reinstalar nem recompilar:
 
-| Variável                                         | Para quê                                                                    |
-| ------------------------------------------------ | --------------------------------------------------------------------------- |
-| `SITE_URL`                                       | Endereço do sistema (obrigatório).                                          |
-| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO` | Login automático (opcional).                                                |
-| `SEND_MODE`                                      | `observacao` (padrão: só mostra) ou `live` (envia de verdade).              |
-| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`           | Credenciais do Telegram (my.telegram.org).                                  |
-| `TELEGRAM_DESTINO`                               | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.          |
-| `VALIDADE_MENSAGEM_MIN`                          | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta). |
-| `JANELA_TRANSFERENCIA_SEG`                       | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).        |
-| `NAVEGADOR`                                      | `msedge` (padrão) ou `chromium`.                                            |
+| Variável                                         | Para quê                                                                                  |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
+| `SITE_URL`                                       | Endereço do sistema (obrigatório).                                                        |
+| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO` | Login automático (opcional).                                                              |
+| `SEND_MODE`                                      | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                            |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`           | Credenciais do Telegram (my.telegram.org).                                                |
+| `TELEGRAM_DESTINO`                               | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                        |
+| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`     | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado. |
+| `VALIDADE_MENSAGEM_MIN`                          | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).               |
+| `JANELA_TRANSFERENCIA_SEG`                       | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                      |
+| `NAVEGADOR`                                      | `msedge` (padrão) ou `chromium`.                                                          |
 
 Ao trocar a URL, o navegador pode pedir novo login.
+
+## Segundo grupo (ligações longas)
+
+Com `TELEGRAM_DESTINO_5MIN` preenchido (nome do grupo ou ID, como no `TELEGRAM_DESTINO`), o programa também envia **a mesma mensagem** (mesmo modelo) para esse grupo quando uma ligação chega a `DURACAO_LONGA_MIN` minutos (padrão 5) **ainda em Stage 1**.
+
+- O grupo das transferências recebe só transferências; o segundo grupo recebe só as que fizeram 5 min no Stage 1.
+- Se a ligação chegou a 5 min já no Stage 3 (depois de transferida), **não** vai ao segundo grupo. Se fez 5 min no Stage 1 e depois foi transferida, vai aos dois.
+- Ligações que já passavam de 5 min quando o programa abriu **não** geram mensagem (só as que cruzam o tempo depois).
+- Cada ligação gera no máximo uma mensagem do 2º grupo. Cada consulta ao cadastro pausa a leitura da tabela por alguns segundos.
 
 ## Modelo da mensagem
 

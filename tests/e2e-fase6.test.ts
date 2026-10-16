@@ -92,8 +92,18 @@ function montar(
     dormir: async () => undefined,
     agora: () => 2_000_000_000,
   });
+  const tg2 = new TelegramFalso();
+  const enviadorLonga = new EnviadorTelegram(tg2, {
+    destino: "grupo-5min",
+    timeoutEnvioMs: 30,
+    esperaMaximaFloodMs: 5000,
+    esperaAntesDeVerificarMs: 0,
+    dormir: async () => undefined,
+    agora: () => 2_000_000_000,
+  });
   const fila = new TaskQueue(
     {
+      senderLonga: enviadorLonga,
       lookup: opc.lookup ?? {
         find: async () => ({ tipo: "ok", registro: CADASTRO, multiplos: false }),
       },
@@ -119,6 +129,7 @@ function montar(
     leiturasConfirmacao: 1,
     ausenciaMaxLeituras: 3,
     ttlOcorrenciasMs: 3_600_000,
+    duracaoLongaSeg: 300,
   });
   const monitor = new Monitor(
     {
@@ -137,7 +148,7 @@ function montar(
       pausarDuranteConsulta: true,
     },
   );
-  return { tg, notif, fila, monitor, tracker, relogio };
+  return { tg, tg2, notif, fila, monitor, tracker, relogio };
 }
 
 /** Roteiro de uma transferência real: Stage 1 (callback antigo) some e surge Stage 3 com outro callback e o MESMO callee. */
@@ -150,9 +161,66 @@ const TRANSFERENCIA = (t0: number): TableSnapshot[] => [
 ];
 
 async function rodar(m: ReturnType<typeof montar>, passos: number): Promise<void> {
-  for (let i = 0; i < passos; i++) await m.monitor.passo(() => m.relogio.t);
-  await m.fila.drenar();
+  for (let i = 0; i < passos; i++) {
+    await m.monitor.passo(() => m.relogio.t);
+    await m.fila.drenar(); // a consulta ocupa a aba: o roteiro só avança quando ela termina
+  }
 }
+
+describe("E2E: ligação de 5 min vai ao 2º grupo; transferência ao 1º", () => {
+  const linhaDur = (cb: string, st: string, dur: number, ini: string): CallRow => ({
+    ...R(cb, st, CALLEE, ini),
+    callDurationSec: dur,
+  });
+  it("5 min em Stage 1 → só o 2º grupo; depois a transferência → só o 1º", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      snap([linhaDur("100001", "Stage 1 Agent", 100, "09:00:00")], t0),
+      snap([linhaDur("100001", "Stage 1 Agent", 300, "09:00:00")], t0 + 1000),
+      snap([linhaDur("100001", "Stage 1 Agent", 301, "09:00:00")], t0 + 2000),
+      snap([], t0 + 3000),
+      snap([linhaDur("908301", "Stage 3 Agent", 2, "09:05:02")], t0 + 4000),
+      snap([linhaDur("908301", "Stage 3 Agent", 3, "09:05:02")], t0 + 5000),
+    ]);
+    await rodar(m, 6);
+    expect(m.tg2.enviadas).toHaveLength(1);
+    expect(m.tg.enviadas).toHaveLength(1);
+    expect(m.tg2.enviadas[0]).toContain("Line 1 number: 100001");
+    expect(m.tg.enviadas[0]).toContain("Line 1 number: 100001");
+    expect(m.fila.todas.map((x) => x.tipo).sort()).toEqual(["longa", "transferencia"]);
+  });
+
+  it("5 min só no Stage 3 (depois de transferida): nada vai ao 2º grupo", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      snap([linhaDur("100001", "Stage 1 Agent", 100, "09:00:00")], t0),
+      snap([], t0 + 1000),
+      snap([linhaDur("908301", "Stage 3 Agent", 2, "09:01:40")], t0 + 2000),
+      snap([linhaDur("908301", "Stage 3 Agent", 3, "09:01:40")], t0 + 3000),
+      snap([linhaDur("908301", "Stage 3 Agent", 400, "09:01:40")], t0 + 4000),
+    ]);
+    await rodar(m, 5);
+    expect(m.tg.enviadas).toHaveLength(1);
+    expect(m.tg2.enviadas).toHaveLength(0);
+  });
+
+  it("falha no 2º grupo não afeta o 1º", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      snap([linhaDur("100001", "Stage 1 Agent", 10, "09:00:00")], t0 - 1000),
+      snap([linhaDur("100001", "Stage 1 Agent", 300, "09:00:00")], t0),
+      snap([linhaDur("100001", "Stage 1 Agent", 301, "09:00:00")], t0 + 1000),
+      snap([], t0 + 2000),
+      snap([linhaDur("908301", "Stage 3 Agent", 2, "09:05:02")], t0 + 3000),
+      snap([linhaDur("908301", "Stage 3 Agent", 3, "09:05:02")], t0 + 4000),
+    ]);
+    m.tg2.comportamento = [new FalhaTelegram("destino_invalido_ou_sem_permissao")];
+    await rodar(m, 6);
+    expect(m.tg.enviadas).toHaveLength(1);
+    expect(m.fila.todas.find((x) => x.tipo === "longa")?.estado).toBe("falhou");
+    expect(m.fila.todas.find((x) => x.tipo === "transferencia")?.estado).toBe("enviada");
+  });
+});
 
 describe("E2E Fase 6 (site e Telegram simulados)", () => {
   it("transferência → consulta → mensagem com o Callback ANTIGO → Telegram", async () => {

@@ -39,7 +39,9 @@ function alimentar(t: CallTracker, ...snaps: TableSnapshot[]): EventoTracker[] {
   return snaps.flatMap((s) => t.ingest(s));
 }
 const tipos = (e: EventoTracker[]): string[] =>
-  e.map((x) => (x.tipo === "transferencia" ? "transferencia" : `${x.tipo}:${x.codigo}`));
+  e.map((x) =>
+    x.tipo === "transferencia" || x.tipo === "ligacao_longa" ? x.tipo : `${x.tipo}:${x.codigo}`,
+  );
 
 describe("interpretarStatus", () => {
   it("reconhece os três Stages e trata o resto como desconhecido", () => {
@@ -559,5 +561,115 @@ describe("diário de status (diagnóstico)", () => {
       snap([]),
     );
     expect(mudancas).toEqual(["(novo)>1|ringing", "1|ringing>1|agent", "1|agent>(sumiu)"]);
+  });
+});
+
+describe("ligação longa (2º grupo): só em Stage 1", () => {
+  const L = (cb: string, st: string, dur: number, ce = "C1", ini = "T1"): CallRow => ({
+    callbackNumber: cb,
+    calleeNumber: ce,
+    callStatus: st,
+    startTime: ini,
+    callDurationSec: dur,
+  });
+  const mk = (extra = {}) =>
+    new CallTracker({
+      leiturasConfirmacao: 1,
+      ausenciaMaxLeituras: 3,
+      ttlOcorrenciasMs: 60000,
+      duracaoLongaSeg: 300,
+      ...extra,
+    });
+
+  it("emite uma vez quando uma ligação em Stage 1 chega a 5 min", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 1 Agent", 100)]),
+      snap([L("A", "Stage 1 Agent", 299)]),
+      snap([L("A", "Stage 1 Agent", 300)]),
+      snap([L("A", "Stage 1 Agent", 301)]),
+      snap([L("A", "Stage 1 Agent", 400)]),
+    );
+    expect(tipos(ev)).toEqual(["ligacao_longa"]);
+    expect(ev[0]).toMatchObject({ callback: "A", callee: "C1" });
+  });
+
+  it("desligado (sem duracaoLongaSeg): nunca emite", () => {
+    const t = mk({ duracaoLongaSeg: undefined });
+    alimentar(t, snap([]));
+    expect(tipos(alimentar(t, snap([L("A", "Stage 1 Agent", 9999)])))).toEqual([]);
+  });
+
+  it("já transferida: se chegou a 5 min só no Stage 3, não emite", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 1 Agent", 100)]),
+      snap([]),
+      snap([L("B", "Stage 3 Agent", 10)]),
+      snap([L("B", "Stage 3 Agent", 400)]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("chegou a 5 min no Stage 1 e depois foi transferida: sai nos dois grupos", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 1 Agent", 299)]),
+      snap([L("A", "Stage 1 Agent", 300)]),
+      snap([]),
+      snap([L("B", "Stage 3 Agent", 5)]),
+    );
+    expect(tipos(ev)).toEqual(["ligacao_longa", "transferencia"]);
+  });
+
+  it("Stage 3 e Stage 2/4 nunca contam", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 3 Agent", 400, "C1"), L("B", "Stage 4 Agent", 400, "C2")]),
+      snap([L("A", "Stage 3 Agent", 500, "C1"), L("B", "Stage 4 Agent", 500, "C2")]),
+    );
+    expect(ev.filter((e) => e.tipo === "ligacao_longa")).toEqual([]);
+  });
+
+  it("ligação que já estava longa quando o programa abriu não gera mensagem; as que cruzam depois sim", () => {
+    const t = mk();
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 1 Agent", 900), L("B", "Stage 1 Agent", 250, "C2")]), // linha de base
+      snap([L("A", "Stage 1 Agent", 901), L("B", "Stage 1 Agent", 260, "C2")]),
+      snap([L("A", "Stage 1 Agent", 950), L("B", "Stage 1 Agent", 310, "C2")]),
+    );
+    expect(ev).toHaveLength(1);
+    expect(ev[0]).toMatchObject({ tipo: "ligacao_longa", callback: "B" });
+  });
+
+  it("duração ilegível (null) não emite nem quebra", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const r = { ...L("A", "Stage 1 Agent", 0), callDurationSec: null };
+    expect(tipos(alimentar(t, snap([r]), snap([r])))).toEqual([]);
+  });
+
+  it("ligações sucessivas do mesmo funcionário geram uma mensagem cada", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([L("A", "Stage 1 Agent", 300, "C1", "T1")]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([L("A", "Stage 1 Agent", 300, "C2", "T9")]),
+    );
+    expect(tipos(ev)).toEqual(["ligacao_longa", "ligacao_longa"]);
   });
 });

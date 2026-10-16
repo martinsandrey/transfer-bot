@@ -95,6 +95,10 @@ async function principal(): Promise<void> {
     ausenciaMaxLeituras: cfg.monitor.ausenciaMaxLeituras,
     ttlOcorrenciasMs: cfg.monitor.ttlOcorrenciasMin * 60_000,
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
+    // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
+    ...(!simulado && cfg.telegram.destinoLonga
+      ? { duracaoLongaSeg: cfg.duracaoLongaMin * 60 }
+      : {}),
     // Diário de status no ARQUIVO de log (sem telefones): mostra o que acontece entre o Stage 1 e o Stage 3.
     aoMudarStatus: (i) =>
       log.info("status", { evento: "status_mudou", idCurto: i.id, de: i.de, para: i.para }),
@@ -150,12 +154,13 @@ async function principal(): Promise<void> {
       : "Login manual: faça o login na janela do navegador.",
   );
   let sender: MessageSender = new EnviadorConsole();
+  let senderLonga: MessageSender | undefined;
   let clienteTg: ClienteGramJS | undefined;
   if (cfg.modo === "live") {
     const { apiId, apiHash, destino, timeoutEnvioMs, arquivoSessao } = cfg.telegram;
     const resposta = await new Promise<string>((r) =>
       rl.question(
-        `\nENVIO REAL ativado. As mensagens serão enviadas para "${destino}" no Telegram.\nDigite ENVIAR (em maiúsculas) para confirmar, ou qualquer outra coisa para cancelar: `,
+        `\nENVIO REAL ativado. As transferências serão enviadas para "${destino}"${cfg.telegram.destinoLonga ? ` e as ligações de ${cfg.duracaoLongaMin} min (ainda em Stage 1) para "${cfg.telegram.destinoLonga}"` : ""}.\nDigite ENVIAR (em maiúsculas) para confirmar, ou qualquer outra coisa para cancelar: `,
         r,
       ),
     );
@@ -170,6 +175,7 @@ async function principal(): Promise<void> {
         { loginInterativo: false },
       );
       await clienteTg.validarDestino(destino);
+      if (cfg.telegram.destinoLonga) await clienteTg.validarDestino(cfg.telegram.destinoLonga);
     } catch (e) {
       const motivo = e instanceof Error ? e.message : String(e);
       console.error(`\nTelegram: ${descreverFalhaDeEnvio(motivo)}\n`);
@@ -183,15 +189,27 @@ async function principal(): Promise<void> {
       timeoutEnvioMs,
       esperaMaximaFloodMs: 60_000,
     });
-    sender = {
+    const comAviso = (e: EnviadorTelegram, rotulo: string): MessageSender => ({
       send: async (texto, chave) => {
-        const r = await telegram.send(texto, chave);
+        const r = await e.send(texto, chave);
         const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
-        if (r.tipo === "enviada") console.log(`[${hora}] Mensagem enviada ao Telegram.`);
+        if (r.tipo === "enviada")
+          console.log(`[${hora}] Mensagem enviada ao Telegram (${rotulo}).`);
         return r;
       },
-      verify: (chave) => telegram.verify(chave),
-    };
+      verify: (chave) => e.verify(chave),
+    });
+    sender = comAviso(telegram, "transferência");
+    if (cfg.telegram.destinoLonga) {
+      senderLonga = comAviso(
+        new EnviadorTelegram(clienteTg, {
+          destino: cfg.telegram.destinoLonga,
+          timeoutEnvioMs,
+          esperaMaximaFloodMs: 60_000,
+        }),
+        `${cfg.duracaoLongaMin} min`,
+      );
+    }
     console.log("Telegram conectado.");
   }
   const host = await iniciarNavegador(cfg);
@@ -245,6 +263,7 @@ async function principal(): Promise<void> {
         ),
         construtor,
         sender,
+        ...(senderLonga ? { senderLonga } : {}),
         log,
         notificador,
       },
@@ -255,11 +274,15 @@ async function principal(): Promise<void> {
         maxTentativasEnvio: 2,
         backoffMs: 5000,
         ttlTarefasMs: 3_600_000,
-        previa: (t) => {
+        previa: (t, tipo) => {
           const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+          const titulo =
+            tipo === "longa"
+              ? `LIGAÇÃO DE ${cfg.duracaoLongaMin} MIN (STAGE 1) ${hora} — mensagem do 2º grupo`
+              : `TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada`;
           console.log(
             `
-===== TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada =====
+===== ${titulo} =====
 ${t}
 ===== NÃO ENVIADA (modo observação) =====
 `,

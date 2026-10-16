@@ -128,3 +128,8 @@ Não feito (a decidir): recarga ociosa (`RECARGA_OCIOSA_MINUTOS` existe na confi
 ## Fase 7 — Instalação no Windows (2026-10-16)
 
 `instalar.bat` (confere Node ≥ 22.13, instala, compila e orienta os próximos passos), `iniciar.bat` (primeiro uso abre a configuração; sincroniza dependências), `atualizar.bat`, `telegram.bat`, `configurar.bat`, `simular.bat`, `recon.bat`; teste automático dos `.bat` (CRLF, ASCII, sem parênteses em blocos); README reescrito para o estado real; CI com instalação limpa + build + simulação no `windows-latest`; recomendação de distribuição em DECISOES D10. **[WIN] pendente:** instalar do zero numa pasta limpa seguindo só o README.
+
+## 2º grupo: ligações de 5 min em Stage 1 (2026-10-17)
+
+Regras do usuário: grupo 1 = só transferências; grupo 2 = só ligações que atingiram 5 min **ainda em Stage 1** (se chegou a 5 min já no Stage 3, não vai); mesmo modelo de mensagem; `.env`: `TELEGRAM_DESTINO_5MIN` (vazio = desligado) e `DURACAO_LONGA_MIN` (padrão 5). Implementação: evento `ligacao_longa` no rastreador (uma vez por ocorrência; usa a coluna Call Duration; qualquer status "Stage 1"; ligações já longas na linha de base não contam), tarefa `longa` na fila com enviador próprio, previa distinta no modo observação. 192 testes (rastreador + E2E com dois grupos e falha isolada no 2º).
+Suposições a confirmar: (1) "Stage 1" = qualquer complemento (Ringing/Agent/Manual Call); (2) a coluna Call Duration da linha do Stage 1 é confiável.
