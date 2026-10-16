@@ -120,7 +120,7 @@ As três capturas mostram a **tela de monitoramento**, não a Customer Data List
 
 Callee Number → página **Customer Data List** → pesquisa pelo cliente usando o Callee Number → as demais informações da mensagem estão lá.
 **Regra: se faltar algum dado necessário, deixar o campo vazio** (não é erro). Implementado em `ConsultaDeCliente` (lógica pronta e testada com página falsa);
-falta apenas o contato com a página (`PaginaClientes`), que depende de R1/R2. Telefone ausente no cadastro: segue e `Ph` fica vazio; telefone diferente do Callee: cliente errado (não envia).
+o contato com a página (`PaginaClientesPlaywright`) foi implementado com a evidência do recon (falta validar no site real). Telefone ausente no cadastro: segue e `Ph` fica vazio; telefone diferente do Callee: cliente errado (não envia).
 
 ## Passo do botão Edit (2026-10-16, informado pelo usuário)
 

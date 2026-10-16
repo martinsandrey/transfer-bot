@@ -100,3 +100,10 @@ Nenhum dado pessoal aqui. (Aviso: os arquivos enviados continham **nomes reais d
 
 - Login: XHR `POST /wapi/set_verify.php` (corpo com `fingerprint`, resposta com `status` e `token`) e depois `POST /logincheck.php` (documento, 302) com os campos `verify_key`, `done`, `username`, `password`, `submit`. Os nomes de campo `username`/`password` são evidência real para o futuro login automático; `verify_key` vem do token gerado por script.
 - A tabela de chamadas é alimentada por XHR `GET /modules/cc_monitor/get_curcall_in.php?date=…` a cada ~0,6 s (resposta HTML); `get_curcall_out.php` ~1,2 s; `get_peer_status.php` ~5 s; `cont_controler.php` ~131 s. Menu: `GET /modules/menu.php` (XML). **Sem WebSocket.**
+
+**Segunda rodada de recon (2026-10-16) — confirmado**
+
+- Busca: campo de texto `ft[phone]` (Phone) — distinto de `ft[mob_phone]`; botão `input#submitButton` (tipo submit, título "Search"). Os campos do filtro são: `ft[name]`, `ft[mob_phone]`, `ft[phone]`, `ft[status]`, `ft[pc_id]`, `bdate`, `edate`. O resultado é um link "Confirm" com GET `/modules/cc_cds/?…ft[phone]=…` (busca por GET, recarrega o iframe).
+- Linha de resultado: checkbox `checkboxes[]` + links de texto exato **`Edit`** e **`Delete`** (o Edit é o de texto "Edit"; nunca clicar em Delete).
+- Formulário de edição: tabela com pares rótulo/campo (`Name：`, `ID Number：`, `Date of Birth：`, `Mobile Phone：`, `Phone：`, `Address：` …); o botão de envio do formulário também se chama "Edit" (submit para `update.php`) — **nunca clicar**; há um botão "Back" que também não usamos.
+- Falsos positivos do aviso de revisão: `Login Identity： NNNNN` é a identificação do operador logado no cabeçalho (sem dados de cliente); a linha 4621 é só a paginação ("Shared N Page N Entries").

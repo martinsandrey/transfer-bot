@@ -103,3 +103,7 @@ Capturas `clientes`/`resultado`/`edicao`/`rede` recebidas. Registrado em `docs/E
 - **Rótulos:** o site usa dois-pontos largo (`Phone：`); a normalização agora o ignora.
 - **Bloqueio de escrita** (`update.php`, `delete.php`) criado e testado.
   Falta uma nova rodada de recon (`clientes`, `resultado`, `edicao`) com a ferramenta melhorada para identificar campo `Phone`, botão de busca e o link Edit.
+
+## Adaptador real da Customer Data List (2026-10-16)
+
+`PaginaClientesPlaywright` implementado com a evidência confirmada (menu por texto, busca `ft[phone]` + `#submitButton`, linhas com `checkboxes[]`, link "Edit", leitura por rótulos, volta pelo menu "Voice Call Status") e `instalarBloqueioDeEscrita` (aborta `update.php`/`delete.php` etc.). Ligado ao `main.ts` no lugar de `BuscaSemCadastro`; o monitor pausa durante a consulta. Testado contra site fictício com a mesma estrutura (145 testes). **Ainda não testado no site real** — próximo passo: o usuário rodar `iniciar.bat` e ver a mensagem preparada com os dados do cadastro.

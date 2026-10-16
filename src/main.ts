@@ -18,7 +18,11 @@ import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
 import { criarNotificador } from "./notificador/notificador.js";
-import { BuscaSemCadastro } from "./consulta/sem-cadastro.js";
+import { ConsultaDeCliente } from "./consulta/consulta-cliente.js";
+import {
+  instalarBloqueioDeEscrita,
+  PaginaClientesPlaywright,
+} from "./consulta/pagina-clientes-playwright.js";
 import { BuscaSimulada, LeitorSimulado } from "./simulacao/cenario.js";
 
 const simulado = process.argv.includes("--simular");
@@ -130,9 +134,9 @@ async function principal(): Promise<void> {
     return;
   }
 
-  // ---- modo real (parcial): detecção de transferências; consulta ao cliente e Telegram ainda não existem ----
+  // ---- modo real: detecção + consulta ao cadastro (somente leitura); o Telegram ainda não existe ----
   console.log(
-    "ATENÇÃO: a consulta ao cadastro do cliente e o envio ao Telegram ainda não existem. Ao detectar uma transferência, o programa mostra aqui a mensagem preparada (só com o telefone do cliente e o Callback Number; NAME, CPF, Location e Age ficam em branco) e NÃO envia nada.",
+    "ATENÇÃO: o envio ao Telegram ainda não existe. Ao detectar uma transferência, o programa consulta o cliente na Customer Data List (só leitura), mostra aqui a mensagem preparada e NÃO envia nada.",
   );
   if (cfg.site.loginAutomatico) {
     console.log(
@@ -170,6 +174,9 @@ async function principal(): Promise<void> {
   };
 
   try {
+    await instalarBloqueioDeEscrita(host.contexto, (metodo, caminho) =>
+      log.warn("requisição de escrita bloqueada", { metodo, caminho }),
+    );
     await host
       .abrirUrl(cfg.site.url)
       .catch(() => console.warn("Não consegui abrir o endereço configurado em SITE_URL."));
@@ -177,7 +184,17 @@ async function principal(): Promise<void> {
     ajuda();
     const fila = new TaskQueue(
       {
-        lookup: new BuscaSemCadastro(),
+        lookup: new ConsultaDeCliente(
+          new PaginaClientesPlaywright(host.paginaPrincipal(), {
+            timeoutMs: cfg.timeouts.consultaMs,
+          }),
+          (e) => {
+            console.error(
+              "Não consegui voltar para a Voice Call Status. Clique nela no menu da esquerda.",
+            );
+            log.error("falha ao voltar", { erro: e instanceof Error ? e.message : String(e) });
+          },
+        ),
         construtor,
         sender: new EnviadorConsole(),
         log,
@@ -185,7 +202,7 @@ async function principal(): Promise<void> {
       },
       {
         modo: "observacao",
-        maxTentativasConsulta: 1,
+        maxTentativasConsulta: 2,
         maxTentativasEnvio: 1,
         backoffMs: 200,
         ttlTarefasMs: 3_600_000,
@@ -195,7 +212,7 @@ async function principal(): Promise<void> {
             `
 ===== TRANSFERÊNCIA DETECTADA ${hora} — mensagem preparada =====
 ${t}
-===== NÃO ENVIADA (Telegram não conectado; NAME/CPF/Location/Age em branco: cadastro ainda não consultado) =====
+===== NÃO ENVIADA (Telegram não conectado) =====
 `,
           );
         },
