@@ -115,3 +115,9 @@ As três capturas mostram a **tela de monitoramento**, não a Customer Data List
 - **Q1:** na transferência a linha do Stage 1 some e surge outra em Stage 3 com **outro Callback Number** e o **mesmo Callee**. Detecção por Callee implementada. (Ver EVIDENCIAS.)
 - **Q3 (CONFIRMADA pelo usuário em 2026-10-16):** na transferência o Callback Number troca, e o texto preparado deve conter o Callback Number **antigo, do Stage 1 Agent** em `Line 1 number`.
 - **Novas dúvidas:** (a) existe atraso entre a linha do Stage 1 sumir e a do Stage 3 aparecer? (a janela padrão é 60 s); (b) quando Stage 1 vai para **Stage 2**, a linha também troca (Callback `9082xx`)?
+
+## Fluxo do cadastro confirmado pelo usuário (2026-10-16)
+
+Callee Number → página **Customer Data List** → pesquisa pelo cliente usando o Callee Number → as demais informações da mensagem estão lá.
+**Regra: se faltar algum dado necessário, deixar o campo vazio** (não é erro). Implementado em `ConsultaDeCliente` (lógica pronta e testada com página falsa);
+falta apenas o contato com a página (`PaginaClientes`), que depende de R1/R2. Telefone ausente no cadastro: segue e `Ph` fica vazio; telefone diferente do Callee: cliente errado (não envia).

@@ -85,3 +85,8 @@ Recon melhorado: `menu`, `clientes`, `resultado` e `edicao` capturam **todas as 
 Teste real do usuário: **nenhuma transferência detectada** (só avisos de "primeira vez em Stage 3"). Causa: a transferência é a linha do Stage 1 sumir e surgir outra em Stage 3 com outro Callback Number e o mesmo Callee.
 Corrigido: o rastreador liga as duas linhas pelo **Callee Number** (janela configurável, N leituras de confirmação), usa o Callback do Stage 1 como `Line 1 number` e não repete avisos para a mesma chamada de Stage 3. **121 testes.**
 Console do modo real simplificado: só avisos em português (com hora) e a mensagem preparada; o detalhe técnico vai para o arquivo de log.
+
+## Consulta ao cadastro — lógica pronta, página pendente (2026-10-16)
+
+`ConsultaDeCliente` implementa o fluxo (abrir → pesquisar por Phone → 0/1/N → ler campos → conferir telefone → fechar sem salvar; campos ausentes = vazios) sobre a interface `PaginaClientes`, sem ação de escrita.
+Falta o adaptador real da página (menu, Phone, Search, resultados, formulário) — precisa das capturas R1/R2. No modo real o programa ainda usa `BuscaSemCadastro`.
