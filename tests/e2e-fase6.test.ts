@@ -378,13 +378,12 @@ describe("E2E Fase 6 (site e Telegram simulados)", () => {
     expect(m.tg.enviadas).toHaveLength(0);
   });
 
-  it("timeout e nada no destino: não reenvia sozinho ('falhou' com alerta); sem como saber: 'incerta'", async () => {
+  it("timeout e a mensagem NÃO chegou (conferido no grupo): reenvia sozinho e chega, uma vez só", async () => {
     const a = montar(TRANSFERENCIA(1_000_000));
     a.tg.comportamento = ["trava_sem_entregar"];
     await rodar(a, 5);
-    expect(a.fila.todas[0]?.estado).toBe("falhou");
-    expect(a.tg.enviadas).toHaveLength(0);
-    expect(a.notif.alertas.some((x) => /NÃO foi encontrada/.test(x.mensagem))).toBe(true);
+    expect(a.fila.todas[0]?.estado).toBe("enviada");
+    expect(a.tg.enviadas).toHaveLength(1);
   });
 
   it("FLOOD_WAIT curto é esperado e o envio sai uma vez", async () => {

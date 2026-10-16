@@ -80,6 +80,13 @@ async function principal(): Promise<void> {
     ...(simulado ? {} : { nivelConsole: "error" as const }),
   });
   const notificador = criarNotificador();
+  // Rede de segurança: uma promessa rejeitada e esquecida nunca derruba o programa; fica registrada no log.
+  process.on("unhandledRejection", (motivo) => {
+    log.error("Promessa rejeitada sem tratamento", {
+      evento: "unhandled_rejection",
+      motivo: motivo instanceof Error ? motivo.message : "desconhecido",
+    });
+  });
   const sinal = new AbortController();
   const rl = createInterface({ input: stdin, output: stdout });
   const encerrar = (): void => {

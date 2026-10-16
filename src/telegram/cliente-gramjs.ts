@@ -100,7 +100,9 @@ export class ClienteGramJS implements ClienteTelegram {
       );
     }
     const c = new TelegramClient(new StringSession(existente), cred.apiId, cred.apiHash, {
-      connectionRetries: 5,
+      connectionRetries: 50, // se a internet cair, tenta reconectar por bastante tempo (e cada envio ainda reconecta se preciso)
+      retryDelay: 2000,
+      autoReconnect: true,
       useWSS: false,
     });
     await c.start({
@@ -132,12 +134,18 @@ export class ClienteGramJS implements ClienteTelegram {
     }
   }
 
+  /** Antes de cada operação: se a conexão caiu, reconecta (a internet pode ter voltado). Falha de reconexão vira erro normal. */
+  private async garantirConexao(): Promise<void> {
+    if (this.c.connected === false || this.c.disconnected) await this.c.connect();
+  }
+
   async enviar(
     destino: string,
     texto: string,
     responderAId?: number,
   ): Promise<{ id: number; data: number }> {
     try {
+      await this.garantirConexao();
       const m = await this.c.sendMessage(await this.entidade(destino), {
         message: texto,
         parseMode: undefined,
@@ -150,11 +158,13 @@ export class ClienteGramJS implements ClienteTelegram {
   }
 
   async mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]> {
+    await this.garantirConexao();
     const ms = await this.c.getMessages(await this.entidade(destino), { limit: limite });
     return ms.map((m) => ({ id: m.id, texto: m.message, data: m.date }));
   }
 
   async lerMensagem(destino: string, id: number): Promise<string | null> {
+    await this.garantirConexao();
     const ms = await this.c.getMessages(await this.entidade(destino), { ids: id });
     const m = ms[0];
     return m && typeof m.message === "string" ? m.message : null;

@@ -56,6 +56,7 @@ export class Monitor {
   private emPausa = false;
   private todasIgnoradasSeguidas = 0;
   private falhasSeguidas = 0;
+  private errosDoLaco = 0;
   private ultimaLimpeza = 0;
 
   constructor(
@@ -69,7 +70,23 @@ export class Monitor {
     this.ultimaLimpeza = agora();
     while (!sinal.aborted) {
       const inicio = agora();
-      await this.passo(agora);
+      try {
+        await this.passo(agora);
+        this.errosDoLaco = 0;
+      } catch (e) {
+        // Um erro inesperado num passo NUNCA derruba o monitoramento: registra, avisa (sem spam) e segue para a próxima leitura.
+        this.errosDoLaco++;
+        this.deps.log.error("Erro inesperado no passo do monitor", {
+          evento: "erro_no_passo",
+          contagem: this.errosDoLaco,
+          motivo: e instanceof Error ? e.message : "desconhecido",
+        });
+        if (this.errosDoLaco === 1 || this.errosDoLaco % 30 === 0)
+          this.deps.notificador.alerta(
+            "erro",
+            `Erro inesperado no monitoramento (${this.errosDoLaco}ª vez seguida). O programa continua tentando. Detalhes no arquivo de log.`,
+          );
+      }
       if (agora() - this.ultimaLimpeza >= this.op.limpezaMs) {
         this.deps.tracker.sweep(agora());
         this.deps.fila?.limpar();
@@ -163,6 +180,20 @@ export class Monitor {
     );
   }
 
+  /** Processa a fila em segundo plano; qualquer erro é registrado (nunca vira "unhandled rejection" que derruba o programa). */
+  private iniciarFila(fila: TaskQueue): void {
+    fila.drenar().catch((e: unknown) => {
+      this.deps.log.error("Erro inesperado na fila", {
+        evento: "erro_na_fila",
+        motivo: e instanceof Error ? e.message : "desconhecido",
+      });
+      this.deps.notificador.alerta(
+        "erro",
+        "Erro inesperado na fila de mensagens. Detalhes no arquivo de log.",
+      );
+    });
+  }
+
   private tratar(ev: EventoTracker): void {
     const { log, notificador, fila } = this.deps;
     if (ev.tipo === "transferencia") {
@@ -176,7 +207,7 @@ export class Monitor {
         `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
       );
       if (!fila) return;
-      if (fila.enqueue(ev)) void fila.drenar();
+      if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "callback") {
       log.info("Ninguém atendeu o Stage 3", {
         evento: "callback",
@@ -188,7 +219,7 @@ export class Monitor {
         `NINGUÉM ATENDEU (CALLBACK): cliente ${mascararTelefone(ev.callee)}, funcionário ${mascararTelefone(ev.callback)}.`,
       );
       if (!fila) return;
-      if (fila.enqueue(ev)) void fila.drenar();
+      if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "ligacao_longa") {
       log.info("Ligação longa detectada", {
         evento: "ligacao_longa",
@@ -200,7 +231,7 @@ export class Monitor {
         `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
       );
       if (!fila) return;
-      if (fila.enqueue(ev)) void fila.drenar();
+      if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "aviso") {
       log.warn("Aviso do rastreador", {
         evento: "aviso",

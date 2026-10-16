@@ -240,11 +240,11 @@ describe("TaskQueue", () => {
     expect(sender.enviados).toHaveLength(1);
   });
 
-  it("incerta + verificação: entregue → enviada; não encontrada → falhou (sem reenvio); indeterminado → incerta", async () => {
-    for (const [v, esperado] of [
-      ["entregue", "enviada"],
-      ["nao_encontrada", "falhou"],
-      ["indeterminado", "incerta"],
+  it("incerta + verificação: entregue → enviada (1 envio); não encontrada → REENVIA e chega (2 envios); indeterminado → incerta", async () => {
+    for (const [v, esperado, envios] of [
+      ["entregue", "enviada", 1],
+      ["nao_encontrada", "enviada", 2],
+      ["indeterminado", "incerta", 1],
     ] as const) {
       const { fila, sender } = montar({
         sender: new EnviadorFalso([{ tipo: "incerta", motivo: "t" }], v),
@@ -252,8 +252,38 @@ describe("TaskQueue", () => {
       fila.enqueue(ev());
       await fila.drenar();
       expect(estados(fila)).toEqual([esperado]);
-      expect(sender.enviados).toHaveLength(1);
+      expect(sender.enviados).toHaveLength(envios);
     }
+  });
+
+  it("incerta e não encontrada em TODAS as tentativas: reenvia até o limite e então falha com alerta (sem laço infinito)", async () => {
+    const { fila, sender, notif } = montar({
+      sender: new EnviadorFalso(
+        [
+          { tipo: "incerta", motivo: "t" },
+          { tipo: "incerta", motivo: "t" },
+          { tipo: "incerta", motivo: "t" },
+        ],
+        "nao_encontrada",
+      ),
+    });
+    fila.enqueue(ev());
+    await fila.drenar();
+    expect(estados(fila)).toEqual(["falhou"]);
+    expect(sender.enviados).toHaveLength(3); // maxTentativasEnvio = 3
+    expect(notif.alertas.some((a) => /acabaram as tentativas/.test(a.mensagem))).toBe(true);
+  });
+
+  it("não deu para conferir de primeira (conexão caída) mas a 2ª conferência lê: resolve sozinha", async () => {
+    const sender = new EnviadorFalso([{ tipo: "incerta", motivo: "t" }]);
+    const leituras = ["indeterminado", "indeterminado", "entregue"] as const;
+    let i = 0;
+    sender.verify = async () => leituras[Math.min(i++, leituras.length - 1)] as "entregue";
+    const { fila } = montar({ sender });
+    fila.enqueue(ev());
+    await fila.drenar();
+    expect(estados(fila)).toEqual(["enviada"]);
+    expect(sender.enviados).toHaveLength(1);
   });
 
   it("decisão manual sobre tarefa incerta", async () => {

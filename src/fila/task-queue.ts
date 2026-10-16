@@ -100,6 +100,8 @@ export interface OpcoesFila {
   memoriaMensagemLongaMs?: number;
   /** Mensagem mais velha que isso (desde a detecção) não é mais enviada (o Telegram pode ter ficado fora do ar). 0/ausente = não expira. */
   validadeMensagemMs?: number;
+  /** Quantas vezes conferir de novo o destino (com espera crescente) quando a 1ª conferência não conseguiu ler. Padrão 3. */
+  verificacoesExtras?: number;
   /** Pausa entre uma tarefa e a próxima, para o monitor voltar a ler a tabela de chamadas entre as consultas (padrão 3 s). */
   pausaEntreTarefasMs?: number;
   agora?: () => number;
@@ -522,32 +524,54 @@ export class TaskQueue {
         );
         return;
       }
-      await this.tratarIncerta(t, resultado.motivo);
+      if ((await this.tratarIncerta(t, resultado.motivo)) === "reenviar") continue;
       return;
     }
   }
 
   /** Nunca reenvia sozinho: verifica quando possível; senão alerta e espera decisão manual. */
-  private async tratarIncerta(t: TarefaTransferencia, motivo: string): Promise<void> {
+  /**
+   * Envio de resultado desconhecido. Confere no destino (a verificação só diz "não encontrada" quando LEU o destino e a mensagem
+   * não está lá, então reenviar é seguro): chegou → enviada; não chegou → `"reenviar"` (se ainda houver tentativas e a mensagem for
+   * útil); não deu para conferir → tenta conferir de novo algumas vezes (a conexão pode estar voltando) antes de ficar incerta.
+   */
+  private async tratarIncerta(t: TarefaTransferencia, motivo: string): Promise<"reenviar" | "fim"> {
     const sender = this.senderDe(t);
-    const v = sender.verify
-      ? await sender.verify(t.chave).catch(() => "indeterminado" as const)
-      : "indeterminado";
+    const extras = this.op.verificacoesExtras ?? 3;
+    let v: "entregue" | "nao_encontrada" | "indeterminado" = "indeterminado";
+    for (let i = 0; i <= extras; i++) {
+      v = sender.verify
+        ? await sender.verify(t.chave).catch(() => "indeterminado" as const)
+        : "indeterminado";
+      if (v !== "indeterminado" || !sender.verify || i === extras) break;
+      await this.dormir(this.op.backoffMs * 2 ** i); // espera a conexão voltar e confere de novo
+    }
     if (v === "entregue") {
       this.mover(t, "enviada", "confirmada_na_verificacao");
-    } else if (v === "nao_encontrada") {
+      return "fim";
+    }
+    if (v === "nao_encontrada") {
+      if (t.tentativasEnvio < this.op.maxTentativasEnvio && !this.expirou(t)) {
+        this.deps.log.info("Mensagem não chegou ao destino; reenviando", {
+          evento: "reenvio_apos_verificacao",
+          idCurto: t.id,
+          tentativa: t.tentativasEnvio,
+        });
+        return "reenviar";
+      }
       this.mover(t, "falhou", "nao_encontrada_na_verificacao");
       this.deps.notificador.alerta(
         "erro",
-        `Tarefa ${t.id}: a mensagem NÃO foi encontrada no destino. Decida se deve reenviar (nada foi reenviado automaticamente).`,
+        `Tarefa ${t.id}: a mensagem NÃO foi encontrada no destino e acabaram as tentativas. Decida se deve reenviar.`,
       );
-    } else {
-      this.mover(t, "incerta", motivo);
-      this.deps.notificador.alerta(
-        "erro",
-        `Tarefa ${t.id}: envio INCERTO (${motivo}). Verifique o destino e decida manualmente; nada será reenviado automaticamente.`,
-      );
+      return "fim";
     }
+    this.mover(t, "incerta", motivo);
+    this.deps.notificador.alerta(
+      "erro",
+      `Tarefa ${t.id}: envio INCERTO (${motivo}). Não consegui conferir o destino. Verifique o grupo e decida manualmente; nada será reenviado automaticamente.`,
+    );
+    return "fim";
   }
 
   /** Decisão humana sobre uma tarefa incerta. `reenviar` faz UMA nova tentativa de envio. */
