@@ -62,3 +62,15 @@ Numa transferência real, o console mostrou avisos `visto_primeira_vez_stage3` p
 - Portanto a transferência não é uma mudança de status na mesma linha; é **troca de linha com o mesmo Callee Number**. A detecção passou a ligar a linha nova de Stage 3 à última linha `Stage 1 Agent` do mesmo Callee (janela `JANELA_TRANSFERENCIA_SEG`, padrão 60 s).
 - `Line 1 number` da mensagem = **Callback Number da linha do Stage 1** (o funcionário que originou). Confirmado pelo usuário (Q3).
 - A linha de Stage 3 pode sumir e voltar na tabela; isso não repete aviso nem transferência.
+
+## Rótulos do formulário de edição — informados pelo usuário em 2026-10-16
+
+| Campo da mensagem | Rótulo no formulário                                                            |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `{{nome}}`        | **Name**                                                                        |
+| `{{cpf}}`         | **ID number**                                                                   |
+| `{{age}}`         | **Date of birth** (o conteúdo vai literalmente para `Age:`, sem calcular idade) |
+| `{{Phone}}`       | **Phone**                                                                       |
+| `{{location}}`    | **Address**                                                                     |
+
+Falta ainda a captura `edicao` para saber COMO o rótulo se liga ao campo no HTML (e não adivinhar seletores).

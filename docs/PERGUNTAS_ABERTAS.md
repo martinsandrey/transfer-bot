@@ -134,3 +134,7 @@ Após preparar a mensagem, voltar para **Voice Call Status** e **nunca confirmar
 ## R1 respondida em parte (2026-10-16)
 
 Clicar no menu lateral substitui a página atual; para voltar, clicar em **Voice Call Status** no menu lateral — sem nenhuma pergunta de confirmação ao sair do formulário de edição. Segue em aberto: como a Customer Data List aparece/abre ao clicar no menu e a captura `resultado`/`edicao` (R2).
+
+## P11 respondida em parte (2026-10-16)
+
+Rótulos do formulário de edição: Name, ID number, Date of birth, Phone, Address (ver EVIDENCIAS). Código: `src/consulta/rotulos.ts`. Segue em aberto a estrutura HTML do formulário (captura `edicao`).
