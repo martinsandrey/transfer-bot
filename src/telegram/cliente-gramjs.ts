@@ -147,6 +147,12 @@ export class ClienteGramJS implements ClienteTelegram {
     return ms.map((m) => ({ id: m.id, texto: m.message, data: m.date }));
   }
 
+  async lerMensagem(destino: string, id: number): Promise<string | null> {
+    const ms = await this.c.getMessages(await this.entidade(destino), { ids: id });
+    const m = ms[0];
+    return m && typeof m.message === "string" ? m.message : null;
+  }
+
   async dialogos(limite: number): Promise<Dialogo[]> {
     const ds = (await this.c.getDialogs({ limit: limite })).filter((x) => !ehGrupoAntigo(x));
     return ds.map((d) => ({

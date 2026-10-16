@@ -21,6 +21,8 @@ export interface ClienteTelegram {
   enviar(destino: string, texto: string): Promise<{ id: number; data: number }>;
   /** Últimas mensagens do destino (para verificar se um envio incerto chegou). */
   mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]>;
+  /** Texto atual (já editado, se foi) de uma mensagem do destino; `null` se a mensagem não existe mais (apagada). */
+  lerMensagem(destino: string, id: number): Promise<string | null>;
   /** Lista conversas (comando `chats`). */
   dialogos(limite: number): Promise<Dialogo[]>;
   encerrar(): Promise<void>;

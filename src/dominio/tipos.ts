@@ -67,4 +67,9 @@ export interface MessageSender {
   /** `chave` identifica a ocorrência (idempotência). Lançar exceção = resultado desconhecido (tratado como incerto). */
   send(texto: string, chave: string): Promise<ResultadoEnvio>;
   verify?(chave: string): Promise<"entregue" | "nao_encontrada" | "indeterminado">;
+  /**
+   * Lê o texto ATUAL de uma mensagem já enviada (a `confirmacao` do envio). Serve para reaproveitar uma mensagem que a pessoa pode
+   * ter EDITADO depois de enviada. Devolve o texto; `"apagada"` se a mensagem não existe mais; `null` se não foi possível ler.
+   */
+  reler?(confirmacao: string): Promise<string | "apagada" | null>;
 }

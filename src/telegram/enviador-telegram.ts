@@ -101,4 +101,19 @@ export class EnviadorTelegram implements MessageSender {
       return "indeterminado";
     }
   }
+
+  /** Texto atual de uma mensagem que este enviador mandou (`telegram:<id>`), inclusive se a pessoa a editou depois. */
+  async reler(confirmacao: string): Promise<string | "apagada" | null> {
+    const id = /^telegram:(\d+)$/.exec(confirmacao)?.[1];
+    if (id === undefined) return null;
+    try {
+      const t = await comPrazo(
+        this.cliente.lerMensagem(this.op.destino, Number(id)),
+        this.op.timeoutEnvioMs,
+      );
+      return t === null ? "apagada" : t;
+    } catch {
+      return null;
+    }
+  }
 }

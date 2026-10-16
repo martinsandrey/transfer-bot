@@ -58,6 +58,13 @@ class TelegramFalso implements ClienteTelegram {
     if (this.leituraFalha) throw new Error("sem rede");
     return this.recentes;
   }
+  edicoes = new Map<number, string | null>();
+  async lerMensagem(_d: string, id: number) {
+    if (this.leituraFalha) throw new Error("sem rede");
+    return this.edicoes.has(id)
+      ? (this.edicoes.get(id) as string | null)
+      : (this.enviadas[id - 1] ?? null);
+  }
   async dialogos() {
     return [];
   }
@@ -204,6 +211,26 @@ describe("E2E: ligação de 5 min vai ao 2º grupo; transferência ao 1º", () =
     expect(m.tg.enviadas[0]).toBe(m.tg2.enviadas[0]); // a transferência reaproveita a mensagem já enviada ao grupo de 5 min
     expect(m.consultas).toBe(1); // e não consulta o cadastro de novo
     expect(m.fila.todas.map((x) => x.tipo).sort()).toEqual(["longa", "transferencia"]);
+  });
+
+  it("a pessoa edita a mensagem no grupo de 5 min antes da transferência: o grupo das transferências recebe o texto editado", async () => {
+    const t0 = 1_000_000;
+    const m = montar([
+      snap([linhaDur("100001", "Stage 1 Agent", 10, "09:00:00")], t0 - 1000),
+      snap([linhaDur("100001", "Stage 1 Agent", 300, "09:00:00")], t0),
+      snap([linhaDur("100001", "Stage 1 Agent", 301, "09:00:00")], t0 + 1000),
+    ]);
+    await rodar(m, 3);
+    expect(m.tg2.enviadas).toHaveLength(1);
+    m.tg2.edicoes.set(1, "NAME: EDITADO NO GRUPO DE 5 MIN\nLine 1 number: 100001"); // edição feita pela pessoa
+    m.monitor["deps"].reader = new LeitorRoteirizado([
+      snap([], t0 + 2000),
+      snap([linhaDur("908301", "Stage 3 Agent", 2, "09:05:02")], t0 + 3000),
+      snap([linhaDur("908301", "Stage 3 Agent", 3, "09:05:02")], t0 + 4000),
+    ]);
+    await rodar(m, 3);
+    expect(m.tg.enviadas).toEqual(["NAME: EDITADO NO GRUPO DE 5 MIN\nLine 1 number: 100001"]);
+    expect(m.consultas).toBe(1);
   });
 
   it("5 min só no Stage 3 (depois de transferida): nada vai ao 2º grupo", async () => {

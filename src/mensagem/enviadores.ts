@@ -22,6 +22,11 @@ export class EnviadorFalso implements MessageSender {
     if (r instanceof Error) throw r;
     return r;
   }
+  /** Texto que `reler` devolve (simula uma edição feita no grupo). `undefined` = não foi possível ler. */
+  relido: string | "apagada" | null | undefined = undefined;
+  async reler(): Promise<string | "apagada" | null> {
+    return this.relido ?? null;
+  }
   async verify(): Promise<"entregue" | "nao_encontrada" | "indeterminado"> {
     return this.verificacao ?? "indeterminado";
   }

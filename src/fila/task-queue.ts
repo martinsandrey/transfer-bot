@@ -66,6 +66,8 @@ export interface TarefaTransferencia {
   id: string;
   /** Identifica a ligação (Stage 1) de origem; liga a mensagem de 5 min à transferência da mesma ligação. */
   vinculo: string;
+  /** Confirmação do envio (ex.: `telegram:123`), usada para reler a mensagem se ela for editada depois. */
+  confirmacao?: string;
   /** Esta tarefa reaproveitou a mensagem já enviada ao grupo de 5 min (não consultou o cadastro). */
   reaproveitada?: boolean;
   /** `transferencia` = grupo das transferências; `longa` = ligação que atingiu o tempo mínimo em Stage 1 (segundo grupo). */
@@ -220,10 +222,18 @@ export class TaskQueue {
   private parando = false;
 
   /** Mensagens JÁ ENVIADAS (ou prévias) do grupo de 5 min, por ligação: reaproveitadas se a ligação for transferida depois. Só em memória. */
-  private readonly mensagensLongas = new Map<string, { texto: string; em: number }>();
+  private readonly mensagensLongas = new Map<
+    string,
+    { texto: string; em: number; confirmacao?: string }
+  >();
 
   private guardarMensagemLonga(t: TarefaTransferencia, texto: string): void {
-    if (t.tipo === "longa") this.mensagensLongas.set(t.vinculo, { texto, em: this.agora() });
+    if (t.tipo !== "longa") return;
+    this.mensagensLongas.set(t.vinculo, {
+      texto,
+      em: this.agora(),
+      ...(t.confirmacao !== undefined ? { confirmacao: t.confirmacao } : {}),
+    });
   }
 
   /** Encerramento limpo: termina a tarefa em andamento (sem pegar outra) e devolve as tarefas que ficaram sem conclusão. */
@@ -265,7 +275,7 @@ export class TaskQueue {
 
   private async processar(t: TarefaTransferencia): Promise<void> {
     this.mover(t, "pesquisando");
-    const reaproveitada = this.mensagemReaproveitavel(t);
+    const reaproveitada = await this.mensagemReaproveitavel(t);
     if (reaproveitada !== undefined) {
       // A ligação já fez 5 min em Stage 1 e a mensagem foi ao grupo de 5 min: reenvia o MESMO texto, sem consultar o cadastro.
       t.reaproveitada = true;
@@ -347,13 +357,39 @@ export class TaskQueue {
     return true;
   }
 
-  private mensagemReaproveitavel(t: TarefaTransferencia): string | undefined {
+  /**
+   * Texto a reaproveitar da mensagem de 5 min desta ligação. Lê a mensagem NO GRUPO no momento da transferência, para pegar uma
+   * edição feita pela pessoa; se a leitura falhar (ou a mensagem não existir mais) usa o texto guardado em memória.
+   */
+  private async mensagemReaproveitavel(t: TarefaTransferencia): Promise<string | undefined> {
     if (t.tipo !== "transferencia") return undefined;
     const g = this.mensagensLongas.get(t.vinculo);
     if (!g) return undefined;
     this.mensagensLongas.delete(t.vinculo); // uma ligação só é transferida uma vez
     const validade = this.op.memoriaMensagemLongaMs ?? 3 * 3_600_000;
-    return this.agora() - g.em <= validade ? g.texto : undefined;
+    if (this.agora() - g.em > validade) return undefined;
+    const sender = this.deps.senderLonga;
+    if (g.confirmacao !== undefined && sender?.reler) {
+      let atual: string | "apagada" | null;
+      try {
+        atual = await sender.reler(g.confirmacao);
+      } catch {
+        atual = null;
+      }
+      if (typeof atual === "string" && atual !== "apagada" && atual.trim() !== "") {
+        if (atual !== g.texto)
+          this.deps.log.info("Mensagem do grupo de 5 min foi editada; usando o texto editado", {
+            evento: "mensagem_editada_usada",
+            idCurto: t.id,
+          });
+        return atual;
+      }
+      this.deps.notificador.alerta(
+        "aviso",
+        `Tarefa ${t.id}: ${atual === "apagada" ? "a mensagem do grupo de 5 min foi apagada" : "não consegui reler a mensagem do grupo de 5 min"}; usei o texto original.`,
+      );
+    }
+    return g.texto;
   }
 
   private async pesquisar(t: TarefaTransferencia): Promise<ResultadoBusca | null> {
@@ -395,6 +431,7 @@ export class TaskQueue {
         resultado = { tipo: "incerta", motivo: "excecao_no_envio" } as const; // não sabemos se saiu
       }
       if (resultado.tipo === "enviada") {
+        t.confirmacao = resultado.confirmacao;
         this.mover(t, "enviada");
         return;
       }

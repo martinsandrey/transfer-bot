@@ -405,6 +405,31 @@ describe("TaskQueue", () => {
       expect(fila.todas[1]?.reaproveitada).toBe(true);
     });
 
+    it("a pessoa EDITOU a mensagem no grupo de 5 min: a transferência envia o texto editado", async () => {
+      const { fila, m, longaSender } = dois();
+      fila.enqueue(longa("VE"));
+      const p1 = fila.drenar();
+      await p1;
+      longaSender.relido = "NAME: TEXTO EDITADO PELA PESSOA";
+      fila.enqueue(transf("VE"));
+      await fila.drenar();
+      expect(m.sender.enviados[0]?.texto).toBe("NAME: TEXTO EDITADO PELA PESSOA");
+      expect(m.busca.chamadas).toHaveLength(1);
+    });
+
+    it("mensagem apagada ou ilegível no grupo de 5 min: usa o texto original guardado e avisa", async () => {
+      for (const relido of ["apagada", null] as const) {
+        const { fila, m, longaSender } = dois();
+        fila.enqueue(longa("VX"));
+        await fila.drenar();
+        longaSender.relido = relido;
+        fila.enqueue(transf("VX"));
+        await fila.drenar();
+        expect(m.sender.enviados[0]?.texto).toBe(longaSender.enviados[0]?.texto);
+        expect(m.notif.alertas.some((a) => /usei o texto original/.test(a.mensagem))).toBe(true);
+      }
+    });
+
     it("transferência antes dos 5 min (sem mensagem longa): cria a mensagem normalmente", async () => {
       const { fila, m } = dois();
       fila.enqueue(transf("V2"));

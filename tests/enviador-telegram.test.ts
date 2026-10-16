@@ -26,6 +26,10 @@ class ClienteFalso implements ClienteTelegram {
     if (this.falhaNaLeitura) throw new Error("rede");
     return this.recentes;
   }
+  texto: string | null = "texto atual";
+  async lerMensagem() {
+    return this.texto;
+  }
   async dialogos() {
     return [];
   }
@@ -153,5 +157,16 @@ describe("grupo antigo (migrado) x grupo novo", () => {
     expect(ehGrupoAntigo({ entity: novo({ migratedTo: {} }) as never })).toBe(true);
     expect(ehGrupoAntigo({ entity: novo({ deactivated: true }) as never })).toBe(true);
     expect(ehGrupoAntigo({ entity: {} as never })).toBe(false);
+  });
+});
+
+describe("reler mensagem enviada (edição feita no grupo)", () => {
+  it("devolve o texto atual, 'apagada' ou null", async () => {
+    const c = new ClienteFalso();
+    const e = criar(c);
+    expect(await e.reler("telegram:7")).toBe("texto atual");
+    c.texto = null;
+    expect(await e.reler("telegram:7")).toBe("apagada");
+    expect(await e.reler("console")).toBeNull();
   });
 });

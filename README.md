@@ -55,7 +55,7 @@ Com `TELEGRAM_DESTINO_5MIN` preenchido (nome do grupo ou ID, como no `TELEGRAM_D
 - O grupo das transferências recebe só transferências; o segundo grupo recebe só as que fizeram 5 min no Stage 1.
 - Se a ligação chegou a 5 min já no Stage 3 (depois de transferida), **não** vai ao segundo grupo. Se fez 5 min no Stage 1 e depois foi transferida, vai aos dois.
 - Ligações que já passavam de 5 min quando o programa abriu **não** geram mensagem (só as que cruzam o tempo depois).
-- Se a ligação já fez 5 min no Stage 1 e a mensagem **já foi enviada** ao 2º grupo, ao ser transferida o programa **reenvia o mesmo texto** ao grupo das transferências (sem consultar o cadastro de novo e sem rótulo de "encaminhada"). Se foi transferida antes dos 5 min, a mensagem é criada normalmente. Se a mensagem de 5 min falhou, o fluxo normal é usado.
+- Se a ligação já fez 5 min no Stage 1 e a mensagem **já foi enviada** ao 2º grupo, ao ser transferida o programa **reenvia essa mensagem** ao grupo das transferências (sem consultar o cadastro de novo e sem rótulo de "encaminhada"). O programa **lê a mensagem no grupo de 5 min no momento da transferência**, então se você a **editou** lá, o texto editado é o que vai para o grupo das transferências. Se a mensagem foi apagada ou não deu para lê-la, usa o texto original e avisa no console. Se foi transferida antes dos 5 min, a mensagem é criada normalmente. Se a mensagem de 5 min falhou, o fluxo normal é usado.
 - Cada ligação gera no máximo uma mensagem do 2º grupo. Cada consulta ao cadastro pausa a leitura da tabela por alguns segundos.
 
 ## Modelo da mensagem
