@@ -82,7 +82,20 @@ export function sanearPagina(anon: Anonimizador, bruta: PaginaBruta, tipo: TipoC
       texto: anon.limparTexto(f.texto),
       atributos: limparAtributos(anon, f.atributos),
     })),
-    tabelas: bruta.tabelas.map((t) => sanearTabela(anon, t, 5)),
+    tabelas: bruta.tabelas
+      .filter(
+        (t) =>
+          t.cabecalhos.some((h) => h !== "") ||
+          t.linhas.some((l) => l.celulas.some((c) => c.texto !== "")),
+      )
+      .map((t) => sanearTabela(anon, t, 5)),
+    tabelasSoDeLayoutOmitidas: bruta.tabelas.filter(
+      (t) =>
+        !(
+          t.cabecalhos.some((h) => h !== "") ||
+          t.linhas.some((l) => l.celulas.some((c) => c.texto !== ""))
+        ),
+    ).length,
   };
 }
 

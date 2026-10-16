@@ -19,10 +19,10 @@ const AJUDA = `
 Comandos (digite e aperte Enter). Em cada um, ANTES de digitar, deixe a tela do navegador no estado indicado:
   login      tela de login (ainda SEM logar)
   tabela     tela da tabela de chamadas (já logado); grava estrutura + uma série de leituras ao longo do tempo
-  menu       qualquer tela com o menu lateral visível
-  clientes   tela Customer Data List (antes de pesquisar)
-  resultado  Customer Data List depois de pesquisar (tente com 1 resultado; repita com 0 e com vários)
-  edicao     tela de edição de um cliente (NÃO clique em salvar; apenas abra e olhe)
+  menu       qualquer tela com o menu lateral visível (captura todas as abas abertas)
+  clientes   com a tela Customer Data List ABERTA e visível (antes de pesquisar); captura todas as abas
+  resultado  Customer Data List depois de pesquisar (a tela com os resultados visível) (tente com 1 resultado; repita com 0 e com vários)
+  edicao     com a tela de edição de um cliente ABERTA e visível (NÃO clique em salvar; apenas abra e olhe)
   abas       acompanha as abas por alguns segundos (teste de 2ª aba e de janela minimizada)
   diagnostico  use se o comando 'tabela' não achar a tabela: mostra ONDE ela está (frames, ancestrais), sem dados
   rede       grava o resumo do tráfego de rede observado até agora
@@ -127,7 +127,17 @@ async function principal(): Promise<void> {
         );
         const amostras = await amostrarAbas(() => host.contexto.pages(), seg * 1000);
         console.log("Gravado:", saida.gravar("abas", amostras));
-      } else if (["login", "tabela", "menu", "clientes", "resultado", "edicao"].includes(cmd)) {
+      } else if (["menu", "clientes", "resultado", "edicao"].includes(cmd)) {
+        // Telas que podem abrir em outra aba/janela: captura TODAS as abas abertas (cada uma com seus frames).
+        const tipo = cmd as TipoCaptura;
+        const paginas = host.contexto.pages();
+        console.log(`Abas abertas: ${paginas.length}. Capturando todas...`);
+        const abas: unknown[] = [];
+        for (const [i, p] of paginas.entries()) {
+          abas.push({ aba: i + 1, captura: await capturarPagina(p, anon, tipo) });
+        }
+        console.log("Gravado:", saida.gravar(tipo, { abasAbertas: paginas.length, abas }));
+      } else if (["login", "tabela"].includes(cmd)) {
         const page = await escolherPagina(host.contexto.pages(), perguntar);
         if (!page) {
           console.log("Nenhuma aba disponível.");

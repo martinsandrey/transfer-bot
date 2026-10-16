@@ -100,3 +100,12 @@ Falta de dado numa linha da tabela é normal. A linha problemática é **ignorad
 - Linhas curtas demais ou com mais células que cabeçalhos também são só ignoradas.
 - Se a linha incompleta tem Callback Number, a chamada fica "congelada" no rastreador (não conta como sumida nem muda de estado).
 - Só a falta de um **cabeçalho** obrigatório invalida a leitura. Se **todas** as linhas forem ignoradas por muito tempo, há um aviso (possível mudança de layout).
+
+## Resposta do recon de 2026-10-16 sobre o cadastro (`clientes`, `resultado`, `edicao`)
+
+As três capturas mostram a **tela de monitoramento**, não a Customer Data List. O recon foi melhorado: agora esses comandos capturam **todas as abas abertas** e todos os seus frames.
+
+| ID  | Pergunta                                                                                                                                                                                                                             | Por que importa                                                                                                                 |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| R1  | Ao clicar em **Customer Data List** no menu lateral, o que acontece: abre uma **janela flutuante dentro da mesma página**, abre uma **nova aba/janela do navegador**, ou a **página inteira muda**?                                  | Define se a consulta usa 2ª aba, janela interna ou navegação, e se a tabela de chamadas continua sendo lida                     |
+| R2  | Repita com a tela **realmente aberta e visível** (e, no `resultado`, com a busca feita): rode `clientes`, depois `resultado` (pesquise um telefone e deixe o resultado na tela) e `edicao` (abra a edição de um cliente, sem salvar) | Sem isso não há campo `Phone`, botão `Search`, lista de resultados nem os rótulos do formulário (nome, CPF, localização, idade) |
