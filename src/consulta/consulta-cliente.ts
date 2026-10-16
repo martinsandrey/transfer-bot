@@ -20,7 +20,11 @@ export interface PaginaClientes {
   abrir(): Promise<void>;
   /** Digita o telefone no campo Phone, aciona Search e espera o resultado. Devolve quantos clientes apareceram. */
   pesquisarPorTelefone(telefone: string): Promise<{ resultados: number }>;
-  /** Abre a edição do PRIMEIRO resultado (somente para ler). */
+  /**
+   * Clica no botão **Edit** da LINHA do cliente pesquisado (o primeiro resultado) para abrir o formulário, somente para LER.
+   * É a única ação de clique no cadastro: nunca clicar em Salvar/Save/Update/Delete. O botão certo é o da linha do resultado, e só
+   * depois da pesquisa ter terminado. TODO(confirmar) (R2): aparência/rótulo do botão Edit na linha de resultados.
+   */
   abrirEdicaoDoPrimeiro(): Promise<void>;
   /** Lê os campos do formulário, sem alterá-los. Campo ausente = `undefined`. */
   lerCampos(): Promise<CamposDoCadastro>;
@@ -39,7 +43,8 @@ export function telefonesIguais(a: string, b: string): boolean {
 }
 
 /**
- * Fluxo combinado com o usuário: Callee Number → Customer Data List → pesquisa por Phone → lê o cadastro → fecha sem salvar.
+ * Fluxo combinado com o usuário: Callee Number → Customer Data List → pesquisa por Phone → clica em Edit na linha do cliente
+ * → lê o cadastro → fecha sem salvar.
  * - 0 resultados: não gera mensagem. Vários: segue com o primeiro (a fila alerta).
  * - Campo faltando no cadastro: fica VAZIO (regra do usuário); não é erro.
  * - Telefone do cadastro diferente do Callee Number: cliente errado, não envia. Telefone ausente no cadastro: não dá para

@@ -121,3 +121,8 @@ As três capturas mostram a **tela de monitoramento**, não a Customer Data List
 Callee Number → página **Customer Data List** → pesquisa pelo cliente usando o Callee Number → as demais informações da mensagem estão lá.
 **Regra: se faltar algum dado necessário, deixar o campo vazio** (não é erro). Implementado em `ConsultaDeCliente` (lógica pronta e testada com página falsa);
 falta apenas o contato com a página (`PaginaClientes`), que depende de R1/R2. Telefone ausente no cadastro: segue e `Ph` fica vazio; telefone diferente do Callee: cliente errado (não envia).
+
+## Passo do botão Edit (2026-10-16, informado pelo usuário)
+
+Entre pesquisar e ler o cadastro, o bot precisa **clicar no botão Edit na linha do cliente pesquisado** (primeiro resultado). Está na interface (`abrirEdicaoDoPrimeiro`).
+Precisamos da evidência de como é esse botão na linha de resultados (rótulo/ícone, posição) — capturar com `resultado` (resultado na tela). É a única ação de clique no cadastro; Salvar/Update/Delete continuam proibidos e as requisições de escrita serão bloqueadas na aba de consulta.

@@ -340,3 +340,8 @@ mantém a mensagem em memória até a decisão manual; os demais estados termina
 `interpretarStatusDetalhado` separa número do Stage e complemento (`ringing`, `agent`, `manual call`). A ocorrência guarda `viuStage1Agent` e `aguardaStage3Agent`:
 só vira transferência quem esteve em `Stage 1 Agent` e chega a `Stage 3 Agent` (direto, ou via outro complemento do Stage 3). Detalhes e fatos: `docs/EVIDENCIAS.md`.
 **Risco aberto (Q1):** se o Callback Number mudar na transferência, a identidade por Callback Number precisará de uma ligação pelo Callee Number.
+
+## Anexo — fluxo da consulta ao cadastro (2026-10-16)
+
+Callee Number → Customer Data List (menu) → pesquisa em `Phone` + `Search` → **clique em Edit na linha do cliente** → leitura dos campos (nome, CPF, location, age, phone) → fechar **sem salvar**.
+Campos ausentes ficam vazios. Código: `src/consulta/consulta-cliente.ts` (`ConsultaDeCliente` + interface `PaginaClientes`, sem ação de escrita). Adaptador real pendente de evidência (R1/R2).
