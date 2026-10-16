@@ -539,3 +539,25 @@ describe("CallTracker", () => {
     }
   });
 });
+
+describe("diário de status (diagnóstico)", () => {
+  it("registra surgimento, mudanças e sumiço sem telefones", () => {
+    const mudancas: string[] = [];
+    const t = new CallTracker({
+      leiturasConfirmacao: 1,
+      ausenciaMaxLeituras: 1,
+      ttlOcorrenciasMs: 60000,
+      aoMudarStatus: (i) => mudancas.push(`${i.de}>${i.para}`),
+    });
+    alimentar(t, snap([]));
+    alimentar(
+      t,
+      snap([linha("A", "Stage 1 Ringing")]),
+      snap([linha("A", S1)]),
+      snap([]),
+      snap([]),
+      snap([]),
+    );
+    expect(mudancas).toEqual(["(novo)>1|ringing", "1|ringing>1|agent", "1|agent>(sumiu)"]);
+  });
+});

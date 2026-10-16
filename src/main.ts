@@ -95,6 +95,9 @@ async function principal(): Promise<void> {
     ausenciaMaxLeituras: cfg.monitor.ausenciaMaxLeituras,
     ttlOcorrenciasMs: cfg.monitor.ttlOcorrenciasMin * 60_000,
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
+    // Diário de status no ARQUIVO de log (sem telefones): mostra o que acontece entre o Stage 1 e o Stage 3.
+    aoMudarStatus: (i) =>
+      log.info("status", { evento: "status_mudou", idCurto: i.id, de: i.de, para: i.para }),
   });
   const opMonitor = {
     pausarDuranteConsulta: true,

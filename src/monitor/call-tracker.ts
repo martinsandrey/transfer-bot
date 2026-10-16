@@ -65,6 +65,8 @@ export interface OpcoesTracker {
    * TODO(confirmar) (P5): padrão provisório = Start Time + Callee Number (texto cru); ajustar com a evidência do recon.
    */
   discriminador?: (row: CallRow) => string;
+  /** Diário de status (só para diagnóstico, sem telefones): chamado quando uma ocorrência surge, muda de status confirmado ou some. */
+  aoMudarStatus?: (info: { id: string; de: string; para: string }) => void;
   /**
    * Evidência real (2026-10-16): na transferência a linha do Stage 1 SOME e aparece OUTRA linha em "Stage 3 Agent", com outro
    * Callback Number (o do agente do Stage 3) e o MESMO Callee Number. A transferência é detectada ligando as duas pelo Callee.
@@ -221,6 +223,7 @@ export class CallTracker {
           leiturasNoStatus: 1,
         };
         this.ativas.set(cb, oc);
+        this.op.aoMudarStatus?.({ id: oc.id, de: "(novo)", para: status.chave });
         this.aoSurgir(oc, status, s.readAt, baseline, eventos);
         if (!baseline) this.aposLeitura(oc, row, s.readAt, eventos);
         continue;
@@ -246,6 +249,7 @@ export class CallTracker {
       oc.candidato = null;
       oc.leiturasNoStatus = this.op.leiturasConfirmacao;
       if (status.numero === 1 && status.sub === "agent") oc.viuStage1Agent = true;
+      this.op.aoMudarStatus?.({ id: oc.id, de: de.chave, para: status.chave });
       this.aplicarTransicao(oc, de, status, row, s.readAt, eventos);
       this.aposLeitura(oc, row, s.readAt, eventos);
     }
@@ -256,7 +260,10 @@ export class CallTracker {
       for (const [cb, oc] of this.ativas) {
         if (porCallback.has(cb) || incompletos.has(cb)) continue;
         oc.ausencias++;
-        if (oc.ausencias > this.op.ausenciaMaxLeituras) this.ativas.delete(cb);
+        if (oc.ausencias > this.op.ausenciaMaxLeituras) {
+          this.op.aoMudarStatus?.({ id: oc.id, de: oc.confirmado.chave, para: "(sumiu)" });
+          this.ativas.delete(cb);
+        }
       }
     }
     return eventos;

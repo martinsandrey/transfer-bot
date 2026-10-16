@@ -14,6 +14,8 @@ const CAMPOS_PERMITIDOS = new Set([
   "estadoTarefa",
   "estadoSessao",
   "idCurto",
+  "de",
+  "para",
   "callbackMascarado",
   "contagem",
   "linhas",

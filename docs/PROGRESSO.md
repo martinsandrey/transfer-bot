@@ -120,3 +120,7 @@ Opção B (GramJS, conta pessoal) — ver DECISOES D9. `ClienteTelegram` (contra
 
 Feito: login automático com verificação humana (a pessoa clica no botão quadrado; o programa espera, avisa com som e só então preenche `username`/`password` do `.env` **uma vez**; após uma tentativa que falhe, nunca tenta sozinho de novo); depois do login abre "Voice Call Status" pelo menu; **validade da mensagem** (`VALIDADE_MENSAGEM_MIN`, padrão 15: mensagem velha não é enviada, com alerta); **encerramento limpo** (termina a tarefa em andamento e lista pendentes/incertas); testes ponta a ponta com Telegram falso (timeout com/sem entrega, FLOOD_WAIT, 0 resultados, mensagem velha, sessão expirada no meio, encerramento) e soak de 8 h simuladas sem acúmulo de memória. 170 testes.
 Não feito (a decidir): recarga ociosa (`RECARGA_OCIOSA_MINUTOS` existe na config mas ainda não age) e vigia de "tabela parada". **[WIN] pendente:** testar login automático real (verificação + preenchimento) e o roteiro observação → `me` → canal definitivo.
+
+## Diário de status (2026-10-16)
+
+`recon` e `start` **não podem rodar juntos** (mesmo perfil de navegador, e o recon mexe na página). Para investigar o que há entre Stage 1 e Stage 3 sem parar o trabalho, o bot grava no arquivo de log (nunca no console) cada mudança de status (`status_mudou`: id curto, de, para, sem telefones).
