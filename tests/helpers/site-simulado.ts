@@ -152,6 +152,17 @@ async function atualizar() {
 atualizar(); setInterval(atualizar, ${periodoMs});</script>`;
 }
 
+/** Tela de busca + lista de clientes FICTÍCIA (imita só o tipo de estrutura vista no recon). `title` das células leva um nome inventado. */
+const PAGINA_CLIENTES = `<!doctype html><title>Clientes</title>
+<form id="selectForm"><table class="adminlist">
+<tr><td nowrap>Name：</td><td><input type="text" name="ft[name]" id="f_name"></td></tr>
+<tr><td nowrap>Phone：</td><td><input type="text" name="ft[phone]" id="f_phone"></td></tr>
+<tr><td colspan="2"><input type="submit" value="Search"></td></tr></table></form>
+<table cellpadding="3" cellspacing="1"><thead><tr><th></th><th>Personal Data ID</th><th>Name</th><th>Phone</th><th>Action</th></tr></thead><tbody>
+<tr><td><input type="checkbox"></td><td>1234567</td><td title="NOME FICTICIO COMPLETO">NOME FIC…</td><td>011900000101</td><td><a href="edit.php?id=1234567"><img alt="Edit"></a><a href="del.php?id=1234567"><font>Del</font></a></td></tr>
+<tr><td><input type="checkbox"></td><td>1234568</td><td title="OUTRO NOME INVENTADO">OUTRO…</td><td>011900000102</td><td><a href="edit.php?id=1234568"><img alt="Edit"></a></td></tr>
+</tbody></table>`;
+
 export interface SiteSimulado {
   url: string;
   fechar(): Promise<void>;
@@ -168,6 +179,9 @@ export async function iniciarSiteSimulado(passoMs = 300): Promise<SiteSimulado> 
     } else if (caminho === "/painel-iframe") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
       res.end(PAGINA_IFRAME);
+    } else if (caminho === "/clientes-lista") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      res.end(PAGINA_CLIENTES);
     } else if (caminho === "/layout-evidencia") {
       t0 = Date.now();
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" });

@@ -42,6 +42,14 @@ export interface ControleBruto {
   visivel: boolean;
   dentroDe: string | null;
   dentroDeTabela: boolean;
+  /** Posição da linha (0, 1...) dentro da tabela, quando o controle está numa tabela. */
+  linhaNaTabela: number | null;
+  /** Texto da célula à esquerda quando parece rótulo ("Phone："): liga o campo ao seu rótulo em formulários feitos de tabela. */
+  rotuloDaCelula: string | null;
+  /** Rótulo visível de botões (value de input button/submit/reset/image ou texto de <button>). */
+  textoBotao: string | null;
+  /** alt/title/texto de elementos filhos (ícones de ação) para reconhecer botões feitos de imagem. */
+  filhos: string[];
 }
 export interface PaginaBruta {
   titulo: string;
@@ -257,31 +265,60 @@ export function extrairNoNavegador(op: OpcoesExtracao): PaginaBruta {
   // ---- controles ----
   const contentorMenu =
     "nav, aside, [role=navigation], [role=menu], [class*=sidebar i], [class*=menu i]";
-  const controles: ControleBruto[] = Array.from(
+  const controles: ControleBruto[] = [];
+  for (const el of Array.from(
     document.querySelectorAll(
       "input, select, textarea, button, a[href], [role=button], [role=tab], [role=menuitem], [role=link], summary",
     ),
-  )
-    .slice(0, 500)
-    .map((el) => {
-      const tag = el.tagName.toLowerCase();
-      const dentroDeTabela = !!el.closest("tbody tr, [role=row]");
-      const eCampo = tag === "input" || tag === "select" || tag === "textarea";
-      const contentor = el.closest(contentorMenu);
-      return {
-        tag,
-        tipo: el.getAttribute("type"),
-        atributos: atributosDe(el),
-        rotulo: eCampo ? rotuloDe(el) : null,
-        texto:
-          eCampo || dentroDeTabela
-            ? null
-            : limpo((el as HTMLElement).innerText ?? el.textContent).slice(0, 60),
-        visivel: visivel(el),
-        dentroDe: contentor ? contentor.tagName.toLowerCase() : null,
-        dentroDeTabela,
-      };
+  )) {
+    if (controles.length >= 500) break;
+    const tag = el.tagName.toLowerCase();
+    const tr = el.closest("tbody tr, [role=row]");
+    const dentroDeTabela = !!tr;
+    let linhaNaTabela: number | null = null;
+    if (tr && tr.parentElement) {
+      linhaNaTabela = Array.from(tr.parentElement.children).indexOf(tr);
+      // tabelas grandes (listas de dados): só as 2 primeiras linhas, o suficiente para ver a estrutura
+      if (linhaNaTabela >= 2 && tr.parentElement.children.length > 4) continue;
+    }
+    const eCampo = tag === "input" || tag === "select" || tag === "textarea";
+    const tipo = (el.getAttribute("type") ?? "").toLowerCase();
+    const contentor = el.closest(contentorMenu);
+    const td = el.closest("td");
+    const anterior = td?.previousElementSibling ?? null;
+    const textoAnterior = anterior ? limpo((anterior as HTMLElement).innerText) : "";
+    const ehBotaoDeEntrada =
+      tag === "input" && ["button", "submit", "reset", "image"].includes(tipo);
+    controles.push({
+      tag,
+      tipo: el.getAttribute("type"),
+      atributos: atributosDe(el),
+      rotulo: eCampo ? rotuloDe(el) : null,
+      texto: eCampo ? null : limpo((el as HTMLElement).innerText ?? el.textContent).slice(0, 60),
+      visivel: visivel(el),
+      dentroDe: contentor ? contentor.tagName.toLowerCase() : null,
+      dentroDeTabela,
+      linhaNaTabela,
+      rotuloDaCelula:
+        eCampo &&
+        textoAnterior.length > 0 &&
+        textoAnterior.length <= 40 &&
+        /[:：]\s*$/.test(textoAnterior)
+          ? textoAnterior
+          : null,
+      textoBotao: ehBotaoDeEntrada
+        ? limpo((el as HTMLInputElement).value).slice(0, 40)
+        : tag === "button"
+          ? limpo((el as HTMLElement).innerText).slice(0, 40)
+          : null,
+      filhos: Array.from(el.querySelectorAll("img, font, span"))
+        .slice(0, 4)
+        .map((f) =>
+          limpo(f.getAttribute("alt") ?? f.getAttribute("title") ?? f.textContent).slice(0, 30),
+        )
+        .filter(Boolean),
     });
+  }
 
   const folhasDeMenu = Array.from(
     document.querySelectorAll(

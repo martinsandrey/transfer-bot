@@ -16,6 +16,57 @@ export type TipoCaptura = "login" | "tabela" | "clientes" | "resultado" | "edica
 /** Nas telas que mostram dados de cliente, títulos/ cabeçalhos livres viram apenas "forma". */
 const TIPOS_SENSIVEIS: ReadonlySet<TipoCaptura> = new Set(["resultado", "edicao"]);
 
+/** Atributos estruturais que não carregam dados do cliente. */
+const ATRIBUTOS_ESTRUTURAIS = new Set([
+  "class",
+  "id",
+  "name",
+  "type",
+  "width",
+  "height",
+  "align",
+  "valign",
+  "colspan",
+  "rowspan",
+  "nowrap",
+  "border",
+  "cellpadding",
+  "cellspacing",
+  "href",
+  "src",
+  "action",
+  "method",
+  "enctype",
+  "target",
+  "rel",
+  "role",
+  "size",
+  "maxlength",
+  "readonly",
+  "disabled",
+  "checked",
+  "for",
+  "color",
+]);
+
+/**
+ * Para linhas/células/controles de TABELAS DE DADOS: só atributos estruturais passam; `title`/`alt` curtos e sem dígitos (rótulos de ícone
+ * como "Edit") também; todo o resto vira marcador. Evita vazar nomes de clientes que o site põe em `title` das células.
+ */
+function limparAtributosDeDados(
+  anon: Anonimizador,
+  atributos: Record<string, string>,
+): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(atributos).map(([k, v]) => {
+      if (ATRIBUTOS_ESTRUTURAIS.has(k)) return [k, anon.limparAtributo(k, v)];
+      if ((k === "title" || k === "alt") && v.length <= 16 && !/\d/.test(v))
+        return [k, anon.limparTexto(v)];
+      return [k, `<${anon.marcador(`ATTR_${k}`, v)}>`];
+    }),
+  );
+}
+
 function limparAtributos(
   anon: Anonimizador,
   atributos: Record<string, string>,
@@ -30,21 +81,26 @@ export function sanearTabela(anon: Anonimizador, t: TabelaBruta, maxLinhas: numb
   return {
     indice: t.indice,
     tipo: t.tipo,
-    atributos: limparAtributos(anon, t.atributos),
+    atributos: limparAtributosDeDados(anon, t.atributos),
     cabecalhos: t.cabecalhos,
     totalLinhas: t.totalLinhas,
     linhasAmostra: t.linhas.slice(0, maxLinhas).map((l) => ({
-      atributos: limparAtributos(anon, l.atributos),
+      atributos: limparAtributosDeDados(anon, l.atributos),
       celulas: l.celulas.map((c, i) => ({
         valor: anon.celula(politicas[i] ?? "generica", i, c.texto),
         ...(c.textoOculto !== null
           ? { textoOcultoDiferente: anon.marcador("OCULTO", c.textoOculto) }
           : {}),
-        atributos: limparAtributos(anon, c.atributos),
+        atributos: limparAtributosDeDados(anon, c.atributos),
         esqueleto: c.esqueleto,
       })),
     })),
   };
+}
+
+/** Textos longos dentro de linhas de dados podem ser nomes: só passam textos curtos (rótulos de ação). */
+function curto(t: string): string {
+  return t.length <= 14 ? t : formaDoValor(t, 14);
 }
 
 export function sanearPagina(anon: Anonimizador, bruta: PaginaBruta, tipo: TipoCaptura): unknown {
@@ -64,17 +120,23 @@ export function sanearPagina(anon: Anonimizador, bruta: PaginaBruta, tipo: TipoC
       ...f,
       atributos: limparAtributos(anon, f.atributos),
     })),
-    controles: bruta.controles
-      .filter((c) => !c.dentroDeTabela)
-      .map((c) => ({
-        tag: c.tag,
-        tipo: c.tipo,
-        visivel: c.visivel,
-        rotulo: c.rotulo === null ? null : anon.limparTexto(c.rotulo),
-        texto: c.texto === null ? null : anon.limparTexto(c.texto),
-        dentroDe: c.dentroDe,
-        atributos: limparAtributos(anon, c.atributos),
-      })),
+    controles: bruta.controles.map((c) => ({
+      tag: c.tag,
+      tipo: c.tipo,
+      visivel: c.visivel,
+      rotulo: c.rotulo === null ? null : anon.limparTexto(c.rotulo),
+      rotuloDaCelula: c.rotuloDaCelula === null ? null : anon.limparTexto(c.rotuloDaCelula),
+      texto:
+        c.texto === null ? null : anon.limparTexto(c.dentroDeTabela ? curto(c.texto) : c.texto),
+      textoBotao: c.textoBotao === null ? null : anon.limparTexto(c.textoBotao),
+      filhos: c.filhos.map((f) => anon.limparTexto(curto(f))),
+      dentroDe: c.dentroDe,
+      dentroDeTabela: c.dentroDeTabela,
+      linhaNaTabela: c.linhaNaTabela,
+      atributos: c.dentroDeTabela
+        ? limparAtributosDeDados(anon, c.atributos)
+        : limparAtributos(anon, c.atributos),
+    })),
     controlesDentroDeTabela: bruta.controles.filter((c) => c.dentroDeTabela).length,
     itensDeMenu: menus.length,
     folhasDeMenu: bruta.folhasDeMenu.map((f) => ({

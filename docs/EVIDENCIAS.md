@@ -74,3 +74,29 @@ Numa transferência real, o console mostrou avisos `visto_primeira_vez_stage3` p
 | `{{location}}`    | **Address**                                                                     |
 
 Falta ainda a captura `edicao` para saber COMO o rótulo se liga ao campo no HTML (e não adivinhar seletores).
+
+## Customer Data List, edição e rede — recon de 2026-10-16 (`clientes`, `resultado`, `edicao`, `rede`)
+
+Nenhum dado pessoal aqui. (Aviso: os arquivos enviados continham **nomes reais de clientes** no atributo `title` das células da lista; o recon foi corrigido para não gravar isso.)
+
+**Onde as telas ficam**
+
+- A Customer Data List e o formulário de edição abrem **dentro da mesma página** (`/modules/index.php`), como **iframes**: lista em `/modules/cc_cds/`, edição em `/modules/cc_cds/edit.php`. Só 1 aba do navegador. Com a lista aberta, os iframes de `cc_monitor` (tabela de chamadas) **deixam de existir** — confirma que a consulta tira a tabela de chamadas da tela.
+
+**Lista de clientes (`/modules/cc_cds/`)**
+
+- Formulário de busca (`selectForm`, tabela de classe `adminlist`) com rótulos: `Name：`, `Mobile Phone：`, `Phone：`, `Status：` (All/Connected/Not Connected), `Personal Data ID：`, `Creation Date` (calendário) e uma linha com o botão de busca. A pesquisa parece ser por GET com parâmetros `ft[phone]`, `ft[name]`, `ft[mob_phone]`, `ft[pc_id]`, `ft[status]`, `bdate`, `edate` (deduzido do endereço do formulário de exclusão, que repete esses parâmetros) — **a confirmar** com os nomes reais dos campos.
+- Tabela de resultados, 12 colunas: _(caixa de seleção)_, `Personal Data ID`, `Name`, `Gender`, `ID Number`, `Date of Birth`, `Mobile Phone`, `Phone`, `Customer Type`, `Status`, `Creation Date`, `Action`. A célula `Name` leva o nome completo no atributo `title`. Na coluna `Action` há **2 links** (`a` e `a>font`) — qual é o **Edit** ainda não está identificado.
+- Rodapé: `Delete Confirm` + paginação "… Next Page [Last Page] Shared N Page N Entries"; com 1 resultado aparece "Shared 1 Page 1 Entries". Sem filtro são 10 linhas por página.
+- **Controles perigosos na mesma tela:** formulário `listForm` (POST `/modules/cc_cds/delete.php`), botões "Add Customer Data List", "Delete This Account Customer Data" e campo "Delete Specific Personal Data ID". **Nunca clicar.**
+
+**Formulário de edição (`/modules/cc_cds/edit.php`)**
+
+- Formulário `form1` com POST (multipart) para `/modules/cc_cds/update.php` (**é o Salvar — nunca acionar**).
+- Cada campo é uma linha de tabela: célula de rótulo + célula com o campo. Rótulos com **dois-pontos largo** `：`: `Name`, `Customer Type`, `Gender`, `ID Number`, `Date of Birth` (dica `YYYY-MM-DD`), `Mobile Phone`, `Phone`, `Address`, `Postal Code`, `Bank Name`, `Bank Account Number`, `Bank Account Name`, `Amount`. Bate com o mapeamento do usuário (Name, ID Number, Date of Birth, Phone, Address); `Phone` ≠ `Mobile Phone` (comparar o rótulo inteiro).
+- Na lista de amostra, `Mobile Phone` vinha vazio e `Phone` preenchido.
+
+**Tráfego de rede (login e monitoramento)**
+
+- Login: XHR `POST /wapi/set_verify.php` (corpo com `fingerprint`, resposta com `status` e `token`) e depois `POST /logincheck.php` (documento, 302) com os campos `verify_key`, `done`, `username`, `password`, `submit`. Os nomes de campo `username`/`password` são evidência real para o futuro login automático; `verify_key` vem do token gerado por script.
+- A tabela de chamadas é alimentada por XHR `GET /modules/cc_monitor/get_curcall_in.php?date=…` a cada ~0,6 s (resposta HTML); `get_curcall_out.php` ~1,2 s; `get_peer_status.php` ~5 s; `cont_controler.php` ~131 s. Menu: `GET /modules/menu.php` (XML). **Sem WebSocket.**

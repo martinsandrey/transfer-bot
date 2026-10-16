@@ -94,3 +94,12 @@ Falta o adaptador real da página (menu, Phone, Search, resultados, formulário)
 ## Rótulos do formulário (2026-10-16)
 
 Mapeamento Name/ID number/Date of birth/Phone/Address → nome/cpf/age/phone/location implementado e testado (`camposPorRotulo`). Pronto para o adaptador da página, que ainda precisa da captura `edicao`.
+
+## Evidência da Customer Data List (2026-10-16)
+
+Capturas `clientes`/`resultado`/`edicao`/`rede` recebidas. Registrado em `docs/EVIDENCIAS.md`. Correções:
+
+- **Recon:** não grava mais atributos de dados (`title` com nomes de clientes); passa a capturar controles dentro de tabelas (campos de busca, botões, ícones de ação, rótulo ligado ao campo). Teste cobre o vazamento.
+- **Rótulos:** o site usa dois-pontos largo (`Phone：`); a normalização agora o ignora.
+- **Bloqueio de escrita** (`update.php`, `delete.php`) criado e testado.
+  Falta uma nova rodada de recon (`clientes`, `resultado`, `edicao`) com a ferramenta melhorada para identificar campo `Phone`, botão de busca e o link Edit.

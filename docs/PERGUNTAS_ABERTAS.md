@@ -138,3 +138,10 @@ Clicar no menu lateral substitui a página atual; para voltar, clicar em **Voice
 ## P11 respondida em parte (2026-10-16)
 
 Rótulos do formulário de edição: Name, ID number, Date of birth, Phone, Address (ver EVIDENCIAS). Código: `src/consulta/rotulos.ts`. Segue em aberto a estrutura HTML do formulário (captura `edicao`).
+
+## Customer Data List — o que as capturas responderam e o que falta (2026-10-16)
+
+- **R1 respondida:** a lista e a edição abrem como iframes na mesma página (1 aba); a tabela de chamadas some enquanto elas estão abertas.
+- **Falta (recon melhorado, rodar de novo):** nomes/ids reais dos campos do formulário de busca (qual é o `Phone`), o botão de busca, **qual dos links da coluna Action é o Edit** (ícone/`alt`/`href`) e os nomes dos campos do formulário de edição. O recon antigo não capturava controles dentro de tabelas.
+- **Decisão pendente:** a lista de resultados já traz `Name`, `ID Number`, `Date of Birth` e `Phone`, mas **não** `Address`. Seguiremos o fluxo combinado (clicar em Edit e ler o formulário), que traz todos os campos.
+- **Segurança:** bloqueio de requisições (`update.php`, `delete.php`, escrita em `/modules/cc_cds/`) implementado em `src/consulta/bloqueio.ts`, a ser ligado ao `context.route` do adaptador.

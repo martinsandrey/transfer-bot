@@ -112,4 +112,18 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("reconhecimento contra o site simulado", () 
     expect(amostras.length).toBeGreaterThan(0);
     expect(amostras[0]?.visibilidade).toBeDefined();
   });
+
+  it("tela de clientes: campos de busca, botão e link Edit aparecem; nomes de clientes (title) NÃO vazam", async () => {
+    await nav.abrirUrl(`${site.url}/clientes-lista`);
+    const anon = new Anonimizador();
+    const cap = JSON.stringify(await capturarPagina(nav.paginaPrincipal(), anon, "resultado"));
+    expect(cap).not.toContain("NOME FICTICIO");
+    expect(cap).not.toContain("OUTRO NOME");
+    expect(cap).not.toContain("011900000101");
+    expect(cap).toContain("ft[phone]"); // nome do campo de busca por telefone
+    expect(cap).toContain('"rotuloDaCelula":"Phone："'); // rótulo ligado ao campo (formulário feito de tabela)
+    expect(cap).toContain('"textoBotao":"Search"');
+    expect(cap).toContain("Edit"); // ícone de ação da linha
+    expect(varrerTexto("c.json", cap, [])).toEqual([]);
+  });
 });

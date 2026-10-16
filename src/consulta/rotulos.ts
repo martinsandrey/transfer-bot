@@ -20,7 +20,7 @@ export function normalizarRotulo(texto: string): string {
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
-    .replace(/[:*\s]+$/g, "")
+    .replace(/[:：*\s]+$/g, "")
     .replace(/\s+/g, " ")
     .trim();
 }

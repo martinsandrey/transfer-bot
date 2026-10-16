@@ -20,6 +20,10 @@ describe("rótulos do formulário de edição (informados pelo usuário)", () =>
     expect(normalizarRotulo(" ID  Number : ")).toBe("id number");
     expect(normalizarRotulo("Date of Birth*")).toBe("date of birth");
     expect(normalizarRotulo("ENDEREÇO")).toBe("endereco");
+    // o site escreve os rótulos com dois-pontos largo (U+FF1A): "ID Number：", "Date of Birth：", "Phone："
+    expect(normalizarRotulo("ID Number：")).toBe("id number");
+    expect(normalizarRotulo("Phone：")).toBe("phone");
+    expect(normalizarRotulo("Mobile Phone：")).toBe("mobile phone");
   });
 
   it("converte pares rótulo→valor: Age recebe o conteúdo de Date of birth, sem cálculo", () => {
@@ -27,7 +31,8 @@ describe("rótulos do formulário de edição (informados pelo usuário)", () =>
       { rotulo: "Name:", valor: "Maria Exemplo" },
       { rotulo: "ID number", valor: "000.000.000-01" },
       { rotulo: "Date of birth", valor: "1980-05-17" },
-      { rotulo: "Phone", valor: "011900000101" },
+      { rotulo: "Phone：", valor: "011900000101" },
+      { rotulo: "Mobile Phone：", valor: "011977777777" },
       { rotulo: "Address", valor: "Rua Exemplo, 10" },
       { rotulo: "Email", valor: "ignorado@exemplo.invalid" },
     ]);
