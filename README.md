@@ -1,73 +1,90 @@
 # Transfer Bot
 
-Programa para Windows que monitora a tabela de chamadas de um sistema web, detecta transferências
-(`Stage 1 Agent` → `Stage 3 Agent`), consulta o cliente e prepara a mensagem para o Telegram.
+Programa para Windows que abre um navegador dedicado, monitora a tabela de chamadas (Voice Call Status) de um sistema web, detecta
+transferências (`Stage 1 Agent` → `Stage 3 Agent`), consulta o cliente na Customer Data List (**somente leitura**), monta a mensagem
+de `config\mensagem.txt` e a envia pelo Telegram (conta pessoal). Por padrão ele só **mostra** a mensagem no console (modo observação).
 
-> **Estado atual (em desenvolvimento):** detecção de transferências, fila, montagem da mensagem e modo simulado estão prontos.
-> O envio real ao Telegram só liga com `SEND_MODE=live`. O login automático (opcional) preenche usuário e senha do `.env`, mas **a verificação do botão quadrado é sempre você quem clica**.
-> Por isso, hoje o programa **nunca envia nada**: `SEND_MODE=observacao` é o único modo aceito.
-> Andamento detalhado em [`docs/PROGRESSO.md`](docs/PROGRESSO.md); regras do projeto em [`CLAUDE.md`](CLAUDE.md).
+Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAUDE.md`](CLAUDE.md).
 
 ## Pré-requisitos
 
-- Windows 10/11, **Node.js LTS** ([nodejs.org](https://nodejs.org)) e o **Microsoft Edge** (já vem no Windows).
-- Internet para a instalação das dependências (uma vez).
+- Windows 10/11 e o **Microsoft Edge** (já vem no Windows).
+- **Node.js LTS** (versão 22.13 ou mais nova; recomendado o LTS atual) — [nodejs.org](https://nodejs.org).
+- Internet para instalar as dependências (na primeira vez e nas atualizações).
 
-## Instalação
+## Instalação (uma vez)
 
-1. Baixe o projeto (ZIP do GitHub → "Extrair tudo", de preferência numa pasta curta como `C:\TransferBot`).
-2. Dê dois cliques em **`instalar.bat`**.
-3. Dê dois cliques em **`configurar.bat`** e preencha `SITE_URL` (endereço do sistema). Salve e feche.
+1. Baixe o projeto (ZIP do GitHub → "Extrair tudo", numa pasta curta como `C:\TransferBot`) ou clone com git.
+2. Dê dois cliques em **`instalar.bat`**. Ele confere o Node, instala as dependências e prepara o programa.
+3. Dê dois cliques em **`configurar.bat`** e preencha o `.env` (veja abaixo). **Salve em UTF-8** (Bloco de Notas → Salvar como → Codificação UTF-8), principalmente se usar nomes em chinês.
+4. Para enviar ao Telegram: siga a seção "Telegram" mais abaixo.
 
-## Uso
+## Uso diário
 
-- **`simular.bat`** — roda um cenário **fictício** (não acessa o site) para ver o programa funcionando.
-- **`iniciar.bat`** — abre uma janela do Edge **exclusiva do bot** (não mexe no seu Edge pessoal). Faça o login nela e abra a tela da tabela
-  de chamadas. O programa passa a monitorar. Quando detecta uma transferência, avisa com som e **mostra no console a mensagem preparada** (por enquanto só com `Ph` e `Line 1 number`; `NAME`, `CPF`, `Location` e `Age` ficam em branco, porque a consulta ao cadastro ainda não existe). Nada é enviado. Para parar: `Ctrl+C` ou digite `sair`.
-- **`recon.bat`** — ferramenta de reconhecimento do site (gera um relatório **anonimizado** para o desenvolvimento). Roteiro: [`docs/RECONHECIMENTO.md`](docs/RECONHECIMENTO.md).
+- **`iniciar.bat`** — abre uma janela do Edge **exclusiva do bot** (não mexe no seu Edge pessoal).
+  - Aparece a verificação do botão quadrado: **clique você mesmo** (o programa nunca faz isso).
+  - Login: manual, ou automático se `LOGIN_AUTOMATICO=true` (preenche `SITE_USUARIO`/`SITE_SENHA` **uma única vez**, depois da verificação).
+  - Quando detecta uma transferência, o programa consulta o cliente, volta para a Voice Call Status e mostra/envia a mensagem.
+  - Para parar: `Ctrl+C` ou digite `sair`. Ele termina a tarefa em andamento e avisa o que ficou pendente.
+- **`atualizar.bat`** — baixa a versão nova (precisa do Git; sem Git, baixe o ZIP novo e copie por cima mantendo o `.env`).
+- **`simular.bat`** — cenário **fictício** (não acessa o site), para ver o programa funcionando.
+- **`recon.bat`** — ferramenta de reconhecimento do site (relatório **anonimizado**). Não rode junto com o `iniciar.bat` (usam o mesmo navegador). Roteiro: [`docs/RECONHECIMENTO.md`](docs/RECONHECIMENTO.md).
 
-## Como trocar URL, usuário e senha
+## Configuração (`.env`)
 
-Abra `configurar.bat` (ou edite o arquivo `.env` com o Bloco de Notas) e altere `SITE_URL`, `SITE_USUARIO`, `SITE_SENHA`. Não precisa reinstalar nem recompilar.
+Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está em `.env.example`); não precisa reinstalar nem recompilar:
+
+| Variável                                         | Para quê                                                                    |
+| ------------------------------------------------ | --------------------------------------------------------------------------- |
+| `SITE_URL`                                       | Endereço do sistema (obrigatório).                                          |
+| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO` | Login automático (opcional).                                                |
+| `SEND_MODE`                                      | `observacao` (padrão: só mostra) ou `live` (envia de verdade).              |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`           | Credenciais do Telegram (my.telegram.org).                                  |
+| `TELEGRAM_DESTINO`                               | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.          |
+| `VALIDADE_MENSAGEM_MIN`                          | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta). |
+| `JANELA_TRANSFERENCIA_SEG`                       | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).        |
+| `NAVEGADOR`                                      | `msedge` (padrão) ou `chromium`.                                            |
+
 Ao trocar a URL, o navegador pode pedir novo login.
 
-## Como editar o modelo da mensagem
+## Modelo da mensagem
 
-Edite `config\mensagem.txt` (também pelo `configurar.bat`). Use exatamente os marcadores `{{nome}}`, `{{cpf}}`, `{{location}}`, `{{age}}`, `{{Phone}}` e
-`{{callback number}}`. Se faltar algum ou houver um desconhecido, o programa avisa ao iniciar e não começa.
-
-## Modo observação e envio real
-
-Hoje só existe o modo **observação** (padrão): o programa detecta, consulta e **mostra a prévia no console**, sem enviar. O envio real
-(`SEND_MODE=live`) exige `TELEGRAM_API_ID`/`TELEGRAM_API_HASH` no `.env`, o login do Telegram feito antes e uma confirmação digitada (`ENVIAR`) a cada inicialização.
+Edite `config\mensagem.txt` (também pelo `configurar.bat`). Marcadores obrigatórios, exatamente assim: `{{nome}}`, `{{cpf}}`, `{{location}}`,
+`{{age}}`, `{{Phone}}` e `{{callback number}}`. Se faltar algum ou houver um desconhecido, o programa avisa ao iniciar e não começa.
+Campos que não existirem no cadastro ficam vazios. `Line 1 number` é o Callback Number **antigo** (o do Stage 1).
 
 ## Telegram (conta pessoal)
 
-1. Em https://my.telegram.org → "API development tools", crie o app e copie `api_id` e `api_hash` para o `.env` (`TELEGRAM_API_ID`, `TELEGRAM_API_HASH`). Trate o `api_hash` como senha.
-2. `telegram.bat login` (ou abra o `telegram.bat` e escolha 1) — digite telefone, código e (se tiver) a senha 2FA. Só a sessão é salva, na pasta de dados do usuário (fora do projeto); ela dá acesso à conta, não a compartilhe.
-3. `telegram.bat chats` — mostra os IDs das conversas; ponha o nome exato do canal (aceita chinês) ou o ID em `TELEGRAM_DESTINO` (o padrão `me` são as suas Mensagens Salvas, ideal para testar).
-4. `telegram.bat teste` — envia uma mensagem de teste (sem dados de cliente).
-5. Só então use `SEND_MODE=live`.
+1. Em https://my.telegram.org → "API development tools", crie o app e copie `api_id` e `api_hash` para o `.env`. Trate o `api_hash` como senha.
+2. `telegram.bat` → **1 (login)**: telefone, código e (se tiver) senha 2FA, digitados no console. Só a sessão é salva (`%LOCALAPPDATA%\TransferBot\telegram\sessao.txt`); ela dá acesso à conta, **não a compartilhe**.
+3. `telegram.bat` → **2 (chats)** mostra os IDs; ponha o nome exato do canal ou o ID em `TELEGRAM_DESTINO`.
+4. `telegram.bat` → **3 (teste)** envia uma mensagem de teste (sem dados de cliente).
+5. Roteiro recomendado: modo observação → `SEND_MODE=live` com `TELEGRAM_DESTINO=me` → canal definitivo. Com `live`, o programa pede que você digite `ENVIAR` a cada inicialização.
 
 ## Segurança e privacidade
 
-- Senhas ficam só no `.env` (ignorado pelo git). **Não compartilhe** esse arquivo nem o coloque em pastas sincronizadas (OneDrive, etc.).
-- Se o endereço do sistema começa com `http://` (sem `s`), usuário e senha trafegam **sem criptografia** pela rede. Prefira `https://` se existir.
-- Os logs ficam em `%LOCALAPPDATA%\TransferBot\logs`, com telefones mascarados e **sem** dados de clientes.
-- O programa só **lê** o site: nunca clica em salvar, atualizar ou excluir.
-- Nada é gravado como histórico de transferências; o estado fica só na memória.
+- Senhas e `api_hash` ficam só no `.env` (ignorado pelo git). **Não compartilhe** esse arquivo nem o coloque em pastas sincronizadas (OneDrive etc.).
+- Se o endereço começa com `http://` (sem `s`), usuário e senha trafegam **sem criptografia** na rede. Prefira `https://` se existir.
+- Logs em `%LOCALAPPDATA%\TransferBot\logs`: telefones mascarados e **nenhum** dado de cliente (nome, CPF, localização, idade).
+- O programa só **lê** o site: bloqueia qualquer requisição de escrita/exclusão do cadastro e nunca clica em salvar, atualizar ou excluir.
+- Não há histórico de transferências em arquivo ou banco; o estado fica só na memória (o Telegram é o histórico).
+- A verificação do botão quadrado e qualquer 2FA são sempre feitos por você.
 
 ## Solução de problemas
 
-| Problema                         | O que fazer                                                                                                                 |
-| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| "Node.js não encontrado"         | Instale o Node LTS e rode `instalar.bat` de novo.                                                                           |
-| O Edge não abre                  | Coloque `NAVEGADOR=chromium` no `.env` e rode `npx playwright install chromium` no Prompt de Comando, na pasta do programa. |
-| Antivírus/Defender pergunta algo | Permita o navegador automatizado e a pasta do programa.                                                                     |
-| Letras estranhas no console      | Os `.bat` já usam UTF-8; abra pelo `.bat`, não pelo atalho do Node.                                                         |
-| "A tabela está ilegível"         | O site mudou ou a tela errada está aberta. Abra a tela da tabela de chamadas.                                               |
-| Sessão expirada                  | O programa avisa com som e espera: faça o login de novo na janela do navegador.                                             |
-| Janela minimizada / coberta      | Mantenha a janela do bot visível e não minimizada (o Windows pode reduzir a atualização).                                   |
+| Problema                             | O que fazer                                                                                           |
+| ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| "Node.js não encontrado" / antigo    | Instale o Node LTS atual e rode `instalar.bat` de novo.                                               |
+| "Cannot find module ..."             | Rode `instalar.bat` (ou `atualizar.bat`) para reinstalar as dependências.                             |
+| O Edge não abre                      | Coloque `NAVEGADOR=chromium` no `.env` e rode `npx playwright install chromium` na pasta do programa. |
+| Antivírus/Defender pergunta algo     | Permita o navegador automatizado e a pasta do programa.                                               |
+| Letras estranhas no console          | Abra pelo `.bat`, não pelo atalho do Node.                                                            |
+| "A tabela está ilegível"             | O site mudou ou a tela errada está aberta; o programa tenta abrir a Voice Call Status sozinho.        |
+| Sessão do site expirada              | O programa avisa com som e refaz o login (automático, se ligado; senão, faça na janela).              |
+| Canal do Telegram em chinês não acha | Salve o `.env` em UTF-8 ou use o ID (`telegram.bat` → 2).                                             |
+| Mensagem "NÃO foi enviada ... velha" | O envio demorou mais que `VALIDADE_MENSAGEM_MIN`; confira a conexão/Telegram.                         |
+| Envio "INCERTO"                      | Confira o canal no Telegram antes de reiniciar; o programa nunca reenvia sozinho nesse caso.          |
+| Janela minimizada / coberta          | Mantenha a janela do bot visível e não minimizada (o Windows pode reduzir a atualização).             |
 
 ## Para desenvolvedores
 

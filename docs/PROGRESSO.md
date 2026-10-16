@@ -124,3 +124,7 @@ Não feito (a decidir): recarga ociosa (`RECARGA_OCIOSA_MINUTOS` existe na confi
 ## Diário de status (2026-10-16)
 
 `recon` e `start` **não podem rodar juntos** (mesmo perfil de navegador, e o recon mexe na página). Para investigar o que há entre Stage 1 e Stage 3 sem parar o trabalho, o bot grava no arquivo de log (nunca no console) cada mudança de status (`status_mudou`: id curto, de, para, sem telefones).
+
+## Fase 7 — Instalação no Windows (2026-10-16)
+
+`instalar.bat` (confere Node ≥ 22.13, instala, compila e orienta os próximos passos), `iniciar.bat` (primeiro uso abre a configuração; sincroniza dependências), `atualizar.bat`, `telegram.bat`, `configurar.bat`, `simular.bat`, `recon.bat`; teste automático dos `.bat` (CRLF, ASCII, sem parênteses em blocos); README reescrito para o estado real; CI com instalação limpa + build + simulação no `windows-latest`; recomendação de distribuição em DECISOES D10. **[WIN] pendente:** instalar do zero numa pasta limpa seguindo só o README.

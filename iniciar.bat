@@ -1,6 +1,11 @@
 @echo off
 chcp 65001 >nul
 cd /d "%~dp0"
+if not exist .env (
+  echo Primeiro uso: vou abrir a configuracao. Preencha SITE_URL, salve e feche o Bloco de Notas.
+  copy .env.example .env >nul
+  notepad .env
+)
 echo Verificando dependencias...
 call npm install --no-audit --no-fund --loglevel=error
 if errorlevel 1 (

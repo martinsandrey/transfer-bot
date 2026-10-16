@@ -117,3 +117,7 @@ login; sem tracing/screenshots por padrão; códigos de verificação só no con
 - **Som:** PowerShell (`SystemSounds`) no Windows; BEL nos demais. Falta validar no Windows.
 - **Recon:** anonimização por marcadores estáveis (mesmo valor → mesmo marcador) para preservar "igual/diferente" (necessário para descobrir o discriminador de ligações sucessivas); `Call Status` e `Call Duration` gravados em claro; respostas de rede só como estrutura. Rede observada de forma passiva (`context.on('response')`), sem requisições próprias.
 - **`npm run recon`** = `build` + `node dist/recon/cli.js` (sem `tsx`, menos dependências).
+
+## D10 — Distribuição no Windows — **DECIDIDO (2026-10-16): ZIP/clone do GitHub + Node instalado**
+
+Recomendação adotada: o usuário instala o Node LTS uma vez e usa `instalar.bat`/`iniciar.bat`/`atualizar.bat` (`git pull` quando há Git; senão, ZIP novo por cima mantendo o `.env`). Motivos: uma única máquina, atualizações frequentes durante a validação, menos peso e menos alarmes de antivírus. Alternativa descartada por ora: ZIP gerado por Actions com Node portátil e `node_modules` (maior, desatualiza rápido). Sem executável único (o antivírus costuma bloquear e o Playwright precisa do navegador).
