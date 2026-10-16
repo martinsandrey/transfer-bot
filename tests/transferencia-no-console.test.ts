@@ -109,7 +109,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       expect(previas[0]).toContain("Line 1 number: 900001");
       expect(previas[0]).toContain("Ph: 021900000101");
       expect(previas[0]).toContain("NAME: \n");
-      expect(notif.alertas.some((a) => /Transferência detectada/.test(a.mensagem))).toBe(true);
+      expect(notif.alertas.some((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem))).toBe(true);
     }, 30000);
   },
 );

@@ -117,14 +117,21 @@ describe("Monitor", () => {
   it("avisos e anomalias geram alerta sonoro sem criar tarefa", async () => {
     const m = montar([
       ok([R("A", "Stage 1 Agent")], 1),
-      ok([R("A", "Stage 1 Agent"), R("A", "Stage 1 Agent", "T2"), R("B", "Stage 3 Agent")], 2),
+      ok(
+        [
+          R("A", "Stage 1 Agent"),
+          R("A", "Stage 1 Agent", "T2"),
+          R("B", "Stage 3 Agent", "T1", "5521900000999"),
+        ],
+        2,
+      ),
     ]);
     await m.monitor.passo();
     await m.monitor.passo();
     expect(m.fila.todas).toHaveLength(0);
     const msgs = m.notif.alertas.map((a) => a.mensagem).join("\n");
-    expect(msgs).toMatch(/Anomalia/);
-    expect(msgs).toMatch(/visto_primeira_vez_stage3/);
+    expect(msgs).toMatch(/duas linhas ao mesmo tempo/);
+    expect(msgs).toMatch(/direto em Stage 3/);
     expect(msgs).not.toMatch(/\bA\b.*duas linhas.*A\b/);
   });
 
@@ -217,6 +224,6 @@ describe("Monitor", () => {
     );
     await monitor.passo();
     await monitor.passo();
-    expect(m.notif.alertas.some((a) => /Transferência detectada/.test(a.mensagem))).toBe(true);
+    expect(m.notif.alertas.some((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem))).toBe(true);
   });
 });

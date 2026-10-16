@@ -67,7 +67,12 @@ async function principal(): Promise<void> {
     return;
   }
 
-  const log = criarLogger({ pastaLogs: cfg.pastas.logs, nivel: cfg.nivelLog });
+  // No modo real o console mostra só o essencial (avisos em português + mensagens preparadas); o detalhe vai para o arquivo de log.
+  const log = criarLogger({
+    pastaLogs: cfg.pastas.logs,
+    nivel: cfg.nivelLog,
+    ...(simulado ? {} : { nivelConsole: "error" as const }),
+  });
   const notificador = criarNotificador();
   const sinal = new AbortController();
   const rl = createInterface({ input: stdin, output: stdout });
@@ -84,6 +89,7 @@ async function principal(): Promise<void> {
     leiturasConfirmacao: cfg.monitor.leiturasConfirmacao,
     ausenciaMaxLeituras: cfg.monitor.ausenciaMaxLeituras,
     ttlOcorrenciasMs: cfg.monitor.ttlOcorrenciasMin * 60_000,
+    janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
   });
   const opMonitor = {
     intervaloMs: cfg.monitor.intervaloMs,

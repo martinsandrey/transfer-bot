@@ -109,3 +109,9 @@ As três capturas mostram a **tela de monitoramento**, não a Customer Data List
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | R1  | Ao clicar em **Customer Data List** no menu lateral, o que acontece: abre uma **janela flutuante dentro da mesma página**, abre uma **nova aba/janela do navegador**, ou a **página inteira muda**?                                  | Define se a consulta usa 2ª aba, janela interna ou navegação, e se a tabela de chamadas continua sendo lida                     |
 | R2  | Repita com a tela **realmente aberta e visível** (e, no `resultado`, com a busca feita): rode `clientes`, depois `resultado` (pesquise um telefone e deixe o resultado na tela) e `edicao` (abra a edição de um cliente, sem salvar) | Sem isso não há campo `Phone`, botão `Search`, lista de resultados nem os rótulos do formulário (nome, CPF, localização, idade) |
+
+## Q1 respondida (2026-10-16) e Q3 por hipótese
+
+- **Q1:** na transferência a linha do Stage 1 some e surge outra em Stage 3 com **outro Callback Number** e o **mesmo Callee**. Detecção por Callee implementada. (Ver EVIDENCIAS.)
+- **Q3 (hipótese em uso):** `Line 1 number` = Callback Number da linha do **Stage 1**. Confirmar com o usuário.
+- **Novas dúvidas:** (a) existe atraso entre a linha do Stage 1 sumir e a do Stage 3 aparecer? (a janela padrão é 60 s); (b) quando Stage 1 vai para **Stage 2**, a linha também troca (Callback `9082xx`)?

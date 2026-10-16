@@ -20,6 +20,7 @@ export interface AppConfig {
     leiturasConfirmacao: number;
     ausenciaMaxLeituras: number;
     ttlOcorrenciasMin: number;
+    janelaTransferenciaMs: number;
   };
   timeouts: { navegacaoMs: number; consultaMs: number };
   recargaOciosaMin: number;
@@ -97,6 +98,7 @@ const esquema = z.object({
   LEITURAS_CONFIRMACAO: inteiro("LEITURAS_CONFIRMACAO", 2, 1, 20),
   AUSENCIA_MAX_LEITURAS: inteiro("AUSENCIA_MAX_LEITURAS", 3, 1, 100),
   TTL_OCORRENCIAS_MIN: inteiro("TTL_OCORRENCIAS_MIN", 720, 1, 100000),
+  JANELA_TRANSFERENCIA_SEG: inteiro("JANELA_TRANSFERENCIA_SEG", 60, 5, 600),
   TIMEOUT_NAVEGACAO_MS: inteiro("TIMEOUT_NAVEGACAO_MS", 30000, 1000, 600000),
   TIMEOUT_CONSULTA_MS: inteiro("TIMEOUT_CONSULTA_MS", 60000, 1000, 600000),
   RECARGA_OCIOSA_MINUTOS: inteiro("RECARGA_OCIOSA_MINUTOS", 0, 0, 100000),
@@ -160,6 +162,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       leiturasConfirmacao: c.LEITURAS_CONFIRMACAO,
       ausenciaMaxLeituras: c.AUSENCIA_MAX_LEITURAS,
       ttlOcorrenciasMin: c.TTL_OCORRENCIAS_MIN,
+      janelaTransferenciaMs: c.JANELA_TRANSFERENCIA_SEG * 1000,
     },
     timeouts: { navegacaoMs: c.TIMEOUT_NAVEGACAO_MS, consultaMs: c.TIMEOUT_CONSULTA_MS },
     recargaOciosaMin: c.RECARGA_OCIOSA_MINUTOS,

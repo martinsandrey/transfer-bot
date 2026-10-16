@@ -79,3 +79,9 @@ Implementado com `BuscaSemCadastro` (provisório) + `TaskQueue` em modo observa�
 
 Chegaram, mas mostram a tela de monitoramento (não a Customer Data List). Aprendido: a **tabela de chamadas fica num iframe** (`/modules/cc_monitor/curcall_in.php`), o menu é uma árvore dhtmlx e há uma tabela de saída (`curcall_out.php`) que não nos interessa (detalhes em `docs/EVIDENCIAS.md`).
 Recon melhorado: `menu`, `clientes`, `resultado` e `edicao` capturam **todas as abas abertas**; tabelas só de layout são omitidas. Perguntas R1/R2 abertas.
+
+## Transferência por troca de linha (2026-10-16)
+
+Teste real do usuário: **nenhuma transferência detectada** (só avisos de "primeira vez em Stage 3"). Causa: a transferência é a linha do Stage 1 sumir e surgir outra em Stage 3 com outro Callback Number e o mesmo Callee.
+Corrigido: o rastreador liga as duas linhas pelo **Callee Number** (janela configurável, N leituras de confirmação), usa o Callback do Stage 1 como `Line 1 number` e não repete avisos para a mesma chamada de Stage 3. **121 testes.**
+Console do modo real simplificado: só avisos em português (com hora) e a mensagem preparada; o detalhe técnico vai para o arquivo de log.

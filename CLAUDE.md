@@ -49,8 +49,9 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
    Sessões/perfis fora do repositório. Logs mascaram telefone (`***1234`) e CPF e **nunca** registram nome, CPF, localização, idade.
 6. **Tudo configurável sem recompilar** (URL, usuário, senha, intervalos, modo), validado na inicialização, erros em português.
 7. **Modo observação é o padrão**; envio real só com `SEND_MODE=live` **e** confirmação digitada a cada inicialização.
-8. **Identidade da chamada** = Callback Number + algo que distinga ligações sucessivas (a confirmar na Fase 2). Dedup por
-   _ocorrência_, nunca só por Callback Number. Posição da linha nunca é identidade.
+8. **Identidade da chamada** = Callback Number + Start Time/Callee (distingue ligações sucessivas). Dedup por _ocorrência_, nunca só por
+   Callback Number. Posição da linha nunca é identidade. **Exceção confirmada pelo site:** na transferência a linha do Stage 1 some e surge outra
+   em Stage 3 com outro Callback Number e o MESMO Callee — a transferência é detectada ligando as duas pelo Callee (ver `docs/EVIDENCIAS.md`).
 9. **Funciona no Windows** (caminhos, encoding UTF-8, `.bat` em CRLF) e é testável no Linux.
 10. Esperas por condição, nunca `sleep` fixo como mecanismo principal. Seletores estáveis (id, name, data-*, ARIA, texto).
 

@@ -3,7 +3,7 @@ import { SessaoExpiradaError, type TableReader } from "../dominio/tipos.js";
 import type { TaskQueue } from "../fila/task-queue.js";
 import type { Logger } from "../log/logger.js";
 import type { Notificador } from "../notificador/notificador.js";
-import type { CallTracker, EventoTracker } from "./call-tracker.js";
+import type { CallTracker, CodigoAviso, EventoTracker } from "./call-tracker.js";
 
 export interface OpcoesMonitor {
   intervaloMs: number;
@@ -158,7 +158,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `Transferência detectada (funcionário ${mascararTelefone(ev.callback)}).`,
+        `TRANSFERÊNCIA detectada: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
       );
       if (!fila) return;
       if (fila.enqueue(ev)) void fila.drenar();
@@ -169,10 +169,7 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: ev.callbackMascarado,
       });
-      notificador.alerta(
-        "aviso",
-        `Aviso (${ev.codigo}) para o funcionário ${ev.callbackMascarado}.`,
-      );
+      notificador.alerta("aviso", descreverAviso(ev.codigo, ev.callbackMascarado));
     } else {
       log.warn("Anomalia na tabela", {
         evento: "anomalia",
@@ -181,8 +178,22 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `Anomalia (${ev.codigo}): o mesmo Callback Number ${ev.callbackMascarado} apareceu em duas linhas. Linhas ignoradas.`,
+        `O mesmo Callback Number ${ev.callbackMascarado} apareceu em duas linhas ao mesmo tempo. Ignorei essas linhas.`,
       );
     }
+  }
+}
+
+/** Texto em português simples para cada aviso do rastreador. */
+export function descreverAviso(codigo: CodigoAviso, funcionario: string): string {
+  switch (codigo) {
+    case "visto_primeira_vez_stage3":
+      return `Uma chamada apareceu direto em Stage 3 (funcionário do Stage 3: ${funcionario}) sem eu ter visto a origem em Stage 1 Agent. Nenhuma mensagem foi gerada.`;
+    case "sequencia_inesperada":
+      return `Mudança de status inesperada numa chamada (funcionário ${funcionario}). Nenhuma mensagem foi gerada.`;
+    case "status_desconhecido":
+      return `Status desconhecido numa chamada (funcionário ${funcionario}).`;
+    case "transferencia_duplicada":
+      return `Transferência repetida ignorada (funcionário ${funcionario}).`;
   }
 }

@@ -75,7 +75,12 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("reconhecimento contra o site simulado", () 
     expect(analise.statusDistintos).toEqual(
       expect.arrayContaining(["Stage 1 Agent", "Stage 2 Agent", "Stage 3 Agent"]),
     );
-    expect(analise.transicoesDeStatus["Stage 1 Agent → Stage 3 Agent"]).toBeGreaterThanOrEqual(1);
+    // a transferência real NÃO é mudança de status na mesma linha: aparece como troca de linha com o mesmo Callee
+    expect(analise.trocasDeLinhaPorCallee.length).toBeGreaterThanOrEqual(1);
+    expect(analise.trocasDeLinhaPorCallee[0]).toMatchObject({
+      deStatus: "Stage 1 Agent",
+      paraStatus: "Stage 3 Agent",
+    });
     expect(analise.transicoesDeStatus["Stage 1 Agent → Stage 2 Agent"]).toBeGreaterThanOrEqual(1);
     expect(analise.pares_com_ordem_diferente).toBeGreaterThan(0);
     expect(analise.snapshotsComCallbackDuplicado).toBe(0);

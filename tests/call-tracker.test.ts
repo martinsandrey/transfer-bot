@@ -12,7 +12,7 @@ const S1 = "Stage 1 Agent";
 const S2 = "Stage 2 Agent";
 const S3 = "Stage 3 Agent";
 
-function linha(cb: string, status: string, inicio = "T1", callee = "C1"): CallRow {
+function linha(cb: string, status: string, inicio = "T1", callee = `C${cb}`): CallRow {
   return {
     callbackNumber: cb,
     calleeNumber: callee,
@@ -148,6 +148,123 @@ describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => 
   });
 });
 
+describe("CallTracker: transferência = linha do Stage 1 some e aparece outra em Stage 3 com o mesmo Callee (evidência real)", () => {
+  // Callbacks reais têm 6 dígitos: Stage 1 = 9081xx, Stage 3 = 9083xx. Dados fictícios.
+  const ORIGEM = "908112";
+  const DESTINO = "908301";
+  const CLIENTE = "011900000001";
+  const s1 = (inicio = "20:00:00") => linha(ORIGEM, S1, inicio, CLIENTE);
+  const s3 = (inicio = "20:00:00") => linha(DESTINO, S3, inicio, CLIENTE);
+
+  it("a linha do Stage 1 some e surge outra em Stage 3: uma transferência, com o Callback do Stage 1 (Line 1 number)", () => {
+    const t = tracker();
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]), snap([s1()]), snap([s1()]));
+    const ev = alimentar(t, snap([s3()]), snap([s3()]), snap([s3()]));
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(ev[0]).toMatchObject({ tipo: "transferencia", callback: ORIGEM, callee: CLIENTE });
+  });
+
+  it("troca no mesmo instante (Stage 1 e Stage 3 na mesma leitura) e com a linha do Stage 1 ainda presente também funcionam", () => {
+    const t = tracker();
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]), snap([s1()]));
+    expect(tipos(alimentar(t, snap([s3()]), snap([s3()])))).toEqual(["transferencia"]);
+
+    const t2 = tracker();
+    alimentar(t2, snap([]));
+    alimentar(t2, snap([s1()]), snap([s1()]));
+    expect(tipos(alimentar(t2, snap([s1(), s3()]), snap([s1(), s3()])))).toEqual(["transferencia"]);
+  });
+
+  it("exige N leituras da linha nova em Stage 3 Agent (leitura isolada não gera)", () => {
+    const t = tracker();
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]), snap([s1()]));
+    expect(alimentar(t, snap([s3()]), snap([]), snap([]), snap([]), snap([]))).toEqual([]);
+    const t1 = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t1, snap([]));
+    alimentar(t1, snap([s1()]));
+    expect(tipos(alimentar(t1, snap([s3()])))).toEqual(["transferencia"]);
+  });
+
+  it("Stage 3 sem origem em Stage 1 Agent: um aviso só (sem repetir para o mesmo cliente)", () => {
+    const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 1 });
+    alimentar(t, snap([]));
+    const ev = alimentar(t, snap([s3()]), snap([s3()]), snap([]), snap([]), snap([]), snap([s3()]));
+    expect(tipos(ev)).toEqual(["aviso:visto_primeira_vez_stage3"]);
+  });
+
+  it("origem fora da janela de tempo não conta", () => {
+    const t = tracker({ leiturasConfirmacao: 1, janelaTransferenciaMs: 5000 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]));
+    for (let i = 0; i < 10; i++) t.ingest(snap([])); // 10 s sem a linha
+    expect(tipos(alimentar(t, snap([s3()])))).toEqual(["aviso:visto_primeira_vez_stage3"]);
+  });
+
+  it("origem que nunca foi 'Stage 1 Agent' (só Ringing) não gera transferência", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([linha(ORIGEM, "Stage 1 Ringing", "20:00:00", CLIENTE)]));
+    expect(tipos(alimentar(t, snap([s3()])))).toEqual(["aviso:visto_primeira_vez_stage3"]);
+  });
+
+  it("a linha do Stage 3 pode sumir e voltar sem repetir transferência nem aviso", () => {
+    const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 1 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]));
+    const ev = alimentar(
+      t,
+      snap([s3()]),
+      snap([s3()]),
+      snap([]),
+      snap([]),
+      snap([]),
+      snap([s3()]),
+      snap([s3()]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+
+  it("duas transferências do mesmo funcionário (clientes diferentes) geram duas tarefas distintas", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    const outro = "011900000002";
+    const ev = alimentar(
+      t,
+      snap([linha(ORIGEM, S1, "20:00:00", CLIENTE)]),
+      snap([linha(DESTINO, S3, "20:00:00", CLIENTE)]),
+      snap([]),
+      snap([linha(ORIGEM, S1, "20:30:00", outro)]),
+      snap([linha("908302", S3, "20:30:00", outro)]),
+    );
+    const trs = ev.filter((e) => e.tipo === "transferencia");
+    expect(trs).toHaveLength(2);
+    expect(new Set(trs.map((e) => (e.tipo === "transferencia" ? e.chave : ""))).size).toBe(2);
+  });
+
+  it("chamada que já estava em Stage 3 na linha de base não gera aviso nem tarefa, mesmo reaparecendo", () => {
+    const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 1 });
+    expect(alimentar(t, snap([s3()]), snap([]), snap([]), snap([]), snap([s3()]))).toEqual([]);
+  });
+
+  it("Stage 1 → Stage 2 (linha nova em Stage 2) continua ignorado", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]));
+    expect(alimentar(t, snap([linha("908201", "Stage 2 Agent", "20:00:00", CLIENTE)]))).toEqual([]);
+  });
+
+  it("o evento não carrega o Callback Number do Stage 3 nem expõe telefones fora dos campos previstos", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([s1()]));
+    const ev = alimentar(t, snap([s3()]))[0];
+    expect(JSON.stringify(ev)).not.toContain(DESTINO);
+  });
+});
+
 describe("CallTracker com linhas incompletas", () => {
   it("chamada cuja linha veio incompleta não conta como sumida, mesmo por muitas leituras", () => {
     const t = tracker({ leiturasConfirmacao: 1, ausenciaMaxLeituras: 2 });
@@ -175,7 +292,7 @@ describe("CallTracker", () => {
     expect(alimentar(t, snap([linha("A", S1)]), snap([linha("A", S3)]))).toEqual([]); // 1ª leitura em Stage 3: aguardando
     const ev = alimentar(t, snap([linha("A", S3)]), snap([linha("A", S3)]));
     expect(ev).toHaveLength(1);
-    expect(ev[0]).toMatchObject({ tipo: "transferencia", callback: "A", callee: "C1" });
+    expect(ev[0]).toMatchObject({ tipo: "transferencia", callback: "A", callee: "CA" });
   });
 
   it("a mesma chamada trocando de posição na tabela continua sendo a mesma", () => {

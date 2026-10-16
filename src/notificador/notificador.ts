@@ -32,7 +32,8 @@ export function criarNotificador(op: OpcoesNotificador = {}): Notificador {
   return {
     alerta(nivel, mensagem) {
       const marca = nivel === "erro" ? "[ERRO]" : nivel === "aviso" ? "[AVISO]" : "[INFO]";
-      escrever(`${marca} ${mensagem}\n`);
+      const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
+      escrever(`${hora} ${marca} ${mensagem}\n`);
       if (nivel === "info") return;
       try {
         if (plataforma === "win32") {

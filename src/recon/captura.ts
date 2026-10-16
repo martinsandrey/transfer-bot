@@ -288,6 +288,18 @@ export interface AnaliseSerie {
   mudancasDeCalleeSemSumir: number;
   reaparecimentosComInicioDiferente: number;
   funcionarios: Record<string, EventoFuncionario[]>;
+  /**
+   * Mesmo Callee Number passando a aparecer com OUTRO Callback Number (até 10 leituras depois). Na transferência real a linha do
+   * Stage 1 some e surge outra em Stage 3 com o mesmo cliente: é esta a forma de enxergá-la.
+   */
+  trocasDeLinhaPorCallee: Array<{
+    callee: string;
+    i: number;
+    deCallback: string;
+    deStatus: string;
+    paraCallback: string;
+    paraStatus: string;
+  }>;
 }
 
 function mediana(v: number[]): number | null {
@@ -328,9 +340,33 @@ export function analisarSerie(serie: SerieCapturada): AnaliseSerie {
     mudancasDeCalleeSemSumir: 0,
     reaparecimentosComInicioDiferente: 0,
     funcionarios: {},
+    trocasDeLinhaPorCallee: [],
   };
   const tamanhos = serie.snapshots.map((s) => s.linhas.length);
   if (tamanhos.length) a.linhasMinMax = [Math.min(...tamanhos), Math.max(...tamanhos)];
+  if (cCb !== null && cCe !== null && cSt !== null) {
+    const ultimo = new Map<string, { cb: string; st: string; i: number }>();
+    for (const sn of serie.snapshots) {
+      for (const l of sn.linhas) {
+        const ce = l[cCe] ?? "";
+        const cb = l[cCb] ?? "";
+        const st = l[cSt] ?? "";
+        if (!ce || !cb) continue;
+        const antes = ultimo.get(ce);
+        if (antes && antes.cb !== cb && sn.i - antes.i <= 10) {
+          a.trocasDeLinhaPorCallee.push({
+            callee: ce,
+            i: sn.i,
+            deCallback: antes.cb,
+            deStatus: antes.st,
+            paraCallback: cb,
+            paraStatus: st,
+          });
+        }
+        ultimo.set(ce, { cb, st, i: sn.i });
+      }
+    }
+  }
   if (cCb === null) return a;
 
   const status = new Set<string>();

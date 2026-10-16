@@ -21,15 +21,26 @@ const T = (n: number): string => `2000-01-01 10:00:${String(n).padStart(2, "0")}
 /** Linha do tempo determinística (em "ticks"). */
 export function linhasNoTick(tick: number): LinhaSimulada[] {
   const l: LinhaSimulada[] = [];
-  // Funcionário A: Stage 1 → Stage 3 no tick 3; some nos ticks 6-7; volta no tick 8 como nova ligação
-  if (tick < 6) {
+  // Funcionário A: Stage 1 Agent até o tick 2. COMPORTAMENTO REAL (evidência do usuário, 2026-10-16): na transferência a linha
+  // do Stage 1 SOME e aparece OUTRA linha em Stage 3 Agent, com outro Callback Number e o MESMO Callee, até o tick 5.
+  // Depois some e, no tick 8, o mesmo funcionário faz outra ligação (outro Start Time e outro Callee).
+  if (tick < 3) {
     l.push({
       cb: "5511900000001",
       ce: "5521900000101",
-      status: tick < 3 ? "Stage 1 Agent" : "Stage 3 Agent",
+      status: "Stage 1 Agent",
       inicio: T(1),
       duracao: `00:00:${String(tick).padStart(2, "0")}`,
       idOculto: "88776655",
+    });
+  } else if (tick < 6) {
+    l.push({
+      cb: "5511900000301",
+      ce: "5521900000101",
+      status: "Stage 3 Agent",
+      inicio: T(1),
+      duracao: `00:00:${String(tick).padStart(2, "0")}`,
+      idOculto: "88776657",
     });
   } else if (tick >= 8) {
     l.push({

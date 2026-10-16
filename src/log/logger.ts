@@ -55,6 +55,8 @@ export function sanearCampos(campos: CamposLog | undefined): {
 export interface OpcoesLogger {
   pastaLogs: string;
   nivel: NivelLog;
+  /** Nível mínimo mostrado no console (o arquivo usa `nivel`). Padrão: o mesmo de `nivel`. */
+  nivelConsole?: NivelLog;
   /** Escrita no console; por padrão `console.log`. Injetável em testes. */
   console?: (linha: string) => void;
   /** Destino do pino (stream). Por padrão, arquivo diário na `pastaLogs`. */
@@ -78,7 +80,7 @@ export function criarLogger(op: OpcoesLogger): Logger {
     const extra = descartados > 0 ? { camposDescartados: descartados } : {};
     const texto = mascararTexto(msg);
     base[nivel]({ ...ok, ...extra }, texto);
-    if (ORDEM[nivel] < ORDEM[op.nivel]) return; // o console respeita o mesmo nível do arquivo
+    if (ORDEM[nivel] < ORDEM[op.nivelConsole ?? op.nivel]) return; // o console respeita o mesmo nível do arquivo
     const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
     const detalhes = Object.entries(ok)
       .map(([k, v]) => `${k}=${String(v)}`)

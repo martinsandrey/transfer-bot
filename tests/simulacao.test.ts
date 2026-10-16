@@ -50,7 +50,7 @@ describe("cenário fictício completo (ponta a ponta sem navegador)", () => {
     expect(sender.enviados).toHaveLength(0); // modo observação
     expect(previas).toHaveLength(3);
     const msgs = notif.alertas.map((a) => a.mensagem).join("\n");
-    expect(msgs).toMatch(/visto_primeira_vez_stage3/);
+    expect(msgs).toMatch(/direto em Stage 3/);
     expect(msgs).toMatch(/cliente errado/);
     expect(msgs).toMatch(/nenhum cliente/);
   });

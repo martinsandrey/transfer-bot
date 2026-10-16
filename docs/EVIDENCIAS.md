@@ -53,3 +53,12 @@ As três capturas saíram **praticamente idênticas**: todas mostram a tela de m
 
 - **Customer Data List**: não foi capturada. Os frames de janelas ficaram vazios, o que indica que a tela **não estava aberta/visível** (ou abriu em outra aba que não foi capturada).
   Faltam: como a tela abre (janela interna, nova aba, ou troca de página), o campo `Phone`, o botão `Search`, a tabela de resultados e o formulário de edição.
+
+## Transferência real — relato do usuário em 2026-10-16 (Q1 respondida)
+
+Numa transferência real, o console mostrou avisos `visto_primeira_vez_stage3` para os Callback Numbers `***8301` e `***8304`, e **nenhuma** transferência detectada. Conclusão:
+
+- **Na transferência a linha NÃO continua.** A linha do Stage 1 (Callback `9081xx`) **some** e aparece **outra linha** em `Stage 3 Agent` com **outro Callback Number** (`9083xx`, o do agente do Stage 3). O Callee Number é o mesmo.
+- Portanto a transferência não é uma mudança de status na mesma linha; é **troca de linha com o mesmo Callee Number**. A detecção passou a ligar a linha nova de Stage 3 à última linha `Stage 1 Agent` do mesmo Callee (janela `JANELA_TRANSFERENCIA_SEG`, padrão 60 s).
+- `Line 1 number` da mensagem = **Callback Number da linha do Stage 1** (o funcionário que originou). Hipótese adotada (Q3), a confirmar.
+- A linha de Stage 3 pode sumir e voltar na tabela; isso não repete aviso nem transferência.
