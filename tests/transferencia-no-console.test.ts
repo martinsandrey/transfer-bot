@@ -106,7 +106,8 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       }
       await fila.drenar();
       expect(previas.length).toBeGreaterThanOrEqual(1);
-      expect(previas[0]).toContain("Line 1 number: 900001");
+      expect(previas[0]).toContain("Line 1 number: 900001"); // Callback Number do Stage 1 (o antigo)
+      expect(previas[0]).not.toContain("900301"); // o Callback Number novo, do Stage 3, não entra no texto
       expect(previas[0]).toContain("Ph: 021900000101");
       expect(previas[0]).toContain("NAME: \n");
       expect(notif.alertas.some((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem))).toBe(true);

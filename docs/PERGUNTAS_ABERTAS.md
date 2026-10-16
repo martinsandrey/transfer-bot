@@ -113,5 +113,5 @@ As três capturas mostram a **tela de monitoramento**, não a Customer Data List
 ## Q1 respondida (2026-10-16) e Q3 por hipótese
 
 - **Q1:** na transferência a linha do Stage 1 some e surge outra em Stage 3 com **outro Callback Number** e o **mesmo Callee**. Detecção por Callee implementada. (Ver EVIDENCIAS.)
-- **Q3 (hipótese em uso):** `Line 1 number` = Callback Number da linha do **Stage 1**. Confirmar com o usuário.
+- **Q3 (CONFIRMADA pelo usuário em 2026-10-16):** na transferência o Callback Number troca, e o texto preparado deve conter o Callback Number **antigo, do Stage 1 Agent** em `Line 1 number`.
 - **Novas dúvidas:** (a) existe atraso entre a linha do Stage 1 sumir e a do Stage 3 aparecer? (a janela padrão é 60 s); (b) quando Stage 1 vai para **Stage 2**, a linha também troca (Callback `9082xx`)?
