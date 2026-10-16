@@ -126,3 +126,7 @@ falta apenas o contato com a página (`PaginaClientes`), que depende de R1/R2. T
 
 Entre pesquisar e ler o cadastro, o bot precisa **clicar no botão Edit na linha do cliente pesquisado** (primeiro resultado). Está na interface (`abrirEdicaoDoPrimeiro`).
 Precisamos da evidência de como é esse botão na linha de resultados (rótulo/ícone, posição) — capturar com `resultado` (resultado na tela). É a única ação de clique no cadastro; Salvar/Update/Delete continuam proibidos e as requisições de escrita serão bloqueadas na aba de consulta.
+
+## Fim da consulta (2026-10-16)
+
+Após preparar a mensagem, voltar para **Voice Call Status** e **nunca confirmar** a edição do cliente (fechar sem salvar). Implementado no contrato `PaginaClientes`. Falta evidência (R1) de como voltar e de como fechar o formulário de edição sem confirmar (botão/ícone de fechar ou cancelar; se pede confirmação ao descartar).

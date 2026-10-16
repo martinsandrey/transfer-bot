@@ -345,3 +345,8 @@ só vira transferência quem esteve em `Stage 1 Agent` e chega a `Stage 3 Agent`
 
 Callee Number → Customer Data List (menu) → pesquisa em `Phone` + `Search` → **clique em Edit na linha do cliente** → leitura dos campos (nome, CPF, location, age, phone) → fechar **sem salvar**.
 Campos ausentes ficam vazios. Código: `src/consulta/consulta-cliente.ts` (`ConsultaDeCliente` + interface `PaginaClientes`, sem ação de escrita). Adaptador real pendente de evidência (R1/R2).
+
+## Anexo — fim da consulta (2026-10-16, informado pelo usuário)
+
+Depois de ler o cadastro (ou de não achar cliente), o bot **fecha a edição sem confirmar** e **volta para a página Voice Call Status**, onde a tabela de chamadas é lida, para o monitoramento continuar.
+Isso é feito sempre (inclusive com erro, 0 resultados ou cliente errado): `fecharSemSalvar()` + `voltarParaVoiceCallStatus()` no `finally` de `ConsultaDeCliente`. Se não conseguir voltar, avisa (o monitoramento pode ficar cego).

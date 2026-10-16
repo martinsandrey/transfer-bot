@@ -40,6 +40,9 @@ class PaginaFalsa implements PaginaClientes {
   async fecharSemSalvar() {
     this.passo("fecharSemSalvar");
   }
+  async voltarParaVoiceCallStatus() {
+    this.passo("voltarParaVoiceCallStatus");
+  }
 }
 const COMPLETO = {
   nome: " Maria Exemplo ",
@@ -79,6 +82,7 @@ describe("ConsultaDeCliente", () => {
       "abrirEdicao",
       "lerCampos",
       "fecharSemSalvar",
+      "voltarParaVoiceCallStatus",
     ]);
   });
 
@@ -102,7 +106,7 @@ describe("ConsultaDeCliente", () => {
   it("0 resultados: 'nenhum' e não abre edição", async () => {
     const p = new PaginaFalsa(0, {});
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({ tipo: "nenhum" });
-    expect(p.chamadas).toEqual(["abrir", "pesquisar:011900000101"]);
+    expect(p.chamadas).toEqual(["abrir", "pesquisar:011900000101", "voltarParaVoiceCallStatus"]);
   });
 
   it("vários resultados: usa o primeiro e sinaliza", async () => {
@@ -115,13 +119,13 @@ describe("ConsultaDeCliente", () => {
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
       tipo: "telefone_divergente",
     });
-    expect(p.chamadas.at(-1)).toBe("fecharSemSalvar");
+    expect(p.chamadas.slice(-2)).toEqual(["fecharSemSalvar", "voltarParaVoiceCallStatus"]);
   });
 
   it("falha durante a leitura: repassa o erro e fecha a edição sem salvar", async () => {
     const p = new PaginaFalsa(1, COMPLETO, "lerCampos");
     await expect(new ConsultaDeCliente(p).find("011900000101")).rejects.toThrow(/navegação/);
-    expect(p.chamadas.at(-1)).toBe("fecharSemSalvar");
+    expect(p.chamadas.slice(-2)).toEqual(["fecharSemSalvar", "voltarParaVoiceCallStatus"]);
   });
 
   it("o contrato com a página tem só ações de leitura/navegação (nada de salvar, atualizar ou excluir)", () => {
@@ -134,7 +138,16 @@ describe("ConsultaDeCliente", () => {
       "fecharSemSalvar",
       "lerCampos",
       "pesquisarPorTelefone",
+      "voltarParaVoiceCallStatus",
     ]);
+  });
+
+  it("falha ao voltar para a Voice Call Status não derruba a consulta, mas é avisada", async () => {
+    const p = new PaginaFalsa(1, COMPLETO, "voltarParaVoiceCallStatus");
+    const falhas: unknown[] = [];
+    const r = await new ConsultaDeCliente(p, (e) => falhas.push(e)).find("011900000101");
+    expect(r).toMatchObject({ tipo: "ok" });
+    expect(falhas).toHaveLength(1);
   });
 
   it("ponta a ponta com a fila: mensagem sai com os campos faltantes vazios", async () => {
