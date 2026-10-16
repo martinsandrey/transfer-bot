@@ -84,6 +84,21 @@ describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => 
     expect(ev).toEqual([]);
   });
 
+  it("Stage 4 (antes ou depois) não gera aviso nem tarefa", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    const ev = alimentar(
+      t,
+      snap([linha("A", S1)]),
+      snap([linha("A", "Stage 4 Agent")]),
+      snap([linha("A", "Stage 4 Agent")]),
+      snap([linha("B", "Stage 4 Ringing")]),
+      snap([linha("B", S3)]),
+    );
+    expect(tipos(ev).filter((x) => x === "transferencia")).toEqual([]);
+    expect(ev.filter((e) => e.tipo === "aviso" && e.codigo === "sequencia_inesperada")).toEqual([]);
+  });
+
   it("Ringing → Agent → Stage 3 Agent gera exatamente uma transferência", () => {
     const t = tracker({ leiturasConfirmacao: 1 });
     alimentar(t, snap([]));
@@ -139,12 +154,10 @@ describe("CallTracker com os status reais (Ringing, Agent, Manual Call)", () => 
     expect(tipos(ev)).toEqual(["transferencia"]);
   });
 
-  it("Stage 4 (existe no site, significado a confirmar) gera aviso e nunca tarefa", () => {
+  it("Stage 3 → Stage 4: nada acontece (pedido do usuário)", () => {
     const t = tracker({ leiturasConfirmacao: 1 });
     alimentar(t, snap([linha("A", S3)]));
-    expect(tipos(alimentar(t, snap([linha("A", "Stage 4 Agent")])))).toEqual([
-      "aviso:sequencia_inesperada",
-    ]);
+    expect(tipos(alimentar(t, snap([linha("A", "Stage 4 Agent")])))).toEqual([]);
   });
 });
 

@@ -107,3 +107,7 @@ Capturas `clientes`/`resultado`/`edicao`/`rede` recebidas. Registrado em `docs/E
 ## Adaptador real da Customer Data List (2026-10-16)
 
 `PaginaClientesPlaywright` implementado com a evidência confirmada (menu por texto, busca `ft[phone]` + `#submitButton`, linhas com `checkboxes[]`, link "Edit", leitura por rótulos, volta pelo menu "Voice Call Status") e `instalarBloqueioDeEscrita` (aborta `update.php`/`delete.php` etc.). Ligado ao `main.ts` no lugar de `BuscaSemCadastro`; o monitor pausa durante a consulta. Testado contra site fictício com a mesma estrutura (145 testes). **Ainda não testado no site real** — próximo passo: o usuário rodar `iniciar.bat` e ver a mensagem preparada com os dados do cadastro.
+
+## Stage 4 e Stage 3 Ringing (2026-10-16)
+
+Usuário: **Stage 4 não exige nenhuma ação** (agora ignorado em silêncio, sem aviso nem tarefa). Não se sabe se existe "Stage 3 Ringing"; o rastreador já cobre os dois caminhos (1→3 direto, ou 3 Ringing → 3 Agent: a transferência sai ao chegar em "Stage 3 Agent").

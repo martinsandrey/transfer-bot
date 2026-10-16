@@ -371,6 +371,7 @@ export class CallTracker {
       }
       return; // Ringing → Agent etc.: normal
     }
+    if (de.numero === 4 || para.numero === 4) return; // Stage 4: o usuário pediu para não fazer nada (sem tarefa, sem aviso)
     if (de.numero === 1 && para.numero === 2) return; // não é do interesse
     if (de.numero === 1 && para.numero === 3) {
       if (!(de.sub === "agent" || oc.viuStage1Agent)) {
