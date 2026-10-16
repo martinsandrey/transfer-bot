@@ -292,4 +292,62 @@ describe("TaskQueue", () => {
     expect(m.fila.limpar()).toBe(1);
     expect(estados(m.fila)).toEqual(["incerta"]);
   });
+
+  it("fila: uma 2ª transferência que chega durante a 1ª espera e é enviada logo depois, na ordem", async () => {
+    const ref: { fila?: TaskQueue } = {};
+    let entrou = false;
+    const busca: CustomerLookup = {
+      find: async (callee) => {
+        if (!entrou) {
+          entrou = true; // enquanto a 1ª ainda está sendo consultada/escrita, chegam mais duas
+          ref.fila?.enqueue(ev("k2", "5511900000002", "5521900000102"));
+          ref.fila?.enqueue(ev("k3", "5511900000003", "5521900000103"));
+          void ref.fila?.drenar(); // o monitor também chama drenar(): deve só somar à execução em curso
+        }
+        return { tipo: "ok", registro: { ...REG, phone: callee }, multiplos: false };
+      },
+    };
+    const m = montar();
+    const fila = new TaskQueue(
+      {
+        lookup: busca,
+        construtor: criarConstrutor(readFileSync("config/mensagem.txt", "utf8")),
+        sender: m.sender,
+        log: { debug() {}, info() {}, warn() {}, error() {} },
+        notificador: m.notif,
+      },
+      {
+        modo: "live",
+        maxTentativasConsulta: 1,
+        maxTentativasEnvio: 1,
+        backoffMs: 1,
+        ttlTarefasMs: 1000,
+        pausaEntreTarefasMs: 0,
+      },
+    );
+    ref.fila = fila;
+    fila.enqueue(ev("k1", "5511900000001", "5521900000101"));
+    await fila.drenar();
+    expect(estados(fila)).toEqual(["enviada", "enviada", "enviada"]);
+    expect(m.sender.enviados.map((e) => /Line 1 number: (\d+)/.exec(e.texto)?.[1])).toEqual([
+      "5511900000001",
+      "5511900000002",
+      "5511900000003",
+    ]);
+    expect(m.notif.alertas.filter((a) => /entrou na fila/.test(a.mensagem))).toHaveLength(2);
+  });
+
+  it("fila: tarefa que entra logo depois que o laço esvaziou ainda é processada", async () => {
+    const m = montar({ op: { pausaEntreTarefasMs: 0 } });
+    m.fila.enqueue(ev("k1"));
+    const p = m.fila.drenar();
+    // enfileira no instante em que a 1ª termina, antes de `drenando` ser limpo
+    void p.then(() => undefined);
+    await Promise.resolve();
+    m.fila.enqueue(ev("k2", "5511900000002", "5521900000102"));
+    void m.fila.drenar();
+    await m.fila.drenar();
+    await p;
+    expect(estados(m.fila)).toEqual(["enviada", "enviada"]);
+  });
 });

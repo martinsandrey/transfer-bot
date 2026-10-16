@@ -200,6 +200,8 @@ export class CallTracker {
     const cega = this.janelaCega;
     this.precisaBaseline = false;
     this.janelaCega = false;
+    // Voltamos de uma janela sem leitura (ex.: consulta ao cadastro): o tempo parado não pode esgotar a janela de transferência.
+    if (cega && !baseline) for (const o of this.origens.values()) o.ultimaVez = s.readAt;
 
     // 2) linhas presentes
     for (const [cb, linhas] of porCallback) {

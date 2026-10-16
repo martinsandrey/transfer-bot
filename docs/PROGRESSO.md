@@ -133,3 +133,7 @@ Não feito (a decidir): recarga ociosa (`RECARGA_OCIOSA_MINUTOS` existe na confi
 
 Regras do usuário: grupo 1 = só transferências; grupo 2 = só ligações que atingiram 5 min **ainda em Stage 1** (se chegou a 5 min já no Stage 3, não vai); mesmo modelo de mensagem; `.env`: `TELEGRAM_DESTINO_5MIN` (vazio = desligado) e `DURACAO_LONGA_MIN` (padrão 5). Implementação: evento `ligacao_longa` no rastreador (uma vez por ocorrência; usa a coluna Call Duration; qualquer status "Stage 1"; ligações já longas na linha de base não contam), tarefa `longa` na fila com enviador próprio, previa distinta no modo observação. 192 testes (rastreador + E2E com dois grupos e falha isolada no 2º).
 Suposições a confirmar: (1) "Stage 1" = qualquer complemento (Ringing/Agent/Manual Call); (2) a coluna Call Duration da linha do Stage 1 é confiável.
+
+## Fila de transferências simultâneas (2026-10-17)
+
+A fila já era sequencial (uma consulta por vez na única aba); reforçada: (1) o processamento nunca roda em dois laços ao mesmo tempo e uma tarefa que entra quando o laço está terminando não fica parada; (2) aviso "Tarefa tN entrou na fila (k à frente)"; (3) o tempo em que a leitura da tabela fica parada durante as consultas **não** consome mais a janela de 60 s que liga a linha do Stage 1 à do Stage 3 (antes, uma fila longa podia fazer o bot perder a transferência seguinte). Testes: 3 transferências chegando durante a 1ª saem na ordem; duas transferências simultâneas na tabela; janela cega de 5 min. 197 testes.

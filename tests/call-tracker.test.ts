@@ -673,3 +673,31 @@ describe("ligação longa (2º grupo): só em Stage 1", () => {
     expect(tipos(ev)).toEqual(["ligacao_longa", "ligacao_longa"]);
   });
 });
+
+describe("transferência durante janela sem leitura (consulta ao cadastro)", () => {
+  it("o tempo parado (5 min) não esgota a janela de 60 s: a transferência ainda é detectada", () => {
+    const t = new CallTracker({
+      leiturasConfirmacao: 1,
+      ausenciaMaxLeituras: 3,
+      ttlOcorrenciasMs: 3_600_000,
+      janelaTransferenciaMs: 60_000,
+    });
+    const em = (rows: CallRow[], ms: number): TableSnapshot => ({ readAt: ms, rows, valid: true });
+    const A = (st: string, cb = "100001"): CallRow => ({
+      callbackNumber: cb,
+      calleeNumber: "CX",
+      callStatus: st,
+      startTime: "T1",
+      callDurationSec: 1,
+    });
+    t.ingest(em([], 0));
+    t.ingest(em([A("Stage 1 Agent")], 1000));
+    t.marcarJanelaSemLeitura(); // a aba foi usada na consulta de OUTRA transferência por 5 minutos
+    t.ingest(em([], 301_000));
+    const ev = [
+      ...t.ingest(em([A("Stage 3 Agent", "908301")], 302_000)),
+      ...t.ingest(em([A("Stage 3 Agent", "908301")], 303_000)),
+    ];
+    expect(tipos(ev)).toEqual(["transferencia"]);
+  });
+});

@@ -222,6 +222,48 @@ describe("E2E: ligação de 5 min vai ao 2º grupo; transferência ao 1º", () =
   });
 });
 
+describe("E2E: duas transferências ao mesmo tempo viram fila", () => {
+  it("as duas são detectadas e enviadas uma após a outra, sem perder nenhuma", async () => {
+    const t0 = 1_000_000;
+    const A = (cb: string, st: string, ce: string, ini: string) => R(cb, st, ce, ini);
+    const m = montar([
+      snap(
+        [
+          A("100001", "Stage 1 Agent", "011900000001", "T1"),
+          A("100002", "Stage 1 Agent", "011900000002", "T2"),
+        ],
+        t0,
+      ),
+      snap(
+        [
+          A("100001", "Stage 1 Agent", "011900000001", "T1"),
+          A("100002", "Stage 1 Agent", "011900000002", "T2"),
+        ],
+        t0 + 1000,
+      ),
+      snap([], t0 + 2000),
+      snap(
+        [
+          A("908301", "Stage 3 Agent", "011900000001", "U1"),
+          A("908302", "Stage 3 Agent", "011900000002", "U2"),
+        ],
+        t0 + 3000,
+      ),
+      snap(
+        [
+          A("908301", "Stage 3 Agent", "011900000001", "U1"),
+          A("908302", "Stage 3 Agent", "011900000002", "U2"),
+        ],
+        t0 + 4000,
+      ),
+    ]);
+    await rodar(m, 5);
+    expect(m.tg.enviadas).toHaveLength(2);
+    const nums = m.tg.enviadas.map((x) => /Line 1 number: (\d+)/.exec(x)?.[1]).sort();
+    expect(nums).toEqual(["100001", "100002"]);
+  });
+});
+
 describe("E2E Fase 6 (site e Telegram simulados)", () => {
   it("transferência → consulta → mensagem com o Callback ANTIGO → Telegram", async () => {
     const m = montar(TRANSFERENCIA(1_000_000));

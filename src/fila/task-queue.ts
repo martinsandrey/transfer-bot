@@ -154,8 +154,22 @@ export class TaskQueue {
       tentativasEnvio: 0,
       historico: [{ estado: "detectada", em: this.agora() }],
     };
+    const aFrente = this.todas.filter(
+      (x) =>
+        x !== t &&
+        (x.estado === "na_fila" ||
+          x.estado === "pesquisando" ||
+          x.estado === "enviando" ||
+          x.estado === "pronta"),
+    ).length;
     this.tarefas.set(t.id, t);
     this.mover(t, "na_fila");
+    if (aFrente > 0) {
+      this.deps.notificador.alerta(
+        "info",
+        `Tarefa ${t.id} entrou na fila (${aFrente} à frente). Será processada logo após as anteriores.`,
+      );
+    }
     return t;
   }
 
@@ -181,7 +195,13 @@ export class TaskQueue {
   /** Processa as tarefas em fila, uma por vez. Chamadas simultâneas compartilham a mesma execução (trava). */
   drenar(): Promise<void> {
     if (!this.drenando) {
-      this.drenando = this.laco().finally(() => {
+      // Repete enquanto houver tarefa esperando: uma tarefa que entre justo quando o laço está terminando não fica parada.
+      this.drenando = (async () => {
+        await Promise.resolve(); // garante que `drenando` já está atribuído antes de qualquer tarefa começar (nunca dois laços)
+        do {
+          await this.laco();
+        } while (!this.parando && this.todas.some((t) => t.estado === "na_fila"));
+      })().finally(() => {
         this.drenando = null;
       });
     }
