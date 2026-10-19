@@ -122,6 +122,8 @@ export interface DepsFila {
     estado: "enviada" | "observada";
     texto: string;
     reaproveitada: boolean;
+    /** Callback Number do Stage 1 (o funcionário que fez a transferência): entra no registro para o relatório. */
+    funcionario: string;
   }) => void;
   log: Logger;
   notificador: Notificador;
@@ -212,6 +214,7 @@ export class TaskQueue {
           estado: novo,
           texto: t.mensagem,
           reaproveitada: t.reaproveitada === true,
+          funcionario: t.callback,
         });
       } catch {
         /* o registro nunca atrapalha o envio */

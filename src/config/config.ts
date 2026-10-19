@@ -35,8 +35,6 @@ export interface AppConfig {
     windows: boolean;
     informativas: boolean;
     longas: boolean;
-    /** Mostra os telefones (cliente e callback) por inteiro nas notificações/avisos da tela. Os arquivos de log continuam mascarados. */
-    numerosCompletos: boolean;
   };
   /** Pasta dos .txt com as mensagens (transferências concluídas e ligações de 5 min). `undefined` = não registrar. */
   pastaRegistros: string | undefined;
@@ -141,7 +139,6 @@ const esquema = z.object({
   NOTIFICAR_WINDOWS: booleano("NOTIFICAR_WINDOWS", true),
   NOTIFICAR_TRANSFERENCIAS: booleano("NOTIFICAR_TRANSFERENCIAS", false),
   NOTIFICAR_5MIN: booleano("NOTIFICAR_5MIN", false),
-  NOTIFICAR_NUMEROS_COMPLETOS: booleano("NOTIFICAR_NUMEROS_COMPLETOS", true),
   REGISTRAR_MENSAGENS: booleano("REGISTRAR_MENSAGENS", true),
   PASTA_REGISTROS: z.preprocess(vazioParaUndefined, z.string().default("registros")),
   TELEGRAM_API_ID: z.preprocess(
@@ -245,7 +242,6 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       windows: c.NOTIFICAR_WINDOWS,
       informativas: c.NOTIFICAR_TRANSFERENCIAS,
       longas: c.NOTIFICAR_5MIN,
-      numerosCompletos: c.NOTIFICAR_NUMEROS_COMPLETOS,
     },
     pastaRegistros: c.REGISTRAR_MENSAGENS
       ? resolve(expandirCaminho(c.PASTA_REGISTROS, bruto))

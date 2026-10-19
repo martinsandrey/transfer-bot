@@ -182,3 +182,8 @@ Causa: em `main.ts` o embrulho do enviador (que imprime "Mensagem enviada") desc
 ## Números completos nas notificações (2026-10-19)
 
 `NOTIFICAR_NUMEROS_COMPLETOS` (padrão `true`): a notificação do Windows e os avisos da tela mostram o telefone do cliente e o Callback Number por inteiro; com `false` voltam a `***1234`. CPF e e-mail seguem mascarados na notificação. Os arquivos de log continuam sempre mascarados (regra do projeto). Observação: o Windows guarda as notificações no Centro de Notificações.
+
+## Números sempre visíveis + relatório por funcionário (2026-10-19)
+
+1. Removida a chave `NOTIFICAR_NUMEROS_COMPLETOS`: a notificação e os avisos da tela sempre mostram o telefone do cliente e o Callback Number por inteiro (CPF/e-mail seguem mascarados; os arquivos de log sempre mascaram telefone).
+2. `relatorio.bat` (menu: hoje, ontem, semana, 7 dias, mês, tudo, datas; ou argumentos `hoje`, `semana`, `de=AAAA-MM-DD ate=AAAA-MM-DD`, `observacao`). Tabela por funcionário (Callback Number do Stage 1): transferências sem callback, callbacks, transferências com callback, ligações de 5 min, mais TOTAL; grava também um .csv (Excel) em `registros/relatorios/`. Sem novo banco/histórico: o relatório é calculado a partir dos .txt de registro, cujo cabeçalho agora inclui `| Funcionário: <número>` (registros antigos: usa a linha "Line 1 number" do texto; callbacks antigos ficam "(não identificado)"). Semântica: a mensagem de transferência sai quando o Stage 3 toca, então "com callback" = todas as transferências, "callbacks" = as que ninguém atendeu, "sem callback" = a diferença. Só entram funcionários que geraram mensagem no grupo de transferências (filtro do penúltimo dígito); no grupo de 5 min entram todos.

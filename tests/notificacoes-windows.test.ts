@@ -42,7 +42,7 @@ describe("toast do Windows", () => {
     expect(decodificar(chamadas[0]?.args as string[])).toContain("CreateToastNotifier");
   });
 
-  it("telefones e CPF são mascarados antes de ir para a notificação", () => {
+  it("CPF é mascarado antes de ir para a notificação (telefone não)", () => {
     const { chamadas, fn } = spawnFalso();
     criarToastWindows({ plataforma: "win32", spawnFn: fn })(
       "T",
@@ -53,7 +53,7 @@ describe("toast do Windows", () => {
       [...script.matchAll(/FromBase64String\('([^']+)'\)/g)][1]?.[1] as string,
       "base64",
     ).toString("utf8");
-    expect(texto).not.toContain("011900000001");
+    expect(texto).toContain("011900000001");
     expect(texto).not.toContain("123.456.789-09");
   });
 
@@ -178,7 +178,6 @@ describe("quais alertas viram notificação", () => {
       windows: true,
       informativas: false,
       longas: false,
-      numerosCompletos: true,
     });
     expect(
       validarConfig({
@@ -186,7 +185,7 @@ describe("quais alertas viram notificação", () => {
         NOTIFICAR_WINDOWS: "false",
         NOTIFICAR_TRANSFERENCIAS: "true",
       }).notificacoes,
-    ).toEqual({ windows: false, informativas: true, longas: false, numerosCompletos: true });
+    ).toEqual({ windows: false, informativas: true, longas: false });
   });
 });
 
@@ -273,34 +272,19 @@ describe("integração: problemas reais chegam como notificação", () => {
 });
 
 describe("números completos na notificação", () => {
-  const texto = "cliente 5511987654321 funcionario 5511900000111 CPF 123.456.789-09";
-  function mostrado(mascararTelefones?: boolean): string {
+  it("telefone aparece por inteiro; CPF continua mascarado", () => {
     const { chamadas, fn } = spawnFalso();
-    criarToastWindows({
-      plataforma: "win32",
-      spawnFn: fn,
-      ...(mascararTelefones === undefined ? {} : { mascararTelefones }),
-    })("T", texto);
+    criarToastWindows({ plataforma: "win32", spawnFn: fn })(
+      "T",
+      "cliente 5511987654321 funcionario 5511900000111 CPF 123.456.789-09",
+    );
     const script = decodificar(chamadas[0]?.args as string[]);
-    return Buffer.from(
+    const texto = Buffer.from(
       [...script.matchAll(/FromBase64String\('([^']+)'\)/g)][1]?.[1] as string,
       "base64",
     ).toString("utf8");
-  }
-  it("padrão do toast mascara; com mascararTelefones:false mostra os números (CPF continua mascarado)", () => {
-    expect(mostrado()).not.toContain("5511987654321");
-    const aberto = mostrado(false);
-    expect(aberto).toContain("5511987654321");
-    expect(aberto).toContain("5511900000111");
-    expect(aberto).not.toContain("123.456.789-09");
-  });
-  it("config: padrão true; pode desligar", () => {
-    expect(validarConfig({ SITE_URL: "http://x.invalid/" }).notificacoes.numerosCompletos).toBe(
-      true,
-    );
-    expect(
-      validarConfig({ SITE_URL: "http://x.invalid/", NOTIFICAR_NUMEROS_COMPLETOS: "false" })
-        .notificacoes.numerosCompletos,
-    ).toBe(false);
+    expect(texto).toContain("5511987654321");
+    expect(texto).toContain("5511900000111");
+    expect(texto).not.toContain("123.456.789-09");
   });
 });

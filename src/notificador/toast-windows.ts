@@ -6,7 +6,7 @@ type Spawn = typeof spawn;
 /**
  * Notificações do Windows (toast) sem dependências: um PowerShell curto, com o texto passado em base64 (sem problema de aspas ou de
  * caracteres especiais/chinês). Tenta o toast moderno (centro de notificações); se falhar, usa o balão da bandeja.
- * Regras: nunca lança erro; texto passa pelo mascaramento (CPF, e-mail e, salvo `mascararTelefones: false`, telefones); repetições iguais são suprimidas; no máximo
+ * Regras: nunca lança erro; telefones aparecem por inteiro (pedido do usuário); só CPF e e-mail passam pelo mascaramento; repetições iguais são suprimidas; no máximo
  * `limitePorMinuto` por minuto (o excedente vira UM aviso "mais N avisos").
  */
 export interface OpcoesToast {
@@ -19,8 +19,6 @@ export interface OpcoesToast {
   janelaRepeticaoMs?: number;
   /** Máximo de notificações por minuto (padrão 4). */
   limitePorMinuto?: number;
-  /** `false` = mostra os telefones por inteiro na notificação (CPF e e-mail continuam mascarados). Padrão: true. */
-  mascararTelefones?: boolean;
 }
 
 export type Toast = (titulo: string, texto: string) => void;
@@ -117,7 +115,7 @@ export function criarToastWindows(op: OpcoesToast = {}): Toast {
 
   return (titulo, texto) => {
     if (plataforma !== "win32") return;
-    const limpo = mascararTexto(texto, { telefones: op.mascararTelefones !== false })
+    const limpo = mascararTexto(texto, { telefones: false })
       .replace(/\s+/g, " ")
       .trim()
       .slice(0, 240);

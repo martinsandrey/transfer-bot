@@ -174,9 +174,9 @@ describe("monitor aplica o filtro por funcionário", () => {
   });
 });
 
-describe("avisos do monitor mostram o número por inteiro quando configurado", () => {
+describe("avisos do monitor mostram o número por inteiro", () => {
   const log = { debug() {}, info() {}, warn() {}, error() {} };
-  async function mensagens(numerosCompletos: boolean): Promise<string[]> {
+  async function mensagens(): Promise<string[]> {
     const ev = {
       tipo: "transferencia",
       ocorrencia: "x",
@@ -198,7 +198,6 @@ describe("avisos do monitor mostram o número por inteiro quando configurado", (
         invalidasParaAlertar: 3,
         falhasParaAlertar: 3,
         limpezaMs: 1e6,
-        numerosCompletos,
       },
     );
     const c = new AbortController();
@@ -208,9 +207,9 @@ describe("avisos do monitor mostram o número por inteiro quando configurado", (
     await p;
     return notif.alertas.map((a) => a.mensagem);
   }
-  it("completos: número inteiro; senão ***final", async () => {
-    expect((await mensagens(true))[0]).toContain("cliente 5511987654321");
-    expect((await mensagens(true))[0]).toContain("funcionário 5500000111");
-    expect((await mensagens(false))[0]).toContain("***4321");
+  it("cliente e funcionário aparecem completos", async () => {
+    const m = (await mensagens())[0];
+    expect(m).toContain("cliente 5511987654321");
+    expect(m).toContain("funcionário 5500000111");
   });
 });
