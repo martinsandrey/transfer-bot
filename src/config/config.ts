@@ -54,6 +54,8 @@ export interface AppConfig {
   filtroFuncionarios: FiltroFuncionarios;
   /** Minutos de duração (em Stage 1) que disparam a mensagem do segundo grupo. */
   duracaoLongaMin: number;
+  /** Minutos em que o mesmo cliente não recebe de novo a mensagem de 5 min. 0 = desligado. */
+  repeticao5minMin: number;
   /** Minutos; 0 = a mensagem nunca expira. */
   validadeMensagemMin: number;
   nivelLog: "debug" | "info" | "warn" | "error";
@@ -159,6 +161,7 @@ const esquema = z.object({
   TELEGRAM_DESTINO: z.preprocess(vazioParaUndefined, z.string().default("me")),
   TELEGRAM_DESTINO_5MIN: textoOpcional,
   DURACAO_LONGA_MIN: inteiro("DURACAO_LONGA_MIN", 5, 1, 600),
+  REPETICAO_5MIN_MIN: inteiro("REPETICAO_5MIN_MIN", 30, 0, 1440),
   PENULTIMO_DIGITO_TRANSFERENCIA: textoOpcional,
   PENULTIMO_DIGITO_5MIN: textoOpcional,
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
@@ -263,6 +266,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       longa: digitos5min ?? null,
     },
     duracaoLongaMin: c.DURACAO_LONGA_MIN,
+    repeticao5minMin: c.REPETICAO_5MIN_MIN,
     validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,
     nivelLog: c.NIVEL_LOG,
   };

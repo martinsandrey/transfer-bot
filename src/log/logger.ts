@@ -18,6 +18,7 @@ const CAMPOS_PERMITIDOS = new Set([
   "para",
   "callbackMascarado",
   "contagem",
+  "grupo",
   "linhas",
   "duracaoMs",
   "tentativa",

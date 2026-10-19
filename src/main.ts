@@ -1,3 +1,4 @@
+import { longasRecentes } from "./registro/recentes.js";
 import { idDaLigacao } from "./util/id-ligacao.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -349,6 +350,16 @@ async function principal(): Promise<void> {
       },
       {
         modo: cfg.modo,
+        repeticaoLongaMs: cfg.repeticao5minMin * 60_000,
+        ...(cfg.pastaRegistros
+          ? {
+              longasRecentes: longasRecentes(
+                cfg.pastaRegistros,
+                Date.now(),
+                cfg.repeticao5minMin * 60_000,
+              ),
+            }
+          : {}),
         validadeMensagemMs: cfg.validadeMensagemMin * 60_000,
         maxTentativasConsulta: 2,
         maxTentativasEnvio: 2,

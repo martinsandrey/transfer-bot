@@ -71,6 +71,10 @@ Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparec
 
 ## Segundo grupo (ligações longas)
 
+### Mensagem de 5 min repetida?
+
+O mesmo cliente **não recebe de novo** a mensagem de 5 min dentro de `REPETICAO_5MIN_MIN` minutos (padrão 30; `0` desliga), mesmo que a ligação apareça como "nova" na tabela (outro Start Time, ligação que passa de um funcionário a outro) e **mesmo depois de reiniciar o programa**: ao iniciar, o programa lê `registros\ligacoes-5min.txt` e lembra de quem recebeu há pouco. No log aparece `longa_repetida`.
+
 ### Relatório por funcionário
 
 Abra **`relatorio.bat`**: o navegador abre uma página com o relatório e os filtros **Hoje, Ontem, Esta semana, Últimos 7 dias, Este mês, Tudo** e **Escolher datas**. Mostra, por funcionário (Callback Number do Stage 1): transferências com callback (todas), sem callback (atendidas), callbacks (ninguém atendeu), % de callback e ligações de 5 min, mais a **duração média das transferências sem callback** (quanto tempo as ligações atendidas duraram, por funcionário), o total, a lista ligação a ligação e um botão para baixar a planilha (CSV). O arquivo fica em `registros\relatorios\relatorio.html`. A duração de cada ligação atendida é gravada em `registros\duracoes.txt` (só as ligações a partir desta versão têm duração; as antigas ficam fora da média). O relatório é calculado a partir dos `.txt` de registro: cada ligação recebe um código no cabeçalho do registro, e o CALLBACK é ligado à transferência da MESMA ligação por esse código (registros antigos, sem código, são ligados por proximidade e funcionário).

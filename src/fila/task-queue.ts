@@ -102,6 +102,13 @@ export interface OpcoesFila {
   ttlTarefasMs: number;
   /** Por quanto tempo lembrar (em memória) da mensagem enviada ao grupo de 5 min para reaproveitá-la numa transferência posterior. Padrão 3 h. */
   memoriaMensagemLongaMs?: number;
+  /**
+   * Não gera outra mensagem de 5 min para o MESMO cliente (Callee) dentro desta janela (ms). Protege contra a mesma ligação aparecer
+   * como "ocorrência nova" (Start Time diferente, reinício do programa, ligação que passa de um funcionário a outro). 0/ausente = desligado.
+   */
+  repeticaoLongaMs?: number;
+  /** Clientes que já receberam a mensagem de 5 min há pouco (lidos do registro em arquivo ao iniciar). */
+  longasRecentes?: ReadonlyArray<{ cliente: string; em: number }>;
   /** Mensagem mais velha que isso (desde a detecção) não é mais enviada (o Telegram pode ter ficado fora do ar). 0/ausente = não expira. */
   validadeMensagemMs?: number;
   /** Quantas vezes conferir de novo o destino (com espera crescente) quando a 1ª conferência não conseguiu ler. Padrão 3. */
@@ -144,10 +151,18 @@ export class TaskQueue {
   private processando = false;
   private seq = 0;
 
+  /** Cliente (só dígitos) → instante em que a mensagem de 5 min dele foi gerada. Só em memória (e recarregado do registro ao iniciar). */
+  private readonly longaPorCliente = new Map<string, number>();
+
   constructor(
     private readonly deps: DepsFila,
     private readonly op: OpcoesFila,
-  ) {}
+  ) {
+    for (const r of op.longasRecentes ?? []) {
+      const antes = this.longaPorCliente.get(r.cliente);
+      if (antes === undefined || r.em > antes) this.longaPorCliente.set(r.cliente, r.em);
+    }
+  }
 
   private agora(): number {
     return (this.op.agora ?? Date.now)();
@@ -176,6 +191,19 @@ export class TaskQueue {
       ev.tipo === "ligacao_longa" ? "longa" : ev.tipo === "callback" ? "callback" : "transferencia";
     if (tipo === "longa" && !this.deps.senderLonga && this.op.modo === "live") return null;
     for (const t of this.tarefas.values()) if (t.chave === ev.chave) return null;
+    const cliente = ev.callee.replace(/\D+/g, "");
+    if (tipo === "longa" && cliente !== "" && (this.op.repeticaoLongaMs ?? 0) > 0) {
+      const antes = this.longaPorCliente.get(cliente);
+      if (antes !== undefined && this.agora() - antes <= (this.op.repeticaoLongaMs ?? 0)) {
+        this.deps.log.info("Mensagem de 5 min não repetida: o cliente já recebeu há pouco", {
+          evento: "longa_repetida",
+          idCurto: ev.ocorrencia,
+          contagem: Math.round((this.agora() - antes) / 1000),
+        });
+        return null;
+      }
+      this.longaPorCliente.set(cliente, this.agora());
+    }
     const t: TarefaTransferencia = {
       id: `t${++this.seq}`,
       tipo,
@@ -245,6 +273,8 @@ export class TaskQueue {
         /* o registro nunca atrapalha o envio */
       }
     }
+    if (t.tipo === "longa" && (novo === "falhou" || novo === "ignorada"))
+      this.longaPorCliente.delete(t.callee.replace(/\D+/g, "")); // nada foi enviado: uma nova detecção pode tentar de novo
     t.estado = novo;
     if (motivo !== undefined) t.motivo = motivo;
     t.historico.push({ estado: novo, em: this.agora() });
