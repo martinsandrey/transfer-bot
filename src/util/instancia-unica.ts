@@ -4,7 +4,7 @@ import { dirname } from "node:path";
 export type ResultadoTrava = { ok: true; liberar: () => void } | { ok: false; pid: number };
 
 /** `true` se existe um processo com esse PID (EPERM = existe, sem permissão para sinalizar). */
-function processoVivo(pid: number): boolean {
+export function processoVivo(pid: number): boolean {
   try {
     process.kill(pid, 0);
     return true;

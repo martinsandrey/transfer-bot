@@ -26,6 +26,7 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
   - Login: manual, ou automático se `LOGIN_AUTOMATICO=true` (preenche `SITE_USUARIO`/`SITE_SENHA` **uma única vez**, depois da verificação).
   - Quando detecta uma transferência, o programa consulta o cliente, volta para a Voice Call Status e mostra/envia a mensagem.
   - Para parar: `Ctrl+C` ou digite `sair`. Ele termina a tarefa em andamento e avisa o que ficou pendente.
+- **`diagnostico.bat`** — confere tudo e diz em português o que está errado: versão do Node, `.env` válido e variáveis novas que faltam nele, modelo da mensagem, pastas com permissão de gravação, se o bot já está aberto, Edge abrindo o site (sem login, sem janela), sessão do Telegram e os grupos encontrados, notificações do Windows ligadas, fuso do relógio e um resumo do log mais recente (quantas vezes o programa foi aberto, avisos e erros). Não altera nada e não envia nada. Rode antes de iniciar quando algo não funcionar.
 - **`atualizar.bat`** — baixa a versão nova (precisa do Git; sem Git, baixe o ZIP novo e copie por cima mantendo o `.env`).
 - **`simular.bat`** — cenário **fictício** (não acessa o site), para ver o programa funcionando.
 - **`recon.bat`** — ferramenta de reconhecimento do site (relatório **anonimizado**). Não rode junto com o `iniciar.bat` (usam o mesmo navegador). Roteiro: [`docs/RECONHECIMENTO.md`](docs/RECONHECIMENTO.md).
@@ -135,6 +136,7 @@ O programa tem três travas contra duplicata: (1) só uma cópia pode ficar aber
 
 | Problema                             | O que fazer                                                                                           |
 | ------------------------------------ | ----------------------------------------------------------------------------------------------------- |
+| Não sei o que está errado            | Abra `diagnostico.bat`: ele lista cada item com [OK], [AVISO] ou [ERRO] e o que fazer.                |
 | "Node.js não encontrado" / antigo    | Instale o Node LTS atual e rode `instalar.bat` de novo.                                               |
 | "Cannot find module ..."             | Rode `instalar.bat` (ou `atualizar.bat`) para reinstalar as dependências.                             |
 | O Edge não abre                      | Coloque `NAVEGADOR=chromium` no `.env` e rode `npx playwright install chromium` na pasta do programa. |

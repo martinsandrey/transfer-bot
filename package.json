@@ -18,6 +18,7 @@
     "simular": "npm run build && node dist/main.js --simular",
     "gerar-hash-senha": "npm run build && node dist/seguranca/gerar-hash.js",
     "relatorio": "npm run build && node dist/relatorio/cli.js",
+    "diagnostico": "npm run build && node dist/diagnostico/cli.js",
     "telegram": "npm run build && node dist/telegram/cli.js",
     "testar-notificacao": "npm run build && node dist/main.js --teste-notificacao",
     "start": "npm run build && node dist/main.js"

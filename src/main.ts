@@ -73,7 +73,7 @@ async function principal(): Promise<void> {
       : carregarConfig();
   } catch (e) {
     if (e instanceof ErroDeConfiguracao) {
-      console.error(`\n${e.message}\n`);
+      console.error(`\n${e.message}\n\nPara conferir tudo de uma vez, abra diagnostico.bat.\n`);
       process.exitCode = 1;
       return;
     }
@@ -105,6 +105,8 @@ async function principal(): Promise<void> {
     nivel: cfg.nivelLog,
     ...(simulado ? {} : { nivelConsole: "error" as const }),
   });
+  // Marca cada abertura no log: o diagnóstico conta quantas vezes o programa foi reiniciado no dia.
+  if (!simulado) log.info("Programa iniciado", { evento: "programa_iniciado", modo: cfg.modo });
   const notificador = criarNotificador({
     ...(cfg.notificacoes.windows && !simulado ? { toast: criarToastWindows() } : {}),
     toastInformativos: cfg.notificacoes.informativas,

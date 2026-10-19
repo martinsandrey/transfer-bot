@@ -14,6 +14,7 @@ describe("scripts .bat do Windows", () => {
       "telegram",
       "atualizar",
       "relatorio",
+      "diagnostico",
     ])
       expect(bats).toContain(`${f}.bat`);
   });
