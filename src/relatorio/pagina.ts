@@ -85,11 +85,17 @@ h2{font-size:17px;margin:0 0 12px}
 .rolagem{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
 th,td{padding:10px 12px;border-bottom:1px solid var(--linha);text-align:right;white-space:nowrap}
-th:first-child,td:first-child{text-align:left}
-th{font-size:13px;color:var(--suave);font-weight:600;background:transparent}
+th.esq,td.esq{text-align:left}
+th{font-size:13px;color:var(--suave);font-weight:600;background:transparent;vertical-align:bottom;white-space:normal;line-height:1.25}
+th button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer;text-align:inherit}
+th button:hover{color:var(--texto)}
+th button:focus-visible{outline:2px solid var(--marca);outline-offset:3px;border-radius:4px}
+th button::after{content:"\\2195";margin-left:6px;opacity:.35;font-size:12px}
+th[aria-sort="ascending"] button,th[aria-sort="descending"] button{color:var(--texto)}
+th[aria-sort="ascending"] button::after{content:"\\25B2";opacity:1;color:var(--marca)}
+th[aria-sort="descending"] button::after{content:"\\25BC";opacity:1;color:var(--marca)}
 tbody tr:hover{background:var(--fundo)}
 tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--linha)}
-td.det-esq{text-align:left}
 .selo{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .selo.ok{background:var(--ok-fraco);color:var(--ok)} .selo.alerta{background:var(--alerta-fraco);color:var(--alerta)}
 .barra{display:inline-block;width:70px;height:7px;border-radius:99px;background:var(--linha);vertical-align:middle;margin-left:8px;overflow:hidden}
@@ -131,13 +137,13 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
     <h2>Por funcionário</h2>
     <div class="rolagem"><table id="tabela">
       <thead><tr>
-        <th>Funcionário (Callback Number)</th>
-        <th>Transferências com callback</th>
-        <th>Transferências sem callback</th>
-        <th>Callbacks</th>
-        <th>% de callback</th>
-        <th>Duração média (sem callback)</th>
-        <th>Ligações de 5 min</th>
+        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário (Callback Number)</button></th>
+        <th data-k="total"><button type="button">Transferências com callback</button></th>
+        <th data-k="sem"><button type="button">Transferências sem callback</button></th>
+        <th data-k="cb"><button type="button">Callbacks</button></th>
+        <th data-k="pc"><button type="button">% de callback</button></th>
+        <th data-k="med"><button type="button">Duração média (sem callback)</button></th>
+        <th data-k="lg"><button type="button">Ligações de 5 min</button></th>
       </tr></thead>
       <tbody></tbody><tfoot></tfoot>
     </table></div>
@@ -156,7 +162,13 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
   <section class="painel">
     <h2>Ligações do período</h2>
     <div class="rolagem"><table id="detalhe">
-      <thead><tr><th>Data e hora</th><th>Funcionário</th><th>Cliente</th><th>Resultado</th><th>Duração</th></tr></thead>
+      <thead><tr>
+        <th class="esq" data-k="t"><button type="button">Data e hora</button></th>
+        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
+        <th class="esq" data-k="c" data-tipo="txt"><button type="button">Cliente</button></th>
+        <th class="esq" data-k="r" data-tipo="txt"><button type="button">Resultado</button></th>
+        <th data-k="d"><button type="button">Duração</button></th>
+      </tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -218,10 +230,40 @@ function cartao(rot, num, nota, cls) {
   return c;
 }
 
+const ordem = { tabela: { k: "total", dir: -1 }, detalhe: { k: "t", dir: -1 } };
+const txtCmp = (a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+const vazio = (x) => x === null || x === undefined || (typeof x === "number" && isNaN(x));
+const chavesTabela = { f: (l) => l.f, total: (l) => l.total, sem: (l) => l.sem, cb: (l) => l.cb, pc: (l) => (l.total ? l.cb / l.total : null), med: (l) => media(l), lg: (l) => l.lg };
+const chavesDetalhe = { t: (c) => c.t, f: (c) => c.f, c: (c) => c.c || "", r: (c) => (c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
+/** Ordena sem mexer no original; valores vazios ficam sempre no fim, qualquer que seja o sentido. */
+function ordenar(arr, chaves, o, desempate) {
+  const get = chaves[o.k];
+  return [...arr].sort((a, b) => {
+    const x = get(a), y = get(b);
+    if (vazio(x) || vazio(y)) { if (!(vazio(x) && vazio(y))) return vazio(x) ? 1 : -1; return desempate(a, b); }
+    const c = typeof x === "string" ? txtCmp(x, y) : x - y;
+    return c !== 0 ? c * o.dir : desempate(a, b);
+  });
+}
+function marcarOrdem(idTabela, o) {
+  for (const th of $(idTabela).tHead.rows[0].cells) th.setAttribute("aria-sort", th.dataset.k === o.k ? (o.dir === 1 ? "ascending" : "descending") : "none");
+}
+for (const id of ["tabela", "detalhe"]) {
+  $(id).tHead.addEventListener("click", (e) => {
+    const th = e.target && e.target.closest ? e.target.closest("th[data-k]") : null; if (!th) return;
+    const o = ordem[id];
+    if (o.k === th.dataset.k) o.dir = -o.dir; else { o.k = th.dataset.k; o.dir = th.dataset.tipo === "txt" ? 1 : -1; }
+    desenhar();
+  });
+}
+
 function desenhar() {
   const iv = intervalo();
   $("periodo").textContent = iv.rot;
-  const { linhas, lista } = iv.invalido ? { linhas: [], lista: [] } : resumo(iv);
+  const bruto = iv.invalido ? { linhas: [], lista: [] } : resumo(iv);
+  const linhas = ordenar(bruto.linhas, chavesTabela, ordem.tabela, (a, b) => txtCmp(a.f, b.f));
+  const lista = ordenar(bruto.lista, chavesDetalhe, ordem.detalhe, (a, b) => b.t - a.t);
+  marcarOrdem("tabela", ordem.tabela); marcarOrdem("detalhe", ordem.detalhe);
   const T = linhas.reduce((t, l) => ({ total: t.total + l.total, sem: t.sem + l.sem, cb: t.cb + l.cb, lg: t.lg + l.lg, ds: t.ds + l.ds, nd: t.nd + l.nd }), { total: 0, sem: 0, cb: 0, lg: 0, ds: 0, nd: 0 });
 
   const cs = $("cartoes"); cs.replaceChildren(
@@ -238,11 +280,11 @@ function desenhar() {
   for (const l of linhas) {
     const tr = el("tr");
     const pc = el("td", pctTxt(l.cb, l.total)); const b = el("span", undefined, "barra"); const i = el("i"); i.style.width = pct(l.cb, l.total) + "%"; b.append(i); pc.append(b);
-    tr.append(el("td", l.f), el("td", String(l.total)), el("td", String(l.sem)), el("td", String(l.cb)), pc, el("td", durTxt(media(l))), el("td", String(l.lg)));
+    tr.append(el("td", l.f, "esq"), el("td", String(l.total)), el("td", String(l.sem)), el("td", String(l.cb)), pc, el("td", durTxt(media(l))), el("td", String(l.lg)));
     tb.append(tr);
   }
   const tf = $("tabela").tFoot; tf.replaceChildren();
-  const trT = el("tr"); trT.append(el("td", "TOTAL"), el("td", String(T.total)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.total)), el("td", durTxt(media(T))), el("td", String(T.lg)));
+  const trT = el("tr"); trT.append(el("td", "TOTAL", "esq"), el("td", String(T.total)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.total)), el("td", durTxt(media(T))), el("td", String(T.lg)));
   tf.append(trT);
 
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
@@ -251,11 +293,10 @@ function desenhar() {
     const tr = el("tr");
     const quando = new Date(c.t);
     const sel = el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
-    const r = el("td", undefined, "det-esq"); r.append(sel);
+    const r = el("td", undefined, "esq"); r.append(sel);
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
-    const q = el("td", quando.toLocaleString("pt-BR"), "det-esq");
-    tr.append(q, Object.assign(el("td", c.f), { className: "det-esq" }), Object.assign(el("td", c.c || "—"), { className: "det-esq" }), r, el("td", c.r === "c" ? "—" : durTxt(c.d)));
+    tr.append(el("td", quando.toLocaleString("pt-BR"), "esq"), el("td", c.f, "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d)));
     db.append(tr);
   }
   window.__relatorio = { linhas, total: T, periodo: iv.rot };
