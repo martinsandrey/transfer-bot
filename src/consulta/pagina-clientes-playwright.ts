@@ -1,3 +1,4 @@
+import { abrirMenusAte } from "../navegador/menu-lateral.js";
 import type { BrowserContext, Frame, Page } from "playwright";
 import type { CamposDoCadastro, PaginaClientes } from "./consulta-cliente.js";
 import { deveBloquear } from "./bloqueio.js";
@@ -73,6 +74,8 @@ export class PaginaClientesPlaywright implements PaginaClientes {
 
   /** Clica no item de menu com o texto exato, procurando na página e em todos os iframes (o menu fica na página principal). */
   private async clicarMenu(texto: string): Promise<void> {
+    // Se o menu estiver recolhido (ex.: a página foi recarregada), abre os grupos (botões "+") antes de procurar o item.
+    await abrirMenusAte(this.pagina, texto, this.op.timeoutMs);
     for (const f of this.pagina.frames()) {
       const alvo = f.getByText(texto, { exact: true }).first();
       if ((await alvo.count()) > 0 && (await alvo.isVisible().catch(() => false))) {

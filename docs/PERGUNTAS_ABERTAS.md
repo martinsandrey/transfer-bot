@@ -145,3 +145,7 @@ Rótulos do formulário de edição: Name, ID number, Date of birth, Phone, Addr
 - **Falta (recon melhorado, rodar de novo):** nomes/ids reais dos campos do formulário de busca (qual é o `Phone`), o botão de busca, **qual dos links da coluna Action é o Edit** (ícone/`alt`/`href`) e os nomes dos campos do formulário de edição. O recon antigo não capturava controles dentro de tabelas.
 - **Decisão pendente:** a lista de resultados já traz `Name`, `ID Number`, `Date of Birth` e `Phone`, mas **não** `Address`. Seguiremos o fluxo combinado (clicar em Edit e ler o formulário), que traz todos os campos.
 - **Segurança:** bloqueio de requisições (`update.php`, `delete.php`, escrita em `/modules/cc_cds/`) implementado em `src/consulta/bloqueio.ts`, a ser ligado ao `context.route` do adaptador.
+
+## Botão "+" do menu lateral (2026-10-19)
+
+O menu vem recolhido após o login (3 botões "+"). O bot clica neles antes de clicar em "Voice Call Status"/"Customer Data List", mas o HTML exato do botão ainda NÃO foi capturado: a suposição (`TODO(confirmar)` em `src/navegador/menu-lateral.ts`) é uma `<img>` com "plus" no `src`, no mesmo frame das linhas `standartTreeRow`. Se não abrir, o programa avisa no console e no log (`menu_nao_abriu`) com a estrutura vista (nomes de imagens, sem dados pessoais). Pedir ao usuário: o HTML de um dos botões "+" (botão direito → Inspecionar) ou esse aviso.

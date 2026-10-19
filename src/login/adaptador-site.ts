@@ -1,4 +1,5 @@
 import type { Frame, Page } from "playwright";
+import { abrirMenusAte, descreverMenu } from "../navegador/menu-lateral.js";
 import type { AdaptadorLogin, EstadoSessao } from "./login-manager.js";
 
 /**
@@ -19,10 +20,16 @@ const BOTAO_ENVIAR =
 
 export class AdaptadorLoginDoSite implements AdaptadorLogin {
   private ultimoCliqueMenu = 0;
+  private diagnosticou = false;
   constructor(
     private readonly pagina: Page,
     private readonly leitor: SinaisDaPagina,
-    private readonly op: { timeoutMs: number; agora?: () => number } = { timeoutMs: 15000 },
+    private readonly op: {
+      timeoutMs: number;
+      agora?: () => number;
+      /** Chamado uma vez se o menu não pôde ser aberto (texto sem dados pessoais, para ajustar o seletor). */
+      diagnostico?: (texto: string) => void;
+    } = { timeoutMs: 15000 },
   ) {}
 
   private async frameComFormulario(): Promise<Frame | null> {
@@ -47,6 +54,16 @@ export class AdaptadorLoginDoSite implements AdaptadorLogin {
   private async abrirVoiceCallStatusSePossivel(): Promise<void> {
     const agora = (this.op.agora ?? Date.now)();
     if (agora - this.ultimoCliqueMenu < 5000) return;
+    // O menu vem recolhido depois do login: abre os grupos (botões "+") para o item ficar visível antes de clicar nele.
+    if (!(await abrirMenusAte(this.pagina, "Voice Call Status", this.op.timeoutMs))) {
+      if (!this.diagnosticou) {
+        this.diagnosticou = true;
+        this.op.diagnostico?.(
+          `Não achei o item "Voice Call Status" no menu nem abrindo os botões "+". Estrutura vista: ${await descreverMenu(this.pagina)}`,
+        );
+      }
+      return;
+    }
     for (const f of this.pagina.frames()) {
       try {
         const item = f.getByText("Voice Call Status", { exact: true }).first();

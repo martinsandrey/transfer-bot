@@ -195,3 +195,7 @@ Problema: o CALLBACK era registrado como texto solto e o relatório contava tran
 ## Senha para liberar o envio real (2026-10-19)
 
 A confirmação digitada "ENVIAR" foi substituída por uma senha fixa (não configurável), digitada sem eco (`*`), com 3 tentativas. No código fica só o resumo scrypt (sal aleatório, N=2^17), em `src/seguranca/senha.ts`; a senha não aparece em nenhum arquivo, teste, doc ou commit. Optou-se por hash (irreversível) em vez de criptografia reversível: criptografar exigiria guardar a chave junto ao código. Limite honesto: quem tiver o código pode testar palpites offline (~0,3 s e 128 MB cada); senhas curtas/previsíveis cedem a isso. Para trocar: `npm run gerar-hash-senha` e colar o resultado em `REGISTRO_DA_SENHA`. 309 testes.
+
+## Abrir os menus recolhidos após o login (2026-10-19)
+
+O menu lateral vem recolhido (3 botões "+"). `src/navegador/menu-lateral.ts`: `abrirMenusAte` clica nos "+" (um por vez, reavaliando depois de cada clique, máx. 15, espera por condição) até o item pedido ficar visível; só clica em "+", nunca em itens. Usado antes de clicar em "Voice Call Status" (adaptador de login) e antes de "Customer Data List"/volta (consulta). Se não conseguir, avisa uma vez com a estrutura vista. **Suposição a confirmar:** o "+" é `<img src*="plus">` (padrão dhtmlx); ver PERGUNTAS_ABERTAS. Testado só em site fictício. 316 testes.

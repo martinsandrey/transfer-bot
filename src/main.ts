@@ -282,6 +282,10 @@ async function principal(): Promise<void> {
   });
   const adaptador = new AdaptadorLoginDoSite(host.paginaPrincipal(), leitor, {
     timeoutMs: cfg.timeouts.navegacaoMs,
+    diagnostico: (t) => {
+      console.warn(`\nAviso: ${t}\n`);
+      log.warn("Menu lateral não abriu", { evento: "menu_nao_abriu", motivo: t });
+    },
   });
   const login = new GerenciadorLogin(
     adaptador,
