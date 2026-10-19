@@ -15,6 +15,16 @@ export interface OpcoesEnviadorTelegram {
 
 class TempoEsgotado extends Error {}
 
+/** O Telegram tira espaços e linhas em branco das pontas e usa \n: compara sem essas diferenças. */
+export function normalizarTextoDeMensagem(t: string): string {
+  return t.replace(/\r\n?/g, "\n").trim();
+}
+
+/** Tolerância entre o relógio do PC e o do Telegram ao conferir uma mensagem (um PC adiantado/atrasado não pode causar reenvio). */
+const TOLERANCIA_RELOGIO_S = 15 * 60;
+/** Mesmo texto enviado e confirmado dentro deste prazo NÃO é enviado de novo (trava contra duplicata por reenvio/evento repetido). */
+const JANELA_ANTI_DUPLICATA_S = 60;
+
 function comPrazo<T>(p: Promise<T>, ms: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const t = setTimeout(() => reject(new TempoEsgotado()), ms);
@@ -40,6 +50,8 @@ function comPrazo<T>(p: Promise<T>, ms: number): Promise<T> {
  */
 export class EnviadorTelegram implements MessageSender {
   private readonly pendentes = new Map<string, { texto: string; desde: number }>();
+  /** Textos já enviados com sucesso (normalizados): trava anti-duplicata de curta duração. */
+  private readonly enviadosHa = new Map<string, { em: number; confirmacao: string }>();
   private readonly dormir: (ms: number) => Promise<void>;
   private readonly agora: () => number;
 
@@ -54,6 +66,11 @@ export class EnviadorTelegram implements MessageSender {
   async send(texto: string, chave: string, opcoes?: OpcoesEnvio): Promise<ResultadoEnvio> {
     let respostaA = /^telegram:(\d+)$/.exec(opcoes?.responderA ?? "")?.[1];
     let corpo = texto;
+    const agoraS = this.agora();
+    for (const [k, v] of this.enviadosHa)
+      if (agoraS - v.em > JANELA_ANTI_DUPLICATA_S) this.enviadosHa.delete(k);
+    const jaEnviado = this.enviadosHa.get(`${respostaA ?? ""}|${normalizarTextoDeMensagem(texto)}`);
+    if (jaEnviado) return { tipo: "enviada", confirmacao: jaEnviado.confirmacao }; // mesma mensagem há instantes: não duplica
     this.pendentes.set(chave, { texto: corpo, desde: this.agora() - 5 });
     let esperouFlood = false;
     for (;;) {
@@ -67,7 +84,12 @@ export class EnviadorTelegram implements MessageSender {
           this.op.timeoutEnvioMs,
         );
         this.pendentes.delete(chave);
-        return { tipo: "enviada", confirmacao: `telegram:${r.id}` };
+        const confirmacao = `telegram:${r.id}`;
+        this.enviadosHa.set(`${respostaA ?? ""}|${normalizarTextoDeMensagem(corpo)}`, {
+          em: this.agora(),
+          confirmacao,
+        });
+        return { tipo: "enviada", confirmacao };
       } catch (e) {
         if (e instanceof FloodWaitTelegram) {
           if (!esperouFlood && e.segundos * 1000 <= this.op.esperaMaximaFloodMs) {
@@ -106,7 +128,11 @@ export class EnviadorTelegram implements MessageSender {
         this.cliente.mensagensRecentes(this.op.destino, 20),
         this.op.timeoutEnvioMs,
       );
-      const achou = recentes.some((m) => m.data >= p.desde && m.texto === p.texto);
+      const alvo = normalizarTextoDeMensagem(p.texto);
+      const achou = recentes.some(
+        (m) =>
+          m.data >= p.desde - TOLERANCIA_RELOGIO_S && normalizarTextoDeMensagem(m.texto) === alvo,
+      );
       if (achou) {
         this.pendentes.delete(chave);
         return "entregue";

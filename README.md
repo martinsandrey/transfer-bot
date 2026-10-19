@@ -102,6 +102,10 @@ Campos que não existirem no cadastro ficam vazios. `Line 1 number` é o Callbac
 - **Registros das mensagens:** a pasta `registros\` (ao lado do programa) recebe `transferencias-concluidas.txt` e `ligacoes-5min.txt`, com o texto de cada mensagem enviada (em modo observação, marcada como "não enviada"). **Esses arquivos contêm dados de clientes**: não os compartilhe nem os envie ao git (a pasta já é ignorada). Mude a pasta com `PASTA_REGISTROS` ou desligue com `REGISTRAR_MENSAGENS=false`. Os arquivos só crescem; apague ou arquive de tempos em tempos.
 - A verificação do botão quadrado e qualquer 2FA são sempre feitos por você.
 
+## Mensagem em dobro?
+
+O programa tem três travas contra duplicata: (1) só uma cópia pode ficar aberta (arquivo `bot.lock` na pasta de dados; se abrir outra, ele avisa e não inicia); (2) o mesmo texto não é reenviado ao mesmo grupo em 60 s; (3) quando um envio dá timeout, ele confere o grupo antes de reenviar (tolerando diferença de relógio entre o PC e o Telegram). Para investigar, procure no log do dia por `envio_tentativa` (cada tentativa, com o id da tarefa) e `reenvio_apos_verificacao`. Duas linhas `envio_tentativa` com o mesmo `idCurto` mostram um reenvio automático.
+
 ## Solução de problemas
 
 | Problema                             | O que fazer                                                                                           |

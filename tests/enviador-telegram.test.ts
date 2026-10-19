@@ -107,7 +107,7 @@ describe("EnviadorTelegram", () => {
     await e.send("texto C", "c");
     c.recentes = [
       { id: 1, texto: "texto A", data: 1001 },
-      { id: 2, texto: "texto B", data: 500 }, // antiga: não conta
+      { id: 2, texto: "texto B", data: 0 }, // muito antiga (mais de 15 min): não conta
     ];
     expect(await e.verify("a")).toBe("entregue");
     expect(await e.verify("b")).toBe("nao_encontrada");
@@ -201,5 +201,57 @@ describe("enviar como resposta (CALLBACK)", () => {
     const c = new ClienteFalso();
     await criar(c).send("CALLBACK", "k", { responderA: "console" });
     expect(c.respondeuA).toEqual([undefined]);
+  });
+});
+
+describe("duplicatas: conferência robusta (relógio diferente do Telegram, espaços nas pontas)", () => {
+  it("mensagem entregue, mas com horário do servidor 40 s ANTES do relógio local: continua 'entregue' (não reenvia)", async () => {
+    const c = new ClienteFalso();
+    c.respostas = ["trava"];
+    const e = criar(c); // agora() = 1000
+    await e.send("texto A", "a");
+    c.recentes = [{ id: 1, texto: "texto A", data: 960 }]; // servidor 40 s atrás do relógio do PC
+    expect(await e.verify("a")).toBe("entregue");
+  });
+
+  it("o Telegram tira espaços/linhas em branco das pontas e troca CRLF: ainda reconhece a mensagem", async () => {
+    const c = new ClienteFalso();
+    c.respostas = ["trava"];
+    const e = criar(c);
+    await e.send("linha 1\r\nlinha 2  \n\n", "a");
+    c.recentes = [{ id: 1, texto: "linha 1\nlinha 2", data: 1001 }];
+    expect(await e.verify("a")).toBe("entregue");
+  });
+
+  it("guarda anti-duplicata: o MESMO texto não é enviado de novo dentro de 60 s; depois disso, sim (nova ligação igual)", async () => {
+    const c = new ClienteFalso();
+    let agora = 1000;
+    const e = new EnviadorTelegram(c, {
+      destino: "me",
+      timeoutEnvioMs: 50,
+      esperaMaximaFloodMs: 10_000,
+      esperaAntesDeVerificarMs: 0,
+      dormir: async () => undefined,
+      agora: () => agora,
+    });
+    expect((await e.send("igual", "k1")).tipo).toBe("enviada");
+    agora += 30;
+    const r2 = await e.send("igual", "k2"); // outra tarefa, mesmo texto, 30 s depois
+    expect(r2.tipo).toBe("enviada");
+    expect(c.enviadas).toEqual(["igual"]); // não foi ao Telegram de novo
+    agora += 31; // 61 s depois da 1ª
+    await e.send("igual", "k3");
+    expect(c.enviadas).toEqual(["igual", "igual"]);
+  });
+
+  it("a guarda não confunde textos diferentes nem responde com 'enviada' uma mensagem que falhou", async () => {
+    const c = new ClienteFalso();
+    c.respostas = [new FalhaTelegram("destino_invalido_ou_sem_permissao")];
+    const e = criar(c);
+    expect((await e.send("x", "k1")).tipo).toBe("falhou");
+    expect((await e.send("x", "k2")).tipo).toBe("enviada"); // a 1ª falhou: a 2ª tem de ir de verdade
+    expect(c.enviadas).toEqual(["x", "x"]);
+    await e.send("y", "k3");
+    expect(c.enviadas).toEqual(["x", "x", "y"]);
   });
 });

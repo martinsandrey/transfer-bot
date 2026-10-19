@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { stdin, stdout } from "node:process";
 import {
@@ -17,6 +18,7 @@ import { criarConstrutor, ErroDeModelo } from "./mensagem/construtor.js";
 import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
+import { adquirirTrava } from "./util/instancia-unica.js";
 import { RegistroEmArquivo } from "./registro/registro-arquivo.js";
 import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
 import { EnviadorTelegram } from "./telegram/enviador-telegram.js";
@@ -182,6 +184,19 @@ async function principal(): Promise<void> {
       ? "Login automático ligado: se aparecer a verificação (botão para clicar), clique você; o usuário e a senha do .env são preenchidos sozinhos, uma única vez."
       : "Login manual: faça o login na janela do navegador.",
   );
+  // Uma única cópia por vez: duas cópias mandariam cada mensagem duas vezes.
+  if (!simulado) {
+    const trava = adquirirTrava(join(cfg.pastas.dados, "bot.lock"));
+    if (!trava.ok) {
+      console.error(
+        `\nJá existe outra cópia do programa aberta${trava.pid > 0 ? ` (processo ${trava.pid})` : ""}. Feche a outra janela antes de abrir esta.\nSe tiver certeza de que não há outra, apague o arquivo "bot.lock" na pasta de dados (${cfg.pastas.dados}).\n`,
+      );
+      process.exitCode = 1;
+      rl.close();
+      return;
+    }
+    process.on("exit", trava.liberar);
+  }
   const registro = cfg.pastaRegistros
     ? new RegistroEmArquivo(cfg.pastaRegistros, () =>
         console.error(

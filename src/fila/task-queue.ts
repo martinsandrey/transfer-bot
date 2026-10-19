@@ -497,6 +497,12 @@ export class TaskQueue {
         return;
       }
       t.tentativasEnvio++;
+      this.deps.log.info("Tentativa de envio", {
+        evento: "envio_tentativa",
+        idCurto: t.id,
+        tentativa: t.tentativasEnvio,
+        codigo: t.tipo,
+      });
       let resultado;
       try {
         resultado = await this.senderDe(t).send(t.mensagem, t.chave, this.opcoesDe(t));

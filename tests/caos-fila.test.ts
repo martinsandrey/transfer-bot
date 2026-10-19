@@ -26,7 +26,8 @@ function rng(seed: number): () => number {
 
 /** Telegram falso com caos: falhas de todo tipo; o que "chegou ao grupo" fica em `entregues`. */
 class TelegramCaos implements ClienteTelegram {
-  entregues: Array<{ id: number; texto: string; respondeA?: number | undefined }> = [];
+  entregues: Array<{ id: number; texto: string; data: number; respondeA?: number | undefined }> =
+    [];
   emVoo = 0;
   maxEmVoo = 0;
   constructor(
@@ -45,7 +46,12 @@ class TelegramCaos implements ClienteTelegram {
       if (x < this.taxa * 0.6) throw new Error("rede caiu antes de enviar"); // nada chegou
       const entrega = (): number => {
         const id = this.entregues.length + 1;
-        this.entregues.push({ id, texto, respondeA: responderAId });
+        this.entregues.push({
+          id,
+          texto: `${texto.trim()}`, // o Telegram tira espaços das pontas
+          data: 2_000_000_000 - Math.floor(this.r() * 600), // relógio do PC até 10 min diferente do Telegram
+          respondeA: responderAId,
+        });
         return id;
       };
       if (x < this.taxa * 0.8) {
@@ -61,7 +67,7 @@ class TelegramCaos implements ClienteTelegram {
   falhaLeitura = 0;
   async mensagensRecentes(): Promise<MensagemRecente[]> {
     if (this.r() < this.falhaLeitura) throw new Error("sem rede para ler");
-    return this.entregues.map((e) => ({ id: e.id, texto: e.texto, data: 2_000_000_000 }));
+    return this.entregues.map((e) => ({ id: e.id, texto: e.texto, data: e.data }));
   }
   async lerMensagem(_d: string, id: number) {
     if (this.r() < this.falhaLeitura) throw new Error("sem rede");
