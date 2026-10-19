@@ -16,6 +16,7 @@
     "test": "vitest run",
     "recon": "npm run build && node dist/recon/cli.js",
     "simular": "npm run build && node dist/main.js --simular",
+    "gerar-hash-senha": "npm run build && node dist/seguranca/gerar-hash.js",
     "relatorio": "npm run build && node dist/relatorio/cli.js",
     "telegram": "npm run build && node dist/telegram/cli.js",
     "testar-notificacao": "npm run build && node dist/main.js --teste-notificacao",

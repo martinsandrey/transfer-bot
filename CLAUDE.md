@@ -50,7 +50,7 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
    `.env` ignorado pelo git; `.env.example` só com placeholders. Códigos 2FA/Telegram digitados no console, nunca gravados.
    Sessões/perfis fora do repositório. Logs mascaram telefone (`***1234`) e CPF e **nunca** registram nome, CPF, localização, idade (os registros .txt acima são a única exceção, e não são logs).
 6. **Tudo configurável sem recompilar** (URL, usuário, senha, intervalos, modo), validado na inicialização, erros em português.
-7. **Modo observação é o padrão**; envio real só com `SEND_MODE=live` **e** confirmação digitada a cada inicialização.
+7. **Modo observação é o padrão**; envio real só com `SEND_MODE=live` **e** senha de liberação digitada a cada inicialização (fixa, não configurável; no código só o hash scrypt em `src/seguranca/senha.ts`; nunca escrever a senha em arquivos, testes, docs ou commits; trocar com `npm run gerar-hash-senha`).
 8. **Identidade da chamada** = Callback Number + Start Time/Callee (distingue ligações sucessivas). Dedup por _ocorrência_, nunca só por
    Callback Number. Posição da linha nunca é identidade. **Exceção confirmada pelo site:** na transferência a linha do Stage 1 some e surge outra
    em Stage 3 com outro Callback Number e o MESMO Callee — a transferência é detectada ligando as duas pelo Callee (ver `docs/EVIDENCIAS.md`).

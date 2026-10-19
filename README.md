@@ -109,7 +109,7 @@ Campos que não existirem no cadastro ficam vazios. `Line 1 number` é o Callbac
 2. `telegram.bat` → **1 (login)**: telefone, código e (se tiver) senha 2FA, digitados no console. Só a sessão é salva (`%LOCALAPPDATA%\TransferBot\telegram\sessao.txt`); ela dá acesso à conta, **não a compartilhe**.
 3. `telegram.bat` → **2 (chats)** mostra os IDs; ponha o nome exato do canal ou o ID em `TELEGRAM_DESTINO`.
 4. `telegram.bat` → **3 (teste)** envia uma mensagem de teste (sem dados de cliente).
-5. Roteiro recomendado: modo observação → `SEND_MODE=live` com `TELEGRAM_DESTINO=me` → canal definitivo. Com `live`, o programa pede que você digite `ENVIAR` a cada inicialização.
+5. Roteiro recomendado: modo observação → `SEND_MODE=live` com `TELEGRAM_DESTINO=me` → canal definitivo. Com `live`, o programa pede a **senha de liberação** a cada inicialização (digitada sem aparecer na tela, 3 tentativas). A senha é fixa e não é configurável; o código guarda só um resumo irreversível dela (scrypt), não a senha.
 
 ## Segurança e privacidade
 

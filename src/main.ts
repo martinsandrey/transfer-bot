@@ -19,6 +19,8 @@ import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
 import { adquirirTrava } from "./util/instancia-unica.js";
+import { senhaDoEnvioEstaCorreta } from "./seguranca/senha.js";
+import { lerSenhaOculta } from "./seguranca/senha-console.js";
 import { RegistroEmArquivo } from "./registro/registro-arquivo.js";
 import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
 import { comAviso } from "./telegram/com-aviso.js";
@@ -42,6 +44,8 @@ Comandos durante a execução (digite e Enter):
   sair      encerra (ou Ctrl+C)
 `);
 }
+
+const TENTATIVAS_DE_SENHA = 3;
 
 /** `testar-notificacao.bat`: mostra duas notificações de exemplo para você conferir se o Windows as exibe. */
 async function testarNotificacao(): Promise<void> {
@@ -221,14 +225,20 @@ async function principal(): Promise<void> {
   let clienteTg: ClienteGramJS | undefined;
   if (cfg.modo === "live") {
     const { apiId, apiHash, destino, timeoutEnvioMs, arquivoSessao } = cfg.telegram;
-    const resposta = await new Promise<string>((r) =>
-      rl.question(
-        `\nENVIO REAL ativado. As transferências serão enviadas para "${destino}"${cfg.telegram.destinoLonga ? ` e as ligações de ${cfg.duracaoLongaMin} min (ainda em Stage 1) para "${cfg.telegram.destinoLonga}"` : ""}.\nDigite ENVIAR (em maiúsculas) para confirmar, ou qualquer outra coisa para cancelar: `,
-        r,
-      ),
+    console.log(
+      `\nENVIO REAL ativado. As transferências serão enviadas para "${destino}"${cfg.telegram.destinoLonga ? ` e as ligações de ${cfg.duracaoLongaMin} min (ainda em Stage 1) para "${cfg.telegram.destinoLonga}"` : ""}.`,
     );
-    if (resposta.trim() !== "ENVIAR") {
-      console.log("Cancelado. Nada foi enviado. Para só observar, use SEND_MODE=observacao.");
+    let liberado = false;
+    for (let tentativa = 1; tentativa <= TENTATIVAS_DE_SENHA && !liberado; tentativa++) {
+      const digitada = await lerSenhaOculta(rl, "Digite a senha para liberar o envio real: ");
+      liberado = senhaDoEnvioEstaCorreta(digitada);
+      if (!liberado && tentativa < TENTATIVAS_DE_SENHA)
+        console.log("Senha incorreta. Tente de novo.");
+    }
+    if (!liberado) {
+      console.log(
+        "Senha incorreta. Cancelado: nada foi enviado. Para só observar, use SEND_MODE=observacao.",
+      );
       rl.close();
       return;
     }

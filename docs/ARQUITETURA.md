@@ -280,7 +280,7 @@ sonoro e pede decisão manual no console (reenviar / dar como enviada / descarta
 
 - `SEND_MODE=observacao` (**padrão**): detecta, consulta, monta a mensagem e mostra a **prévia no console** (os logs em
   arquivo continuam mascarados e sem PII). Estado final da tarefa: `observada`. Usa `ConsoleSender`.
-- `SEND_MODE=live`: exige, a cada inicialização, confirmação digitada no console (ex.: digitar `ENVIAR`); sem confirmação o
+- `SEND_MODE=live`: exige, a cada inicialização, senha digitada no console (sem eco; só um hash scrypt fica no código); sem confirmação o
   programa volta ao modo observação ou encerra. O destino de teste vs. definitivo é decidido na Fase 5/6.
 - Nenhum modo escreve histórico em disco.
 
