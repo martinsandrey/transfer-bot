@@ -137,6 +137,7 @@ async function principal(): Promise<void> {
   const opMonitor = {
     pausarDuranteConsulta: true,
     intervaloMs: cfg.monitor.intervaloMs,
+    ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,
     limpezaMs: 60_000,
@@ -145,6 +146,14 @@ async function principal(): Promise<void> {
   console.log(
     `\nModo: ${cfg.modo === "observacao" ? "OBSERVAÇÃO (nada é enviado)" : "ENVIO REAL"}${simulado ? " — SIMULAÇÃO com dados fictícios" : ""}`,
   );
+
+  if (!simulado) {
+    const desc = (d: ReadonlySet<string> | null): string =>
+      d === null ? "todos os funcionários" : `penúltimo dígito ${[...d].join(" ou ")}`;
+    console.log(
+      `Funcionários: transferências = ${desc(cfg.filtroFuncionarios.transferencia)}; 5 minutos = ${desc(cfg.filtroFuncionarios.longa)}.`,
+    );
+  }
 
   if (simulado) {
     const sender: MessageSender = new EnviadorConsole();

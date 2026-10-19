@@ -34,18 +34,19 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
 
 Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está em `.env.example`); não precisa reinstalar nem recompilar:
 
-| Variável                                         | Para quê                                                                                  |
-| ------------------------------------------------ | ----------------------------------------------------------------------------------------- |
-| `SITE_URL`                                       | Endereço do sistema (obrigatório).                                                        |
-| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO` | Login automático (opcional).                                                              |
-| `SEND_MODE`                                      | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                            |
-| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`           | Credenciais do Telegram (my.telegram.org).                                                |
-| `TELEGRAM_DESTINO`                               | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                        |
-| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`     | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado. |
-| `VALIDADE_MENSAGEM_MIN`                          | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).               |
-| `JANELA_TRANSFERENCIA_SEG`                       | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                      |
-| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`  | Notificações do Windows (padrão: ligadas; as informativas, desligadas).                   |
-| `NAVEGADOR`                                      | `msedge` (padrão) ou `chromium`.                                                          |
+| Variável                                                  | Para quê                                                                                                                        |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `SITE_URL`                                                | Endereço do sistema (obrigatório).                                                                                              |
+| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO`          | Login automático (opcional).                                                                                                    |
+| `SEND_MODE`                                               | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                  |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                    | Credenciais do Telegram (my.telegram.org).                                                                                      |
+| `TELEGRAM_DESTINO`                                        | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                              |
+| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN` | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos). |
+| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`              | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                       |
+| `VALIDADE_MENSAGEM_MIN`                                   | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                     |
+| `JANELA_TRANSFERENCIA_SEG`                                | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                                                            |
+| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`           | Notificações do Windows (padrão: ligadas; as informativas, desligadas).                                                         |
+| `NAVEGADOR`                                               | `msedge` (padrão) ou `chromium`.                                                                                                |
 
 Ao trocar a URL, o navegador pode pedir novo login.
 
@@ -69,6 +70,20 @@ Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparec
 - O CALLBACK também é registrado em `registros\transferencias-concluidas.txt`, marcado.
 
 ## Segundo grupo (ligações longas)
+
+### Funcionários por dígito
+
+O Callback Number do Stage 1 (quem fez a transferência) termina em três dígitos `[linha][dono][qualquer]`: o antepenúltimo é a linha
+(1 = primeira, 3 = segunda) e o **penúltimo** é o dono do funcionário (0 = equipe do paquistanês, 1 = a sua). Quais valores do penúltimo
+dígito geram mensagem em cada grupo vem do `.env` (lista separada por vírgula, ou `*` para todos):
+
+```
+PENULTIMO_DIGITO_TRANSFERENCIA=1   # grupo de transferências (e o aviso CALLBACK): só funcionários com 1
+PENULTIMO_DIGITO_5MIN=*            # grupo de 5 minutos: todos
+```
+
+Quando todos os funcionários forem seus, use `*` (ou `0,1`); se surgirem outros valores, é só incluí-los (ex.: `1,2`). Se o número tiver
+menos de dois dígitos e houver filtro, a mensagem não é gerada e você recebe um aviso. Ligações filtradas ficam no log como `funcionario_filtrado`.
 
 Com `TELEGRAM_DESTINO_5MIN` preenchido (nome do grupo ou ID, como no `TELEGRAM_DESTINO`), o programa também envia **a mesma mensagem** (mesmo modelo) para esse grupo quando uma ligação chega a `DURACAO_LONGA_MIN` minutos (padrão 5) **ainda em Stage 1**.
 

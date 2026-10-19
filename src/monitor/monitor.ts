@@ -3,6 +3,7 @@ import { SessaoExpiradaError, type TableReader } from "../dominio/tipos.js";
 import type { TaskQueue } from "../fila/task-queue.js";
 import type { Logger } from "../log/logger.js";
 import type { Notificador } from "../notificador/notificador.js";
+import { SEM_FILTRO, decidirFiltro, type FiltroFuncionarios } from "./filtro-funcionario.js";
 import type { CallTracker, CodigoAviso, EventoTracker } from "./call-tracker.js";
 
 export interface OpcoesMonitor {
@@ -19,6 +20,8 @@ export interface OpcoesMonitor {
    * ausências nem avança confirmações. Chamadas que começam e terminam inteiramente dentro da consulta não são vistas.
    */
   pausarDuranteConsulta?: boolean;
+  /** Quais funcionários (penúltimo dígito do Callback Number do Stage 1) geram mensagem em cada grupo. Ausente = todos. */
+  filtroFuncionarios?: FiltroFuncionarios;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -196,6 +199,31 @@ export class Monitor {
     });
   }
 
+  /** Aplica o filtro por funcionário (`.env`). O CALLBACK segue o filtro das transferências: ele responde à mensagem de transferência. */
+  private funcionarioPermitido(
+    ev: Extract<EventoTracker, { tipo: "transferencia" | "callback" | "ligacao_longa" }>,
+    grupo: "transferencia" | "callback" | "longa",
+  ): boolean {
+    const filtro = this.op.filtroFuncionarios ?? SEM_FILTRO;
+    const permitidos = grupo === "longa" ? filtro.longa : filtro.transferencia;
+    const decisao = decidirFiltro(permitidos, ev.callback);
+    if (decisao === "enviar") return true;
+    this.deps.log.info("Mensagem não gerada: funcionário fora do filtro", {
+      evento: "funcionario_filtrado",
+      idCurto: ev.ocorrencia,
+      grupo,
+      motivo: decisao,
+      callbackMascarado: mascararTelefone(ev.callback),
+    });
+    if (decisao === "indeterminado" && grupo !== "callback") {
+      this.deps.notificador.alerta(
+        "aviso",
+        `O Callback Number ${mascararTelefone(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
+      );
+    }
+    return false;
+  }
+
   private tratar(ev: EventoTracker): void {
     const { log, notificador, fila } = this.deps;
     if (ev.tipo === "transferencia") {
@@ -209,7 +237,7 @@ export class Monitor {
         `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
         { windows: "informativo" },
       );
-      if (!fila) return;
+      if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "callback") {
       log.info("Ninguém atendeu o Stage 3", {
@@ -222,7 +250,7 @@ export class Monitor {
         `NINGUÉM ATENDEU (CALLBACK): cliente ${mascararTelefone(ev.callee)}, funcionário ${mascararTelefone(ev.callback)}.`,
         { windows: "informativo" },
       );
-      if (!fila) return;
+      if (!fila || !this.funcionarioPermitido(ev, "callback")) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "ligacao_longa") {
       log.info("Ligação longa detectada", {
@@ -235,7 +263,7 @@ export class Monitor {
         `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
         { windows: "informativo" },
       );
-      if (!fila) return;
+      if (!fila || !this.funcionarioPermitido(ev, "longa")) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "aviso") {
       log.warn("Aviso do rastreador", {

@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
+import { interpretarDigitos, type FiltroFuncionarios } from "../monitor/filtro-funcionario.js";
 
 export type ModoEnvio = "observacao" | "live";
 export type NavegadorEscolhido = "chromium" | "msedge";
@@ -43,6 +44,8 @@ export interface AppConfig {
     timeoutEnvioMs: number;
     arquivoSessao: string;
   };
+  /** Quais funcionários (pelo penúltimo dígito do Callback Number do Stage 1) vão para cada grupo. */
+  filtroFuncionarios: FiltroFuncionarios;
   /** Minutos de duração (em Stage 1) que disparam a mensagem do segundo grupo. */
   duracaoLongaMin: number;
   /** Minutos; 0 = a mensagem nunca expira. */
@@ -148,6 +151,8 @@ const esquema = z.object({
   TELEGRAM_DESTINO: z.preprocess(vazioParaUndefined, z.string().default("me")),
   TELEGRAM_DESTINO_5MIN: textoOpcional,
   DURACAO_LONGA_MIN: inteiro("DURACAO_LONGA_MIN", 5, 1, 600),
+  PENULTIMO_DIGITO_TRANSFERENCIA: textoOpcional,
+  PENULTIMO_DIGITO_5MIN: textoOpcional,
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
   VALIDADE_MENSAGEM_MIN: inteiro("VALIDADE_MENSAGEM_MIN", 15, 0, 100000),
   NIVEL_LOG: z.preprocess(
@@ -193,6 +198,17 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       'SEND_MODE=live exige TELEGRAM_API_ID e TELEGRAM_API_HASH (crie em https://my.telegram.org, "API development tools").',
     );
   }
+  // Transferências: por padrão só os funcionários com penúltimo dígito 1 (equipe do usuário). 5 min: todos. "*" = todos.
+  const digitosTransferencia = interpretarDigitos(c.PENULTIMO_DIGITO_TRANSFERENCIA ?? "1");
+  const digitos5min = interpretarDigitos(c.PENULTIMO_DIGITO_5MIN ?? "*");
+  if (digitosTransferencia === undefined)
+    problemas.push(
+      'PENULTIMO_DIGITO_TRANSFERENCIA: use dígitos de 0 a 9 separados por vírgula (ex.: "1" ou "0,1") ou "*" para todos.',
+    );
+  if (digitos5min === undefined)
+    problemas.push(
+      'PENULTIMO_DIGITO_5MIN: use dígitos de 0 a 9 separados por vírgula (ex.: "1" ou "0,1") ou "*" para todos.',
+    );
   if (problemas.length) throw new ErroDeConfiguracao(problemas);
 
   const dados = resolve(expandirCaminho(c.PASTA_DADOS ?? pastaDadosPadrao(bruto), bruto));
@@ -228,6 +244,10 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       destinoLonga: c.TELEGRAM_DESTINO_5MIN,
       timeoutEnvioMs: c.TIMEOUT_ENVIO_TELEGRAM_MS,
       arquivoSessao: join(dados, "telegram", "sessao.txt"),
+    },
+    filtroFuncionarios: {
+      transferencia: digitosTransferencia ?? null,
+      longa: digitos5min ?? null,
     },
     duracaoLongaMin: c.DURACAO_LONGA_MIN,
     validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,
