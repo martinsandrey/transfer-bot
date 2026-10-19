@@ -261,7 +261,7 @@ export class Monitor {
       notificador.alerta(
         "aviso",
         `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
-        { windows: "informativo" },
+        { windows: "informativo_5min" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "longa")) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);

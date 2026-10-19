@@ -174,3 +174,7 @@ Pedido do usuário: o Callback Number do Stage 1 termina em `[linha][dono][qualq
 ## CALLBACK não respondia à mensagem (2026-10-19)
 
 Causa: em `main.ts` o embrulho do enviador (que imprime "Mensagem enviada") descartava as opções de envio (`responderA`/`reserva`) e a função `reler`; por isso o CALLBACK saía como mensagem solta (ou nem lia a mensagem editada do grupo de 5 min). Corrigido: embrulho movido para `src/telegram/com-aviso.ts`, que repassa tudo, com teste. 288 testes.
+
+## Notificações separadas: transferência e 5 min (2026-10-19)
+
+`NOTIFICAR_TRANSFERENCIAS` (transferência detectada e CALLBACK) e novo `NOTIFICAR_5MIN` (ligação que chegou a 5 min) são independentes, ambos desligados por padrão. Erros continuam notificando com `NOTIFICAR_WINDOWS=true`.

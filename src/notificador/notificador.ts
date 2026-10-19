@@ -7,11 +7,12 @@ export type NivelAlerta = "info" | "aviso" | "erro";
  * Quando o alerta também vira notificação do Windows (além do console e do som):
  * - `erro`: sempre (algo deu errado e merece atenção);
  * - `aviso`: só com `windows: true` (relevante e que pede ação ou muda o que o programa está fazendo);
- * - `windows: "informativo"`: só se o usuário ligou as notificações informativas (ex.: cada transferência detectada);
+ * - `windows: "informativo"`: só se o usuário ligou as notificações de transferência (transferência detectada e CALLBACK);
+ * - `windows: "informativo_5min"`: só se o usuário ligou as notificações de ligações de 5 minutos;
  * - `windows: false`: nunca.
  */
 export interface OpcoesAlerta {
-  windows?: boolean | "informativo";
+  windows?: boolean | "informativo" | "informativo_5min";
 }
 
 export interface Notificador {
@@ -29,8 +30,10 @@ const SOM_POWERSHELL: Record<Exclude<NivelAlerta, "info">, string> = {
 export interface OpcoesNotificador {
   /** Função que mostra a notificação do Windows (ver `criarToastWindows`). Sem ela, não há notificações. */
   toast?: Toast;
-  /** Também notifica os alertas "informativos" (cada transferência, CALLBACK, ligação de 5 min). Padrão: não. */
+  /** Também notifica cada transferência detectada e cada CALLBACK. Padrão: não. */
   toastInformativos?: boolean;
+  /** Também notifica cada ligação que chegou a 5 min. Padrão: não. */
+  toastLigacoesLongas?: boolean;
   plataforma?: NodeJS.Platform;
   spawnFn?: Spawn;
   escrever?: (texto: string) => void;
@@ -58,7 +61,9 @@ export function criarNotificador(op: OpcoesNotificador = {}): Notificador {
             ? false
             : w === "informativo"
               ? op.toastInformativos === true
-              : nivel === "erro" || w === true;
+              : w === "informativo_5min"
+                ? op.toastLigacoesLongas === true
+                : nivel === "erro" || w === true;
         if (notificar && op.toast)
           op.toast(nivel === "erro" ? "Transfer Bot — ERRO" : "Transfer Bot — atenção", mensagem);
       } catch {

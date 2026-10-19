@@ -34,19 +34,19 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
 
 Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está em `.env.example`); não precisa reinstalar nem recompilar:
 
-| Variável                                                  | Para quê                                                                                                                        |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `SITE_URL`                                                | Endereço do sistema (obrigatório).                                                                                              |
-| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO`          | Login automático (opcional).                                                                                                    |
-| `SEND_MODE`                                               | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                  |
-| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                    | Credenciais do Telegram (my.telegram.org).                                                                                      |
-| `TELEGRAM_DESTINO`                                        | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                              |
-| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN` | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos). |
-| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`              | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                       |
-| `VALIDADE_MENSAGEM_MIN`                                   | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                     |
-| `JANELA_TRANSFERENCIA_SEG`                                | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                                                            |
-| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`           | Notificações do Windows (padrão: ligadas; as informativas, desligadas).                                                         |
-| `NAVEGADOR`                                               | `msedge` (padrão) ou `chromium`.                                                                                                |
+| Variável                                                          | Para quê                                                                                                                        |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `SITE_URL`                                                        | Endereço do sistema (obrigatório).                                                                                              |
+| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO`                  | Login automático (opcional).                                                                                                    |
+| `SEND_MODE`                                                       | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                  |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                            | Credenciais do Telegram (my.telegram.org).                                                                                      |
+| `TELEGRAM_DESTINO`                                                | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                              |
+| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN`         | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos). |
+| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`                      | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                       |
+| `VALIDADE_MENSAGEM_MIN`                                           | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                     |
+| `JANELA_TRANSFERENCIA_SEG`                                        | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                                                            |
+| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`, `NOTIFICAR_5MIN` | Notificações do Windows (padrão: ligadas; as de transferência/CALLBACK e as de 5 min, desligadas, cada uma no seu botão).       |
+| `NAVEGADOR`                                                       | `msedge` (padrão) ou `chromium`.                                                                                                |
 
 Ao trocar a URL, o navegador pode pedir novo login.
 
@@ -56,7 +56,7 @@ O programa mostra uma **notificação do Windows** (canto da tela) quando algo r
 
 - **Erros** (sempre): envio que falhou, mensagem velha demais, envio incerto, cliente não encontrado ou telefone diferente, consulta que travou, sessão do site expirada, falha ao voltar para a Voice Call Status, erro inesperado ou programa parado.
 - **Avisos relevantes:** login ou verificação (botão quadrado) esperando você, monitoramento retomado depois de uma pausa (transferências nesse intervalo não foram vistas), tabela ilegível, CALLBACK que não pôde ser enviado.
-- Cada transferência detectada, CALLBACK e ligação de 5 min **não** notificam por padrão (use `NOTIFICAR_TRANSFERENCIAS=true` se quiser).
+- Cada transferência detectada e CALLBACK **não** notificam por padrão (`NOTIFICAR_TRANSFERENCIAS=true` liga). Cada ligação de 5 min também não (`NOTIFICAR_5MIN=true` liga). Os dois são independentes. Erros sempre notificam enquanto `NOTIFICAR_WINDOWS=true`.
 - Sem repetição: a mesma mensagem não volta em 2 minutos e há no máximo 4 por minuto (o resto vira "mais N avisos").
 - As notificações não trazem dados de clientes (telefones saem mascarados).
 

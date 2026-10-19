@@ -114,16 +114,33 @@ describe("toast do Windows", () => {
 });
 
 describe("quais alertas viram notificação", () => {
-  function montar(informativos = false) {
+  function montar(informativos = false, longas = false) {
     const toasts: Array<{ t: string; m: string }> = [];
     const n = criarNotificador({
       plataforma: "linux",
       escrever: () => undefined,
       toast: (t, m) => void toasts.push({ t, m }),
       toastInformativos: informativos,
+      toastLigacoesLongas: longas,
     });
     return { n, toasts };
   }
+  it("transferência e 5 min têm botões independentes", () => {
+    const so5 = montar(false, true);
+    so5.n.alerta("aviso", "transf", { windows: "informativo" });
+    so5.n.alerta("aviso", "cinco", { windows: "informativo_5min" });
+    expect(so5.toasts.map((x) => x.m)).toEqual(["cinco"]);
+    const soT = montar(true, false);
+    soT.n.alerta("aviso", "transf", { windows: "informativo" });
+    soT.n.alerta("aviso", "cinco", { windows: "informativo_5min" });
+    expect(soT.toasts.map((x) => x.m)).toEqual(["transf"]);
+    const nenhum = montar();
+    nenhum.n.alerta("aviso", "cinco", { windows: "informativo_5min" });
+    expect(nenhum.toasts).toEqual([]);
+    expect(
+      validarConfig({ SITE_URL: "http://x.invalid/", NOTIFICAR_5MIN: "true" }).notificacoes.longas,
+    ).toBe(true);
+  });
   it("erro: sempre; aviso comum: não; aviso marcado: sim; info: não", () => {
     const { n, toasts } = montar();
     n.alerta("erro", "envio falhou");
@@ -157,14 +174,14 @@ describe("quais alertas viram notificação", () => {
   });
   it("config: ligado por padrão; informativas desligadas por padrão", () => {
     const c = validarConfig({ SITE_URL: "http://x.invalid/" });
-    expect(c.notificacoes).toEqual({ windows: true, informativas: false });
+    expect(c.notificacoes).toEqual({ windows: true, informativas: false, longas: false });
     expect(
       validarConfig({
         SITE_URL: "http://x.invalid/",
         NOTIFICAR_WINDOWS: "false",
         NOTIFICAR_TRANSFERENCIAS: "true",
       }).notificacoes,
-    ).toEqual({ windows: false, informativas: true });
+    ).toEqual({ windows: false, informativas: true, longas: false });
   });
 });
 

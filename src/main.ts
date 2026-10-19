@@ -102,6 +102,7 @@ async function principal(): Promise<void> {
   const notificador = criarNotificador({
     ...(cfg.notificacoes.windows && !simulado ? { toast: criarToastWindows() } : {}),
     toastInformativos: cfg.notificacoes.informativas,
+    toastLigacoesLongas: cfg.notificacoes.longas,
   });
   // Rede de segurança: uma promessa rejeitada e esquecida nunca derruba o programa; fica registrada no log.
   process.on("unhandledRejection", (motivo) => {
