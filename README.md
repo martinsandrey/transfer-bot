@@ -56,7 +56,7 @@ O programa mostra uma **notificação do Windows** (canto da tela) quando algo r
 
 - **Erros** (sempre): envio que falhou, mensagem velha demais, envio incerto, cliente não encontrado ou telefone diferente, consulta que travou, sessão do site expirada, falha ao voltar para a Voice Call Status, erro inesperado ou programa parado.
 - **Avisos relevantes:** login ou verificação (botão quadrado) esperando você, monitoramento retomado depois de uma pausa (transferências nesse intervalo não foram vistas), tabela ilegível, CALLBACK que não pôde ser enviado.
-- Cada transferência detectada e CALLBACK **não** notificam por padrão (`NOTIFICAR_TRANSFERENCIAS=true` liga). Cada ligação de 5 min também não (`NOTIFICAR_5MIN=true` liga). Os dois são independentes. Erros sempre notificam enquanto `NOTIFICAR_WINDOWS=true`.
+- Cada transferência detectada e CALLBACK **não** notificam por padrão (`NOTIFICAR_TRANSFERENCIAS=true` liga). Cada ligação de 5 min também não (`NOTIFICAR_5MIN=true` liga). Os dois são independentes. Erros sempre notificam enquanto `NOTIFICAR_WINDOWS=true`. `NOTIFICAR_NUMEROS_COMPLETOS=true` (padrão) mostra o número do cliente e o Callback Number por inteiro na notificação; com `false` aparece `***1234`. Os arquivos de log sempre mascaram os telefones.
 - Sem repetição: a mesma mensagem não volta em 2 minutos e há no máximo 4 por minuto (o resto vira "mais N avisos").
 - As notificações não trazem dados de clientes (telefones saem mascarados).
 

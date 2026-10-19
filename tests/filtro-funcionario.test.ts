@@ -173,3 +173,44 @@ describe("monitor aplica o filtro por funcionário", () => {
     expect(enfileirados).toHaveLength(1);
   });
 });
+
+describe("avisos do monitor mostram o número por inteiro quando configurado", () => {
+  const log = { debug() {}, info() {}, warn() {}, error() {} };
+  async function mensagens(numerosCompletos: boolean): Promise<string[]> {
+    const ev = {
+      tipo: "transferencia",
+      ocorrencia: "x",
+      chave: "k",
+      callback: "5500000111",
+      callee: "5511987654321",
+      vinculo: "v",
+      fase: "agent",
+    } as EventoTracker;
+    const tracker = { ingest: () => [ev], sweep() {} } as unknown as CallTracker;
+    const reader: TableReader = {
+      read: async (): Promise<TableSnapshot> => ({ readAt: 1, rows: [], valid: true }),
+    };
+    const notif = criarNotificadorFalso();
+    const m = new Monitor(
+      { reader, tracker, fila: null, log, notificador: notif },
+      {
+        intervaloMs: 1,
+        invalidasParaAlertar: 3,
+        falhasParaAlertar: 3,
+        limpezaMs: 1e6,
+        numerosCompletos,
+      },
+    );
+    const c = new AbortController();
+    const p = m.executar(c.signal);
+    await new Promise((r) => setTimeout(r, 20));
+    c.abort();
+    await p;
+    return notif.alertas.map((a) => a.mensagem);
+  }
+  it("completos: número inteiro; senão ***final", async () => {
+    expect((await mensagens(true))[0]).toContain("cliente 5511987654321");
+    expect((await mensagens(true))[0]).toContain("funcionário 5500000111");
+    expect((await mensagens(false))[0]).toContain("***4321");
+  });
+});

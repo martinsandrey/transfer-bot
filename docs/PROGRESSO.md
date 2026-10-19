@@ -178,3 +178,7 @@ Causa: em `main.ts` o embrulho do enviador (que imprime "Mensagem enviada") desc
 ## Notificações separadas: transferência e 5 min (2026-10-19)
 
 `NOTIFICAR_TRANSFERENCIAS` (transferência detectada e CALLBACK) e novo `NOTIFICAR_5MIN` (ligação que chegou a 5 min) são independentes, ambos desligados por padrão. Erros continuam notificando com `NOTIFICAR_WINDOWS=true`.
+
+## Números completos nas notificações (2026-10-19)
+
+`NOTIFICAR_NUMEROS_COMPLETOS` (padrão `true`): a notificação do Windows e os avisos da tela mostram o telefone do cliente e o Callback Number por inteiro; com `false` voltam a `***1234`. CPF e e-mail seguem mascarados na notificação. Os arquivos de log continuam sempre mascarados (regra do projeto). Observação: o Windows guarda as notificações no Centro de Notificações.

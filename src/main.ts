@@ -100,7 +100,9 @@ async function principal(): Promise<void> {
     ...(simulado ? {} : { nivelConsole: "error" as const }),
   });
   const notificador = criarNotificador({
-    ...(cfg.notificacoes.windows && !simulado ? { toast: criarToastWindows() } : {}),
+    ...(cfg.notificacoes.windows && !simulado
+      ? { toast: criarToastWindows({ mascararTelefones: !cfg.notificacoes.numerosCompletos }) }
+      : {}),
     toastInformativos: cfg.notificacoes.informativas,
     toastLigacoesLongas: cfg.notificacoes.longas,
   });
@@ -139,6 +141,7 @@ async function principal(): Promise<void> {
   const opMonitor = {
     pausarDuranteConsulta: true,
     intervaloMs: cfg.monitor.intervaloMs,
+    numerosCompletos: cfg.notificacoes.numerosCompletos,
     ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,

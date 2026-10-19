@@ -174,14 +174,19 @@ describe("quais alertas viram notificação", () => {
   });
   it("config: ligado por padrão; informativas desligadas por padrão", () => {
     const c = validarConfig({ SITE_URL: "http://x.invalid/" });
-    expect(c.notificacoes).toEqual({ windows: true, informativas: false, longas: false });
+    expect(c.notificacoes).toEqual({
+      windows: true,
+      informativas: false,
+      longas: false,
+      numerosCompletos: true,
+    });
     expect(
       validarConfig({
         SITE_URL: "http://x.invalid/",
         NOTIFICAR_WINDOWS: "false",
         NOTIFICAR_TRANSFERENCIAS: "true",
       }).notificacoes,
-    ).toEqual({ windows: false, informativas: true, longas: false });
+    ).toEqual({ windows: false, informativas: true, longas: false, numerosCompletos: true });
   });
 });
 
@@ -264,5 +269,38 @@ describe("integração: problemas reais chegam como notificação", () => {
     await d.drenar();
     expect(toasts.at(-1)).toMatch(/não foi possível consultar o cliente/);
     expect(toasts.length).toBe(3);
+  });
+});
+
+describe("números completos na notificação", () => {
+  const texto = "cliente 5511987654321 funcionario 5511900000111 CPF 123.456.789-09";
+  function mostrado(mascararTelefones?: boolean): string {
+    const { chamadas, fn } = spawnFalso();
+    criarToastWindows({
+      plataforma: "win32",
+      spawnFn: fn,
+      ...(mascararTelefones === undefined ? {} : { mascararTelefones }),
+    })("T", texto);
+    const script = decodificar(chamadas[0]?.args as string[]);
+    return Buffer.from(
+      [...script.matchAll(/FromBase64String\('([^']+)'\)/g)][1]?.[1] as string,
+      "base64",
+    ).toString("utf8");
+  }
+  it("padrão do toast mascara; com mascararTelefones:false mostra os números (CPF continua mascarado)", () => {
+    expect(mostrado()).not.toContain("5511987654321");
+    const aberto = mostrado(false);
+    expect(aberto).toContain("5511987654321");
+    expect(aberto).toContain("5511900000111");
+    expect(aberto).not.toContain("123.456.789-09");
+  });
+  it("config: padrão true; pode desligar", () => {
+    expect(validarConfig({ SITE_URL: "http://x.invalid/" }).notificacoes.numerosCompletos).toBe(
+      true,
+    );
+    expect(
+      validarConfig({ SITE_URL: "http://x.invalid/", NOTIFICAR_NUMEROS_COMPLETOS: "false" })
+        .notificacoes.numerosCompletos,
+    ).toBe(false);
   });
 });

@@ -22,6 +22,8 @@ export interface OpcoesMonitor {
   pausarDuranteConsulta?: boolean;
   /** Quais funcionários (penúltimo dígito do Callback Number do Stage 1) geram mensagem em cada grupo. Ausente = todos. */
   filtroFuncionarios?: FiltroFuncionarios;
+  /** Telefones por inteiro nos avisos da tela/notificações (os logs em arquivo continuam mascarados). Padrão: mascarados. */
+  numerosCompletos?: boolean;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -218,10 +220,15 @@ export class Monitor {
     if (decisao === "indeterminado" && grupo !== "callback") {
       this.deps.notificador.alerta(
         "aviso",
-        `O Callback Number ${mascararTelefone(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
+        `O Callback Number ${this.numero(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
       );
     }
     return false;
+  }
+
+  /** Telefone para mostrar ao usuário (tela/notificação): por inteiro ou mascarado, conforme a configuração. */
+  private numero(valor: string): string {
+    return this.op.numerosCompletos === true ? valor.trim() : mascararTelefone(valor);
   }
 
   private tratar(ev: EventoTracker): void {
@@ -234,7 +241,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${this.numero(ev.callback)}, cliente ${this.numero(ev.callee)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
@@ -247,7 +254,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `NINGUÉM ATENDEU (CALLBACK): cliente ${mascararTelefone(ev.callee)}, funcionário ${mascararTelefone(ev.callback)}.`,
+        `NINGUÉM ATENDEU (CALLBACK): cliente ${this.numero(ev.callee)}, funcionário ${this.numero(ev.callback)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "callback")) return;
@@ -260,7 +267,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${mascararTelefone(ev.callback)}, cliente ${mascararTelefone(ev.callee)}.`,
+        `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${this.numero(ev.callback)}, cliente ${this.numero(ev.callee)}.`,
         { windows: "informativo_5min" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "longa")) return;
