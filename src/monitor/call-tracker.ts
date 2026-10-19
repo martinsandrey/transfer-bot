@@ -110,6 +110,17 @@ export interface OpcoesTracker {
   /** Diário de status (só para diagnóstico, sem telefones): chamado quando uma ocorrência surge, muda de status confirmado ou some. */
   aoMudarStatus?: (info: { id: string; de: string; para: string }) => void;
   /**
+   * Chamado uma vez quando uma ligação transferida que FOI ATENDIDA no Stage 3 termina (a linha some da tabela) e NÃO é CALLBACK
+   * por duração curta: `duracaoSeg` é o maior "Call Duration" visto (ou o tempo contado desde o atendimento, se a coluna for
+   * ilegível). Alimenta a duração média do relatório. `vinculo` tem telefone: não pode ir para o log.
+   */
+  aoEncerrarLigacao?: (info: {
+    vinculo: string;
+    callback: string;
+    callee: string;
+    duracaoSeg: number;
+  }) => void;
+  /**
    * Evidência real (2026-10-16): na transferência a linha do Stage 1 SOME e aparece OUTRA linha em "Stage 3 Agent", com outro
    * Callback Number (o do agente do Stage 3) e o MESMO Callee Number. A transferência é detectada ligando as duas pelo Callee.
    * Esta é a janela máxima entre a última vez que a linha do Stage 1 Agent foi vista e o surgimento da linha do Stage 3 (padrão 60 s).
@@ -544,16 +555,23 @@ export class CallTracker {
       if (d !== undefined && d > (sg.maiorDuracaoSeg ?? 0)) sg.maiorDuracaoSeg = d;
       if (sg.atendida) {
         const sumiu = !naTabela.has(callee) && !cega;
-        if (sumiu && s.readAt - sg.ultimoStage3 >= espera && minimoSeg > 0) {
-          // Atendida e a linha sumiu: se durou menos que o mínimo, conta como CALLBACK.
+        if (sumiu && s.readAt - sg.ultimoStage3 >= espera) {
+          // Atendida e a linha sumiu: se durou menos que o mínimo, conta como CALLBACK; senão registra a duração (relatório).
           const duracao =
             sg.maiorDuracaoSeg ??
             (sg.inicioAtendimento === null
               ? null
               : Math.round((sg.ultimoStage3 - sg.inicioAtendimento) / 1000));
           this.seguimentos.delete(callee);
-          if (duracao !== null && duracao < minimoSeg)
+          if (minimoSeg > 0 && duracao !== null && duracao < minimoSeg)
             this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
+          else if (duracao !== null)
+            this.op.aoEncerrarLigacao?.({
+              vinculo: sg.vinculo,
+              callback: sg.callback,
+              callee,
+              duracaoSeg: duracao,
+            });
           continue;
         }
         // atendida e sem regra de duração: nada mais a fazer; esquece quando a linha some

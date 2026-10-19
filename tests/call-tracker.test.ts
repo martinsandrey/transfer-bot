@@ -1025,3 +1025,57 @@ describe("CALLBACK também por ligação curta (atendida, mas com menos de N seg
     expect(tipos(ev)).toEqual(["callback"]);
   });
 });
+
+describe("duração da ligação atendida (para o relatório)", () => {
+  const X = "CX";
+  const ST1 = linha("100001", S1, "T1", X);
+  const AG = (dur: number | null) => ({
+    ...linha("908301", S3, "U1", X),
+    callDurationSec: dur,
+  });
+  const VAZIAS = () => [snap([]), snap([]), snap([]), snap([]), snap([])];
+  function rodar(minimo: number, ...snaps: TableSnapshot[]) {
+    const fim: Array<{ vinculo: string; duracaoSeg: number }> = [];
+    const t = tracker({
+      leiturasConfirmacao: 1,
+      esperaCallbackMs: 3000,
+      duracaoCallbackSeg: minimo,
+      aoEncerrarLigacao: (i) => fim.push(i),
+    });
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1]));
+    const ev = alimentar(t, ...snaps);
+    return { fim, ev };
+  }
+  it("ligação longa que termina: avisa a duração uma única vez, sem CALLBACK", () => {
+    const { fim, ev } = rodar(
+      20,
+      snap([ST1, AG(2)]),
+      snap([AG(60)]),
+      snap([AG(185)]),
+      ...VAZIAS(),
+      ...VAZIAS(),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(fim).toHaveLength(1);
+    expect(fim[0]?.duracaoSeg).toBe(185);
+  });
+  it("ligação curta vira CALLBACK e NÃO entra na duração média", () => {
+    const { fim, ev } = rodar(20, snap([ST1, AG(2)]), snap([AG(9)]), ...VAZIAS());
+    expect(tipos(ev)).toEqual(["transferencia", "callback"]);
+    expect(fim).toEqual([]);
+  });
+  it("com a regra de duração desligada (0), a duração continua sendo registrada", () => {
+    const { fim, ev } = rodar(0, snap([ST1, AG(2)]), snap([AG(9)]), ...VAZIAS());
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(fim[0]?.duracaoSeg).toBe(9);
+  });
+  it("tocou e ninguém atendeu: sem duração", () => {
+    const { fim } = rodar(
+      20,
+      snap([ST1, { ...linha("908301", "Stage 3 Ringing", "U1", X), callDurationSec: 4 }]),
+      ...VAZIAS(),
+    );
+    expect(fim).toEqual([]);
+  });
+});

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { paginaHtml } from "../src/relatorio/pagina.js";
 import { RegistroEmArquivo } from "../src/registro/registro-arquivo.js";
 import {
+  lerDuracoes,
   lerRegistro,
   montarLigacoes,
   periodoNomeado,
@@ -248,6 +249,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             resultado: "callback",
             observacao: false,
             semTransferencia: false,
+            duracaoSeg: null,
           },
           {
             quando: h(2),
@@ -256,6 +258,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             resultado: "atendida",
             observacao: false,
             semTransferencia: false,
+            duracaoSeg: 120,
           },
           {
             quando: h(3),
@@ -264,6 +267,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             resultado: "atendida",
             observacao: false,
             semTransferencia: false,
+            duracaoSeg: 300,
           },
           {
             quando: ontem,
@@ -272,6 +276,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             resultado: "callback",
             observacao: false,
             semTransferencia: false,
+            duracaoSeg: null,
           },
           {
             quando: h(4),
@@ -280,6 +285,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             resultado: "atendida",
             observacao: true,
             semTransferencia: false,
+            duracaoSeg: 600,
           },
         ],
         inicial: { periodo: "hoje" },
@@ -298,16 +304,21 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
       pagina.evaluate(
         () => (window as unknown as { __relatorio: { total: unknown } }).__relatorio.total,
       );
-    expect(await lerTotais()).toEqual({ total: 3, sem: 2, cb: 1, lg: 1 }); // hoje, sem prévias
+    expect(await lerTotais()).toEqual({ total: 3, sem: 2, cb: 1, lg: 1, ds: 420, nd: 2 }); // hoje, sem prévias
     await pagina.click('button[data-p="ontem"]');
-    expect(await lerTotais()).toEqual({ total: 1, sem: 0, cb: 1, lg: 0 });
+    expect(await lerTotais()).toEqual({ total: 1, sem: 0, cb: 1, lg: 0, ds: 0, nd: 0 });
     await pagina.click('button[data-p="tudo"]');
-    expect(await lerTotais()).toEqual({ total: 4, sem: 2, cb: 2, lg: 1 });
+    expect(await lerTotais()).toEqual({ total: 4, sem: 2, cb: 2, lg: 1, ds: 420, nd: 2 });
     await pagina.click('button[data-p="hoje"]');
     await pagina.check("#obs");
-    expect(await lerTotais()).toEqual({ total: 4, sem: 3, cb: 1, lg: 1 });
+    expect(await lerTotais()).toEqual({ total: 4, sem: 3, cb: 1, lg: 1, ds: 1020, nd: 3 });
     expect(await pagina.locator("#detalhe tbody b").count()).toBe(0); // dado nunca vira HTML
     expect(await pagina.locator("#tabela tbody tr").first().innerText()).toContain(A);
+    // média na tela: 420 s ÷ 2 = 3 min 30 s (só transferências sem callback, hoje)
+    await pagina.click('button[data-p="hoje"]');
+    await pagina.uncheck("#obs");
+    expect(await pagina.locator("#cartoes").innerText()).toContain("3 min 30 s");
+    expect(await pagina.locator("#tabela tfoot").innerText()).toContain("3 min 30 s");
     expect(erros).toEqual([]);
   }, 60_000);
 });
@@ -353,5 +364,74 @@ describe("CALLBACK por ligação curta no registro e na configuração", () => {
     expect(() => validarConfig({ ...base, CALLBACK_DURACAO_SEG: "vinte" })).toThrow(
       /CALLBACK_DURACAO_SEG/,
     );
+  });
+});
+
+describe("duração média das transferências sem callback", () => {
+  const dur = (s: string) => lerDuracoes(s);
+  it("lê duracoes.txt (última linha vale; lixo é ignorado)", () => {
+    const m = dur(
+      "2026-10-21 09:05:00 | Ligação: aaa | Duração: 143 s\nlixo\n2026-10-21 09:06:00 | Ligação: bbb | Duração: 60 s\n2026-10-21 09:07:00 | Ligação: aaa | Duração: 150 s\r\n",
+    );
+    expect(m.get("aaa")).toBe(150);
+    expect(m.get("bbb")).toBe(60);
+    expect(m.size).toBe(2);
+  });
+  it("média só das transferências sem callback que têm duração; callback e ligações sem duração ficam de fora", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1" }) + // 120 s
+      bloco({ ts: "2026-10-21 10:00:00", func: A, lig: "L2" }) + // 240 s
+      bloco({ ts: "2026-10-21 11:00:00", func: A, lig: "L3" }) + // callback (tem duração registrada por engano: ignorada)
+      bloco({ ts: "2026-10-21 11:01:00", func: A, lig: "L3", cb: true }) +
+      bloco({ ts: "2026-10-21 12:00:00", func: A, lig: "L4" }) + // sem duração (registro antigo)
+      bloco({ ts: "2026-10-21 13:00:00", func: B2, lig: "L5" }); // 30 s
+    const duracoes = new Map([
+      ["L1", 120],
+      ["L2", 240],
+      ["L3", 999],
+      ["L5", 30],
+    ]);
+    const d = montarLigacoes(lerRegistro(txt, "transferencia"), duracoes);
+    const linhas = resumir(d, periodoNomeado("hoje", AGORA) as never);
+    const a = linhas.find((x) => x.funcionario === A);
+    expect(a).toMatchObject({
+      comCallback: 4,
+      callbacks: 1,
+      semCallback: 3,
+      comDuracao: 2,
+      mediaSeg: 180,
+    });
+    expect(linhas.find((x) => x.funcionario === B2)).toMatchObject({ mediaSeg: 30, comDuracao: 1 });
+    expect(totalDe(linhas)).toMatchObject({ comDuracao: 3, mediaSeg: 130 });
+  });
+  it("sem nenhuma duração registrada: média nula (a página mostra um traço)", () => {
+    const d = montarLigacoes(
+      lerRegistro(bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1" }), "transferencia"),
+    );
+    expect(resumir(d, periodoNomeado("hoje", AGORA) as never)[0]?.mediaSeg).toBeNull();
+  });
+  it("o registro grava a duração e o relatório lê de volta pelo mesmo código da ligação", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "rel-"));
+    const reg = new RegistroEmArquivo(pasta, undefined, () => new Date(2026, 9, 21, 9, 5, 0));
+    const lig = idDaLigacao("v7");
+    reg.registrar({
+      tipo: "transferencia",
+      estado: "enviada",
+      texto: "NAME: X",
+      funcionario: A,
+      cliente: "1",
+      ligacao: lig,
+    });
+    reg.registrarDuracao({ ligacao: lig, duracaoSeg: 143.4 });
+    const m = lerDuracoes(readFileSync(join(pasta, "duracoes.txt"), "utf8"));
+    expect(m.get(lig)).toBe(143);
+    const d = montarLigacoes(
+      lerRegistro(
+        readFileSync(join(pasta, "transferencias-concluidas.txt"), "utf8"),
+        "transferencia",
+      ),
+      m,
+    );
+    expect(d.ligacoes[0]?.duracaoSeg).toBe(143);
   });
 });

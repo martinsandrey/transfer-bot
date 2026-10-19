@@ -1,3 +1,4 @@
+import { idDaLigacao } from "./util/id-ligacao.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
@@ -126,6 +127,10 @@ async function principal(): Promise<void> {
   process.on("SIGINT", encerrar);
   rl.on("SIGINT", encerrar);
 
+  // O registro em arquivo é criado mais abaixo; o rastreador chama este gancho quando uma ligação atendida termina.
+  const ganchos: {
+    encerrada?: (i: { vinculo: string; duracaoSeg: number }) => void;
+  } = {};
   const tracker = new CallTracker({
     leiturasConfirmacao: cfg.monitor.leiturasConfirmacao,
     ausenciaMaxLeituras: cfg.monitor.ausenciaMaxLeituras,
@@ -133,6 +138,7 @@ async function principal(): Promise<void> {
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
     esperaCallbackMs: cfg.monitor.callbackEsperaMs,
     duracaoCallbackSeg: cfg.monitor.callbackDuracaoSeg,
+    aoEncerrarLigacao: (i) => ganchos.encerrada?.(i),
     // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
     ...(!simulado && cfg.telegram.destinoLonga
       ? { duracaoLongaSeg: cfg.duracaoLongaMin * 60 }
@@ -220,7 +226,11 @@ async function principal(): Promise<void> {
         ),
       )
     : undefined;
-  if (registro) console.log(`Registro das mensagens em: ${cfg.pastaRegistros}`);
+  if (registro) {
+    console.log(`Registro das mensagens em: ${cfg.pastaRegistros}`);
+    ganchos.encerrada = (i) =>
+      registro.registrarDuracao({ ligacao: idDaLigacao(i.vinculo), duracaoSeg: i.duracaoSeg });
+  }
   let sender: MessageSender = new EnviadorConsole();
   let senderLonga: MessageSender | undefined;
   let clienteTg: ClienteGramJS | undefined;

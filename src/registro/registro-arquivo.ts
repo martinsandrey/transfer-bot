@@ -25,6 +25,9 @@ export const NOME_ARQUIVO: Record<TipoRegistro, string> = {
   callback: "transferencias-concluidas.txt", // o CALLBACK fica junto das transferências, marcado
 };
 
+/** Durações das ligações transferidas e atendidas (uma linha por ligação), para a duração média do relatório. */
+export const ARQUIVO_DURACOES = "duracoes.txt";
+
 /**
  * Registro em arquivo de texto das mensagens (pedido do usuário em 2026-10-17): um .txt para transferências concluídas e outro
  * para ligações de 5 minutos, só ACRESCENTANDO ao fim (UTF-8). O texto contém dados de clientes: a pasta é ignorada pelo git
@@ -37,6 +40,29 @@ export class RegistroEmArquivo {
     private readonly aoFalhar: (e: unknown) => void = () => undefined,
     private readonly agora: () => Date = () => new Date(),
   ) {}
+
+  /** Uma linha: quando terminou, código da ligação (o mesmo do cabeçalho das mensagens) e a duração em segundos. */
+  registrarDuracao(r: { ligacao: string; duracaoSeg: number }): void {
+    try {
+      mkdirSync(this.pasta, { recursive: true });
+      appendFileSync(
+        join(this.pasta, ARQUIVO_DURACOES),
+        `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s\n`,
+        { encoding: "utf8" },
+      );
+    } catch (e) {
+      if (!this.avisou) {
+        this.avisou = true;
+        this.aoFalhar(e);
+      }
+    }
+  }
+
+  private carimbo(): string {
+    const d = this.agora();
+    const dois = (n: number): string => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${dois(d.getMonth() + 1)}-${dois(d.getDate())} ${dois(d.getHours())}:${dois(d.getMinutes())}:${dois(d.getSeconds())}`;
+  }
 
   registrar(r: RegistroDeMensagem): void {
     try {

@@ -45,6 +45,7 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
 4. **Sem banco/histórico estruturado de transferências**: proibido SQLite/JSON de histórico; o estado fica em memória e o Telegram é o histórico.
    **Exceção autorizada pelo usuário (2026-10-17):** dois arquivos de texto (`registros/transferencias-concluidas.txt` e `registros/ligacoes-5min.txt`,
    só acrescentando) com os textos das mensagens enviadas; a pasta é ignorada pelo git, configurável (`PASTA_REGISTROS`) e desligável (`REGISTRAR_MENSAGENS=false`).
+   **Segunda exceção (pedido do usuário, 2026-10-19):** `registros/duracoes.txt` (só acrescentando; uma linha por ligação atendida com código da ligação e duração em segundos) para a duração média do relatório, e `registros/relatorios/relatorio.html` (gerado, descartável).
    Persistência local permitida: sessão (perfil do navegador, sessão do Telegram), configuração e esses registros.
 5. **Segredos/PII**: nada de senha, token, api_hash, telefone ou dados de cliente no código, testes, commits ou logs.
    `.env` ignorado pelo git; `.env.example` só com placeholders. Códigos 2FA/Telegram digitados no console, nunca gravados.

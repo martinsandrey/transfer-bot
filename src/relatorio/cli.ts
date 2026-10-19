@@ -5,6 +5,8 @@ import { parseEnv } from "node:util";
 import { paginaHtml } from "./pagina.js";
 import {
   ARQUIVOS_DO_RELATORIO,
+  ARQUIVO_DURACOES,
+  lerDuracoes,
   lerRegistro,
   montarLigacoes,
   NOMES_DE_PERIODO,
@@ -101,7 +103,11 @@ function principal(): void {
     );
     return;
   }
-  const { ligacoes, longas } = montarLigacoes(entradas);
+  const arquivoDuracoes = join(pasta, ARQUIVO_DURACOES);
+  const duracoes = existsSync(arquivoDuracoes)
+    ? lerDuracoes(readFileSync(arquivoDuracoes, "utf8"))
+    : new Map<string, number>();
+  const { ligacoes, longas } = montarLigacoes(entradas, duracoes);
   const dir = join(pasta, "relatorios");
   mkdirSync(dir, { recursive: true });
   const arquivo = join(dir, "relatorio.html");

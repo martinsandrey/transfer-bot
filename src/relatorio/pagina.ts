@@ -30,6 +30,7 @@ export function paginaHtml(d: DadosDaPagina): string {
       r: l.resultado === "callback" ? "c" : "a",
       o: l.observacao ? 1 : 0,
       s: l.semTransferencia ? 1 : 0,
+      d: l.duracaoSeg,
     })),
     longas: d.longas.map((l) => ({
       t: l.quando.getTime(),
@@ -135,6 +136,7 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
         <th>Transferências sem callback</th>
         <th>Callbacks</th>
         <th>% de callback</th>
+        <th>Duração média (sem callback)</th>
         <th>Ligações de 5 min</th>
       </tr></thead>
       <tbody></tbody><tfoot></tfoot>
@@ -142,6 +144,7 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
+      <li><b>Duração média</b>: média do tempo das transferências atendidas e sem callback (só entram as que têm a duração registrada).</li>
       <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco.</li>
     </ul>
     <div class="acoes">
@@ -153,7 +156,7 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
   <section class="painel">
     <h2>Ligações do período</h2>
     <div class="rolagem"><table id="detalhe">
-      <thead><tr><th>Data e hora</th><th>Funcionário</th><th>Cliente</th><th>Resultado</th></tr></thead>
+      <thead><tr><th>Data e hora</th><th>Funcionário</th><th>Cliente</th><th>Resultado</th><th>Duração</th></tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
@@ -191,11 +194,11 @@ const dentro = (t, o, iv) => (estado.obs || !o) && !(iv.de && t < iv.de.getTime(
 
 function resumo(iv) {
   const por = new Map();
-  const lin = (f) => { if (!por.has(f)) por.set(f, { f, total: 0, sem: 0, cb: 0, lg: 0 }); return por.get(f); };
+  const lin = (f) => { if (!por.has(f)) por.set(f, { f, total: 0, sem: 0, cb: 0, lg: 0, ds: 0, nd: 0 }); return por.get(f); };
   const lista = [];
   for (const c of D.ligacoes) {
     if (!dentro(c.t, c.o, iv)) continue;
-    const l = lin(c.f); l.total++; if (c.r === "c") l.cb++; else l.sem++;
+    const l = lin(c.f); l.total++; if (c.r === "c") l.cb++; else { l.sem++; if (c.d !== null && c.d !== undefined) { l.ds += c.d; l.nd++; } }
     lista.push(c);
   }
   for (const c of D.longas) if (dentro(c.t, c.o, iv)) lin(c.f).lg++;
@@ -203,6 +206,8 @@ function resumo(iv) {
   return { linhas, lista: lista.sort((a, b) => b.t - a.t) };
 }
 
+const durTxt = (seg) => { if (seg === null || seg === undefined || isNaN(seg)) return "—"; const s = Math.round(seg); return s < 60 ? s + " s" : Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s"; };
+const media = (l) => (l.nd ? l.ds / l.nd : null);
 const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
 const pctTxt = (a, b) => (b ? String(pct(a, b)).replace(".", ",") + "%" : "—");
 const el = (tag, txt, cls) => { const e = document.createElement(tag); if (txt !== undefined) e.textContent = txt; if (cls) e.className = cls; return e; };
@@ -217,30 +222,31 @@ function desenhar() {
   const iv = intervalo();
   $("periodo").textContent = iv.rot;
   const { linhas, lista } = iv.invalido ? { linhas: [], lista: [] } : resumo(iv);
-  const T = linhas.reduce((t, l) => ({ total: t.total + l.total, sem: t.sem + l.sem, cb: t.cb + l.cb, lg: t.lg + l.lg }), { total: 0, sem: 0, cb: 0, lg: 0 });
+  const T = linhas.reduce((t, l) => ({ total: t.total + l.total, sem: t.sem + l.sem, cb: t.cb + l.cb, lg: t.lg + l.lg, ds: t.ds + l.ds, nd: t.nd + l.nd }), { total: 0, sem: 0, cb: 0, lg: 0, ds: 0, nd: 0 });
 
   const cs = $("cartoes"); cs.replaceChildren(
     cartao("Transferências", T.total, "com e sem callback"),
     cartao("Sem callback", T.sem, "atendidas e longas o bastante", "ok"),
     cartao("Callbacks", T.cb, "sem atendimento ou muito curtas", "alerta"),
     cartao("Taxa de callback", pctTxt(T.cb, T.total), "callbacks ÷ transferências"),
+    cartao("Duração média", durTxt(media(T)), T.nd ? "de " + T.nd + " transferência" + (T.nd > 1 ? "s" : "") + " sem callback" : "sem duração registrada"),
     cartao("Ligações de 5 min", T.lg, "ainda no Stage 1"),
   );
 
   const tb = $("tabela").tBodies[0]; tb.replaceChildren();
-  if (!linhas.length) { const tr = el("tr"); const td = el("td", "Nenhuma mensagem registrada neste período.", "vazio"); td.colSpan = 6; tr.append(td); tb.append(tr); }
+  if (!linhas.length) { const tr = el("tr"); const td = el("td", "Nenhuma mensagem registrada neste período.", "vazio"); td.colSpan = 7; tr.append(td); tb.append(tr); }
   for (const l of linhas) {
     const tr = el("tr");
     const pc = el("td", pctTxt(l.cb, l.total)); const b = el("span", undefined, "barra"); const i = el("i"); i.style.width = pct(l.cb, l.total) + "%"; b.append(i); pc.append(b);
-    tr.append(el("td", l.f), el("td", String(l.total)), el("td", String(l.sem)), el("td", String(l.cb)), pc, el("td", String(l.lg)));
+    tr.append(el("td", l.f), el("td", String(l.total)), el("td", String(l.sem)), el("td", String(l.cb)), pc, el("td", durTxt(media(l))), el("td", String(l.lg)));
     tb.append(tr);
   }
   const tf = $("tabela").tFoot; tf.replaceChildren();
-  const trT = el("tr"); trT.append(el("td", "TOTAL"), el("td", String(T.total)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.total)), el("td", String(T.lg)));
+  const trT = el("tr"); trT.append(el("td", "TOTAL"), el("td", String(T.total)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.total)), el("td", durTxt(media(T))), el("td", String(T.lg)));
   tf.append(trT);
 
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
-  if (!lista.length) { const tr = el("tr"); const td = el("td", "Nenhuma ligação transferida neste período.", "vazio"); td.colSpan = 4; tr.append(td); db.append(tr); }
+  if (!lista.length) { const tr = el("tr"); const td = el("td", "Nenhuma ligação transferida neste período.", "vazio"); td.colSpan = 5; tr.append(td); db.append(tr); }
   for (const c of lista) {
     const tr = el("tr");
     const quando = new Date(c.t);
@@ -249,7 +255,7 @@ function desenhar() {
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
     const q = el("td", quando.toLocaleString("pt-BR"), "det-esq");
-    tr.append(q, Object.assign(el("td", c.f), { className: "det-esq" }), Object.assign(el("td", c.c || "—"), { className: "det-esq" }), r);
+    tr.append(q, Object.assign(el("td", c.f), { className: "det-esq" }), Object.assign(el("td", c.c || "—"), { className: "det-esq" }), r, el("td", c.r === "c" ? "—" : durTxt(c.d)));
     db.append(tr);
   }
   window.__relatorio = { linhas, total: T, periodo: iv.rot };
@@ -272,8 +278,8 @@ $("ate").addEventListener("input", () => { estado.ate = $("ate").value; sincroni
 $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desenhar(); });
 $("csv").addEventListener("click", () => {
   const { linhas, total } = window.__relatorio;
-  const cab = ["Funcionário (Callback Number)", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Ligações de 5 min"];
-  const l = (x, nome) => [nome || x.f, x.total, x.sem, x.cb, pctTxt(x.cb, x.total), x.lg];
+  const cab = ["Funcionário (Callback Number)", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Duração média (min)", "Ligações de 5 min"];
+  const l = (x, nome) => [nome || x.f, x.total, x.sem, x.cb, pctTxt(x.cb, x.total), media(x) === null ? "" : (Math.round((media(x) / 60) * 100) / 100).toString().replace(".", ","), x.lg];
   const linhasCsv = [cab, ...linhas.map((x) => l(x)), l(total, "TOTAL")];
   const esc = (v) => { v = String(v); return /[;"\\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const blob = new Blob(["\\uFEFF" + linhasCsv.map((r) => r.map(esc).join(";")).join("\\r\\n") + "\\r\\n"], { type: "text/csv;charset=utf-8" });

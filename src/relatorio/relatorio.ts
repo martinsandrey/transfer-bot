@@ -1,4 +1,4 @@
-import { NOME_ARQUIVO } from "../registro/registro-arquivo.js";
+import { ARQUIVO_DURACOES, NOME_ARQUIVO } from "../registro/registro-arquivo.js";
 
 /**
  * Relatório por funcionário, calculado a partir dos .txt de registro (nenhum histórico estruturado é criado).
@@ -65,6 +65,16 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
   return saida;
 }
 
+/** Lê `duracoes.txt`: código da ligação → duração em segundos (se houver repetição, vale a última). */
+export function lerDuracoes(texto: string): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const linha of texto.replace(/\r\n?/g, "\n").split("\n")) {
+    const m = /\|\s*Ligação:\s*(\S+)\s*\|\s*Duração:\s*(\d+)\s*s/.exec(linha);
+    if (m) mapa.set(m[1] as string, Number(m[2]));
+  }
+  return mapa;
+}
+
 export interface Ligacao {
   /** Momento da transferência (para CALLBACK sem transferência registrada: o momento do CALLBACK). */
   quando: Date;
@@ -76,6 +86,8 @@ export interface Ligacao {
   observacao: boolean;
   /** O CALLBACK não tem a transferência correspondente no registro. */
   semTransferencia: boolean;
+  /** Duração (s) da ligação atendida no Stage 3; `null` se não foi registrada (ligações antigas) ou se foi CALLBACK. */
+  duracaoSeg: number | null;
 }
 
 export interface LigacaoLonga {
@@ -86,7 +98,10 @@ export interface LigacaoLonga {
 }
 
 /** Liga cada CALLBACK à transferência da mesma ligação e devolve as ligações transferidas e as de 5 min. */
-export function montarLigacoes(entradas: readonly Entrada[]): {
+export function montarLigacoes(
+  entradas: readonly Entrada[],
+  duracoes: ReadonlyMap<string, number> = new Map(),
+): {
   ligacoes: Ligacao[];
   longas: LigacaoLonga[];
 } {
@@ -139,6 +154,7 @@ export function montarLigacoes(entradas: readonly Entrada[]): {
       resultado: comCallback.has(t) ? "callback" : "atendida",
       observacao: !t.enviada,
       semTransferencia: false,
+      duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
     })),
     ...orfaos.map((c): Ligacao => ({
       quando: c.quando,
@@ -147,6 +163,7 @@ export function montarLigacoes(entradas: readonly Entrada[]): {
       resultado: "callback",
       observacao: !c.enviada,
       semTransferencia: true,
+      duracaoSeg: null,
     })),
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
 
@@ -232,6 +249,10 @@ export interface LinhaRelatorio {
   /** Transferências em que ninguém atendeu. */
   callbacks: number;
   longas: number;
+  /** Duração média (s) das transferências SEM callback que têm duração registrada; `null` se nenhuma. */
+  mediaSeg: number | null;
+  /** Quantas transferências sem callback entraram na média. */
+  comDuracao: number;
 }
 
 export function resumir(
@@ -247,16 +268,36 @@ export function resumir(
   const linha = (f: string): LinhaRelatorio => {
     let l = por.get(f);
     if (!l)
-      por.set(f, (l = { funcionario: f, comCallback: 0, semCallback: 0, callbacks: 0, longas: 0 }));
+      por.set(
+        f,
+        (l = {
+          funcionario: f,
+          comCallback: 0,
+          semCallback: 0,
+          callbacks: 0,
+          longas: 0,
+          mediaSeg: null,
+          comDuracao: 0,
+        }),
+      );
     return l;
   };
+  const somas = new Map<string, number>();
   for (const c of dados.ligacoes) {
     if (!dentro(c.quando, c.observacao)) continue;
     const l = linha(c.funcionario);
     l.comCallback++;
     if (c.resultado === "callback") l.callbacks++;
-    else l.semCallback++;
+    else {
+      l.semCallback++;
+      if (c.duracaoSeg !== null) {
+        l.comDuracao++;
+        somas.set(c.funcionario, (somas.get(c.funcionario) ?? 0) + c.duracaoSeg);
+      }
+    }
   }
+  for (const l of por.values())
+    l.mediaSeg = l.comDuracao > 0 ? (somas.get(l.funcionario) ?? 0) / l.comDuracao : null;
   for (const c of dados.longas) if (dentro(c.quando, c.observacao)) linha(c.funcionario).longas++;
   return [...por.values()].sort(
     (a, b) => b.comCallback - a.comCallback || a.funcionario.localeCompare(b.funcionario),
@@ -270,13 +311,19 @@ export function totalDe(linhas: readonly LinhaRelatorio[]): LinhaRelatorio {
     semCallback: 0,
     callbacks: 0,
     longas: 0,
+    mediaSeg: null,
+    comDuracao: 0,
   };
+  let soma = 0;
   for (const l of linhas) {
+    soma += (l.mediaSeg ?? 0) * l.comDuracao;
+    t.comDuracao += l.comDuracao;
     t.comCallback += l.comCallback;
     t.semCallback += l.semCallback;
     t.callbacks += l.callbacks;
     t.longas += l.longas;
   }
+  t.mediaSeg = t.comDuracao > 0 ? soma / t.comDuracao : null;
   return t;
 }
 
@@ -287,3 +334,5 @@ export const ARQUIVOS_DO_RELATORIO: ReadonlyArray<{
   { arquivo: NOME_ARQUIVO.transferencia, padrao: "transferencia" },
   { arquivo: NOME_ARQUIVO.longa, padrao: "longa" },
 ];
+
+export { ARQUIVO_DURACOES };
