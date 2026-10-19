@@ -46,6 +46,7 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
    **Exceção autorizada pelo usuário (2026-10-17):** dois arquivos de texto (`registros/transferencias-concluidas.txt` e `registros/ligacoes-5min.txt`,
    só acrescentando) com os textos das mensagens enviadas; a pasta é ignorada pelo git, configurável (`PASTA_REGISTROS`) e desligável (`REGISTRAR_MENSAGENS=false`).
    **Segunda exceção (pedido do usuário, 2026-10-19):** `registros/duracoes.txt` (só acrescentando; uma linha por ligação atendida com código da ligação e duração em segundos) para a duração média do relatório, e `registros/relatorios/relatorio.html` (gerado, descartável).
+   **Terceira exceção (pedido do usuário, 2026-10-19):** `registros/sem-mensagem.txt` (só acrescentando; só linhas-cabeçalho, sem texto de cliente) com as transferências/CALLBACKs/ligações de 5 min de funcionários que o filtro do `.env` impede de enviar (ex.: equipe do paquistanês), para o relatório comparar equipes e calcular quantas ligações de 5 min viraram transferência.
    Persistência local permitida: sessão (perfil do navegador, sessão do Telegram), configuração e esses registros.
 5. **Segredos/PII**: nada de senha, token, api_hash, telefone ou dados de cliente no código, testes, commits ou logs.
    `.env` ignorado pelo git; `.env.example` só com placeholders. Códigos 2FA/Telegram digitados no console, nunca gravados.

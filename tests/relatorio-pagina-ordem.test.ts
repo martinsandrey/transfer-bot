@@ -8,6 +8,7 @@ import type { Ligacao } from "../src/relatorio/relatorio.js";
 import { CHROMIUM_DE_TESTE, navegadorDeTeste } from "./helpers/navegador-teste.js";
 import type { Page } from "playwright";
 
+const R = (n: string): string => `${n} (sem apelido)`;
 const hoje = new Date();
 const em = (min: number): Date =>
   new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), 0, 0, 5 + min * 60);
@@ -97,52 +98,52 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
     });
 
     it("padrão: por funcionário = mais transferências primeiro; ligações = mais recentes primeiro", async () => {
-      expect(await col("tabela", 1)).toEqual(["908114", "908113", "908111"]);
+      expect(await col("tabela", 1)).toEqual([R("908114"), R("908113"), R("908111")]);
       expect(await sentido("tabela", "Transferências com callback")).toBe("descending");
-      expect((await col("detalhe", 2))[0]).toBe("908113"); // a de 6 min é a mais recente
+      expect((await col("detalhe", 2))[0]).toBe(R("908113")); // a de 6 min é a mais recente
       expect(await sentido("detalhe", "Data e hora")).toBe("descending");
     });
 
     it("clicar em Funcionário ordena de A a Z e clicar de novo inverte (TOTAL fica no rodapé)", async () => {
       await clicar("tabela", "Funcionário");
-      expect(await col("tabela", 1)).toEqual(["908111", "908113", "908114"]);
+      expect(await col("tabela", 1)).toEqual([R("908111"), R("908113"), R("908114")]);
       expect(await sentido("tabela", "Funcionário")).toBe("ascending");
       await clicar("tabela", "Funcionário");
-      expect(await col("tabela", 1)).toEqual(["908114", "908113", "908111"]);
+      expect(await col("tabela", 1)).toEqual([R("908114"), R("908113"), R("908111")]);
       expect(await sentido("tabela", "Funcionário")).toBe("descending");
       expect(await pagina.locator("#tabela tfoot td").first().innerText()).toBe("TOTAL");
     });
 
     it("colunas numéricas: 1º clique = maior primeiro; 2º = menor primeiro", async () => {
       await clicar("tabela", "Callbacks");
-      expect((await col("tabela", 4))[0]).toBe("1");
-      expect((await col("tabela", 4)).map(Number)).toEqual(
-        [...(await col("tabela", 4)).map(Number)].sort((a, b) => b - a),
+      expect((await col("tabela", 5))[0]).toBe("1");
+      expect((await col("tabela", 5)).map(Number)).toEqual(
+        [...(await col("tabela", 5)).map(Number)].sort((a, b) => b - a),
       );
       await clicar("tabela", "Callbacks");
-      expect((await col("tabela", 4)).map(Number)).toEqual(
-        [...(await col("tabela", 4)).map(Number)].sort((a, b) => a - b),
+      expect((await col("tabela", 5)).map(Number)).toEqual(
+        [...(await col("tabela", 5)).map(Number)].sort((a, b) => a - b),
       );
     });
 
     it("duração média: quem não tem duração fica sempre por último, nos dois sentidos", async () => {
       await clicar("tabela", "Duração média");
-      expect((await col("tabela", 6))[0]).toBe("3 min 30 s"); // (120 + 300) / 2 do 908114
-      expect((await col("tabela", 6)).slice(1)).toEqual(["—", "—"]);
+      expect((await col("tabela", 7))[0]).toBe("3 min 30 s"); // (120 + 300) / 2 do 908114
+      expect((await col("tabela", 7)).slice(1)).toEqual(["—", "—"]);
       await clicar("tabela", "Duração média");
-      expect((await col("tabela", 6))[0]).toBe("3 min 30 s"); // o único com valor continua na frente
+      expect((await col("tabela", 7))[0]).toBe("3 min 30 s"); // o único com valor continua na frente
     });
 
     it("a lista ligação a ligação ordena por funcionário, cliente, resultado, duração e hora — sem afetar a outra tabela", async () => {
       const antes = await col("tabela", 1);
       await clicar("detalhe", "Funcionário");
       expect(await col("detalhe", 2)).toEqual([
-        "908111",
-        "908113",
-        "908113",
-        "908114",
-        "908114",
-        "908114",
+        R("908111"),
+        R("908113"),
+        R("908113"),
+        R("908114"),
+        R("908114"),
+        R("908114"),
       ]);
       await clicar("detalhe", "Cliente");
       expect(await col("detalhe", 3)).toEqual(["0111", "0222", "0333", "0444", "0555", "0666"]);
@@ -176,7 +177,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       expect(await sentido("tabela", "Funcionário")).toBe("descending");
       await pagina.click('button[data-p="tudo"]');
       expect(await sentido("tabela", "Funcionário")).toBe("descending");
-      expect(await col("tabela", 1)).toEqual(["908114", "908113", "908111"]);
+      expect(await col("tabela", 1)).toEqual([R("908114"), R("908113"), R("908111")]);
     });
   },
 );

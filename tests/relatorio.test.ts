@@ -240,7 +240,9 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
       arquivo,
       paginaHtml({
         geradoEm: agora,
-        longas: [{ quando: h(1), funcionario: A, cliente: "9", observacao: false }],
+        longas: [
+          { quando: h(1), funcionario: A, cliente: "9", observacao: false, transferida: null },
+        ],
         ligacoes: [
           {
             quando: h(1),

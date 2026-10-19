@@ -6,6 +6,10 @@ export interface DadosDaPagina {
   longas: readonly LigacaoLonga[];
   /** Filtro que a página mostra ao abrir: um dos nomes de período, ou `personalizado` com `de`/`ate` (AAAA-MM-DD). */
   inicial: { periodo: string; de?: string; ate?: string };
+  /** Apelidos (número só com dígitos → nome). O apelido sempre aparece junto do número. */
+  apelidos?: ReadonlyMap<string, string>;
+  /** Penúltimos dígitos da equipe do paquistanês (a caixa "Mostrar equipe do paquistanês" usa isto). */
+  equipePaquistanesDigitos?: readonly string[];
 }
 
 /** JSON seguro para ficar dentro de um <script> (nunca fecha a tag nem quebra a linha). */
@@ -17,7 +21,7 @@ function jsonSeguro(v: unknown): string {
 }
 
 /**
- * Página HTML autônoma (sem internet, sem bibliotecas): os filtros de período funcionam dentro da própria página.
+ * Página HTML autônoma (sem internet, sem bibliotecas): filtros de período, equipe e ordenação funcionam dentro da própria página.
  * Os dados (telefones de clientes) ficam só no arquivo local, que fica na pasta de registros (ignorada pelo git).
  */
 export function paginaHtml(d: DadosDaPagina): string {
@@ -37,10 +41,13 @@ export function paginaHtml(d: DadosDaPagina): string {
       f: l.funcionario,
       c: l.cliente,
       o: l.observacao ? 1 : 0,
+      x: l.transferida === null ? null : l.transferida ? 1 : 0,
     })),
+    ap: Object.fromEntries(d.apelidos ?? []),
+    pk: [...(d.equipePaquistanesDigitos ?? ["0"])],
     inicial: d.inicial,
   };
-  return PAGINA.replace("/*DADOS*/null", jsonSeguro(dados));
+  return PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados));
 }
 
 const PAGINA = `<!doctype html>
@@ -105,6 +112,19 @@ tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--linha)}
 .explica{color:var(--suave);font-size:13px;margin-top:6px}
 .explica li{margin:2px 0}
 footer{color:var(--suave);font-size:12px;margin-top:22px}
+.chk{display:flex;gap:8px;align-items:center;margin-top:12px;color:var(--texto)}
+.chk.suave{color:var(--suave)}
+h3{font-size:15px;margin:18px 0 8px}
+.dif{color:var(--suave)}
+.equipe{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--linha);color:var(--suave)}
+.horas{display:grid;grid-template-columns:48px 1fr 1fr;gap:4px 12px;align-items:center;font-variant-numeric:tabular-nums;font-size:13px}
+.horas .cab{color:var(--suave);font-weight:600}
+.horas .h{color:var(--suave)}
+.horas .meio{border-top:2px dashed var(--marca);padding-top:6px}
+.bar{display:flex;align-items:center;gap:8px;min-height:18px}
+.bar i{display:block;height:12px;border-radius:4px;min-width:2px}
+.bar.a i{background:var(--alerta)} .bar.b i{background:var(--ok)}
+.leg{display:flex;gap:16px;color:var(--suave);font-size:12px;margin:0 0 8px}
 @media print{ .filtros,.datas,.opc,.acoes{display:none} body{background:#fff} }
 </style>
 </head>
@@ -127,18 +147,20 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
       <label>De <input type="date" id="de"></label>
       <label>até <input type="date" id="ate"></label>
     </div>
-    <label class="opc"><input type="checkbox" id="obs"> Incluir também as prévias do modo observação (nada foi enviado)</label>
+    <label class="chk"><input type="checkbox" id="pk" checked> Mostrar equipe do paquistanês</label>
+    <label class="chk suave"><input type="checkbox" id="obs"> Incluir também as prévias do modo observação (nada foi enviado)</label>
   </section>
 
   <p class="periodo" id="periodo"></p>
   <section class="cartoes" id="cartoes"></section>
 
   <section class="painel">
-    <h2>Por funcionário</h2>
+    <h2>Transferências por funcionário</h2>
     <div class="rolagem"><table id="tabela">
       <thead><tr>
-        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário (Callback Number)</button></th>
-        <th data-k="total"><button type="button">Transferências com callback</button></th>
+        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
+        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
+        <th data-k="tr"><button type="button">Transferências com callback</button></th>
         <th data-k="sem"><button type="button">Transferências sem callback</button></th>
         <th data-k="cb"><button type="button">Callbacks</button></th>
         <th data-k="pc"><button type="button">% de callback</button></th>
@@ -150,13 +172,56 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
-      <li><b>Duração média</b>: média do tempo das transferências atendidas e sem callback (só entram as que têm a duração registrada).</li>
       <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco.</li>
+      <li><b>Duração média</b>: média do tempo das transferências atendidas e sem callback (só entram as que têm a duração registrada).</li>
     </ul>
     <div class="acoes">
       <button class="acao" id="csv">Baixar planilha (CSV)</button>
       <button class="acao" onclick="window.print()">Imprimir</button>
     </div>
+  </section>
+
+  <section class="painel">
+    <h2>Ligações de 5 minutos: viraram transferência?</h2>
+    <div class="rolagem"><table id="longas">
+      <thead><tr>
+        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
+        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
+        <th data-k="lg"><button type="button">Ligações de 5 min</button></th>
+        <th data-k="lgTr"><button type="button">Transferidas</button></th>
+        <th data-k="pTr"><button type="button">% transferidas</button></th>
+        <th data-k="lgNao"><button type="button">Não transferidas</button></th>
+        <th data-k="pNao"><button type="button">% não transferidas</button></th>
+      </tr></thead>
+      <tbody></tbody><tfoot></tfoot>
+    </table></div>
+    <p class="explica" id="nota-longas"></p>
+  </section>
+
+  <section class="painel">
+    <h2>Antes e depois do meio-dia (horário de Brasília)</h2>
+    <p class="explica">Antes do meio-dia = das 00h00 às 11h59; depois = a partir das 12h00. Se os dois períodos não tiveram o mesmo movimento, compare as taxas (%), não só as quantidades.</p>
+    <div class="rolagem"><table id="comparacao">
+      <thead><tr><th class="esq">Indicador</th><th>Antes do meio-dia</th><th>Depois do meio-dia</th><th>Diferença (depois − antes)</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+    <h3>Movimento por hora do dia</h3>
+    <div class="leg"><span>&#9632; <span style="color:var(--alerta)">Ligações de 5 min</span></span><span>&#9632; <span style="color:var(--ok)">Transferências</span></span></div>
+    <div class="horas" id="horas"></div>
+    <h3>Por funcionário</h3>
+    <div class="rolagem"><table id="meio">
+      <thead><tr>
+        <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
+        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
+        <th data-k="lgM"><button type="button">5 min antes do meio-dia</button></th>
+        <th data-k="trM"><button type="button">Transferências antes</button></th>
+        <th data-k="cM"><button type="button">% transferidas antes</button></th>
+        <th data-k="lgT"><button type="button">5 min depois do meio-dia</button></th>
+        <th data-k="trT"><button type="button">Transferências depois</button></th>
+        <th data-k="cT"><button type="button">% transferidas depois</button></th>
+      </tr></thead>
+      <tbody></tbody>
+    </table></div>
   </section>
 
   <section class="painel">
@@ -173,14 +238,25 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
     </table></div>
   </section>
 
-  <footer>Gerado a partir dos registros em texto do programa. Os horários são os do computador onde o programa roda.</footer>
+  <footer>Gerado a partir dos registros em texto do programa. Os horários da lista são os do computador onde o programa roda; a divisão do meio-dia usa o horário de Brasília.</footer>
 </main>
 <script>
 "use strict";
 const D = /*DADOS*/null;
 const $ = (id) => document.getElementById(id);
-const estado = { p: "hoje", de: "", ate: "", obs: false };
+const estado = { p: "hoje", de: "", ate: "", obs: false, pk: true };
 
+/* ---- funcionários: apelido sempre junto do número; equipe pelo penúltimo dígito ---- */
+const PK = new Set(D.pk);
+const dig = (f) => String(f).replace(/\\D+/g, "");
+const penult = (f) => { const d = dig(f); return d.length >= 2 ? d.charAt(d.length - 2) : ""; };
+const ehPk = (f) => PK.has(penult(f));
+const equipeTxt = (f) => (ehPk(f) ? "Paquistanês" : "Própria");
+const rotulo = (f) => { if (dig(f) === "") return String(f); const n = D.ap[dig(f)]; return n ? n + " (" + f + ")" : f + " (sem apelido)"; };
+/* Brasília = UTC-3 (sem horário de verão desde 2019) */
+const horaBR = (t) => new Date(t - 3 * 3600000).getUTCHours();
+
+/* ---- datas ---- */
 const dia = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const somar = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const dd = (d) => String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
@@ -202,27 +278,37 @@ function intervalo() {
     }
   }
 }
-const dentro = (t, o, iv) => (estado.obs || !o) && !(iv.de && t < iv.de.getTime()) && !(iv.ate && t >= iv.ate.getTime());
+const dentro = (c, iv) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)) && !(iv.de && c.t < iv.de.getTime()) && !(iv.ate && c.t >= iv.ate.getTime());
 
-function resumo(iv) {
-  const por = new Map();
-  const lin = (f) => { if (!por.has(f)) por.set(f, { f, total: 0, sem: 0, cb: 0, lg: 0, ds: 0, nd: 0 }); return por.get(f); };
-  const lista = [];
-  for (const c of D.ligacoes) {
-    if (!dentro(c.t, c.o, iv)) continue;
-    const l = lin(c.f); l.total++; if (c.r === "c") l.cb++; else { l.sem++; if (c.d !== null && c.d !== undefined) { l.ds += c.d; l.nd++; } }
-    lista.push(c);
-  }
-  for (const c of D.longas) if (dentro(c.t, c.o, iv)) lin(c.f).lg++;
-  const linhas = [...por.values()].sort((a, b) => b.total - a.total || a.f.localeCompare(b.f));
-  return { linhas, lista: lista.sort((a, b) => b.t - a.t) };
+/* ---- agregação ---- */
+function agregar(L, G) {
+  const a = { tr: 0, sem: 0, cb: 0, lg: 0, lgAv: 0, lgTr: 0, ds: 0, nd: 0 };
+  for (const c of L) { a.tr++; if (c.r === "c") a.cb++; else { a.sem++; if (c.d !== null && c.d !== undefined) { a.ds += c.d; a.nd++; } } }
+  for (const g of G) { a.lg++; if (g.x !== null && g.x !== undefined) { a.lgAv++; if (g.x) a.lgTr++; } }
+  return a;
+}
+const media = (a) => (a.nd ? a.ds / a.nd : null);
+const razao = (a, b) => (b ? a / b : null);
+
+function porFuncionario(L, G) {
+  const mapa = new Map();
+  const pega = (f) => { if (!mapa.has(f)) mapa.set(f, { f, L: [], G: [] }); return mapa.get(f); };
+  for (const c of L) pega(c.f).L.push(c);
+  for (const g of G) pega(g.f).G.push(g);
+  return [...mapa.values()].map((x) => ({
+    f: x.f, a: agregar(x.L, x.G),
+    m: agregar(x.L.filter((c) => horaBR(c.t) < 12), x.G.filter((g) => horaBR(g.t) < 12)),
+    t: agregar(x.L.filter((c) => horaBR(c.t) >= 12), x.G.filter((g) => horaBR(g.t) >= 12)),
+  }));
 }
 
+/* ---- formatação ---- */
 const durTxt = (seg) => { if (seg === null || seg === undefined || isNaN(seg)) return "—"; const s = Math.round(seg); return s < 60 ? s + " s" : Math.floor(s / 60) + " min " + String(s % 60).padStart(2, "0") + " s"; };
-const media = (l) => (l.nd ? l.ds / l.nd : null);
-const pct = (a, b) => (b ? Math.round((a / b) * 1000) / 10 : 0);
-const pctTxt = (a, b) => (b ? String(pct(a, b)).replace(".", ",") + "%" : "—");
+const pct1 = (r) => String(Math.round(r * 1000) / 10).replace(".", ",") + "%";
+const pctTxt = (a, b) => (b ? pct1(a / b) : "—");
 const el = (tag, txt, cls) => { const e = document.createElement(tag); if (txt !== undefined) e.textContent = txt; if (cls) e.className = cls; return e; };
+const linhaTr = (...tds) => { const tr = el("tr"); tr.append(...tds); return tr; };
+const vazioTr = (n, msg) => { const td = el("td", msg, "vazio"); td.colSpan = n; return linhaTr(td); };
 
 function cartao(rot, num, nota, cls) {
   const c = el("div", undefined, "cartao" + (cls ? " " + cls : ""));
@@ -230,82 +316,161 @@ function cartao(rot, num, nota, cls) {
   return c;
 }
 
-const ordem = { tabela: { k: "total", dir: -1 }, detalhe: { k: "t", dir: -1 } };
-const txtCmp = (a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+/* ---- ordenação por título ---- */
 const vazio = (x) => x === null || x === undefined || (typeof x === "number" && isNaN(x));
-const chavesTabela = { f: (l) => l.f, total: (l) => l.total, sem: (l) => l.sem, cb: (l) => l.cb, pc: (l) => (l.total ? l.cb / l.total : null), med: (l) => media(l), lg: (l) => l.lg };
-const chavesDetalhe = { t: (c) => c.t, f: (c) => c.f, c: (c) => c.c || "", r: (c) => (c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
+const txtCmp = (a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
+const chavesFunc = {
+  f: (x) => rotulo(x.f), eq: (x) => equipeTxt(x.f),
+  tr: (x) => x.a.tr, sem: (x) => x.a.sem, cb: (x) => x.a.cb, pc: (x) => razao(x.a.cb, x.a.tr), med: (x) => media(x.a), lg: (x) => x.a.lg,
+  lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
+  lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
+};
+const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
+const ORD = {
+  tabela: { k: "tr", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
+  longas: { k: "lg", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
+  meio: { k: "f", dir: 1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
+  detalhe: { k: "t", dir: -1, chaves: chavesDet, desempate: (a, b) => b.t - a.t },
+};
 /** Ordena sem mexer no original; valores vazios ficam sempre no fim, qualquer que seja o sentido. */
-function ordenar(arr, chaves, o, desempate) {
-  const get = chaves[o.k];
+function ordenar(id, arr) {
+  const o = ORD[id], get = o.chaves[o.k];
   return [...arr].sort((a, b) => {
     const x = get(a), y = get(b);
-    if (vazio(x) || vazio(y)) { if (!(vazio(x) && vazio(y))) return vazio(x) ? 1 : -1; return desempate(a, b); }
+    if (vazio(x) || vazio(y)) { if (!(vazio(x) && vazio(y))) return vazio(x) ? 1 : -1; return o.desempate(a, b); }
     const c = typeof x === "string" ? txtCmp(x, y) : x - y;
-    return c !== 0 ? c * o.dir : desempate(a, b);
+    return c !== 0 ? c * o.dir : o.desempate(a, b);
   });
 }
-function marcarOrdem(idTabela, o) {
-  for (const th of $(idTabela).tHead.rows[0].cells) th.setAttribute("aria-sort", th.dataset.k === o.k ? (o.dir === 1 ? "ascending" : "descending") : "none");
+function marcarOrdem(id) {
+  for (const th of $(id).tHead.rows[0].cells) if (th.dataset.k) th.setAttribute("aria-sort", th.dataset.k === ORD[id].k ? (ORD[id].dir === 1 ? "ascending" : "descending") : "none");
 }
-for (const id of ["tabela", "detalhe"]) {
+for (const id of Object.keys(ORD)) {
   $(id).tHead.addEventListener("click", (e) => {
     const th = e.target && e.target.closest ? e.target.closest("th[data-k]") : null; if (!th) return;
-    const o = ordem[id];
+    const o = ORD[id];
     if (o.k === th.dataset.k) o.dir = -o.dir; else { o.k = th.dataset.k; o.dir = th.dataset.tipo === "txt" ? 1 : -1; }
     desenhar();
   });
 }
 
+/* ---- desenho ---- */
+const selaEquipe = (f) => el("span", equipeTxt(f), "equipe");
+function celEquipe(f) { const td = el("td", undefined, "esq"); td.append(selaEquipe(f)); return td; }
+
+function desenharTransferencias(linhas, T) {
+  const tb = $("tabela").tBodies[0]; tb.replaceChildren();
+  if (!linhas.length) tb.append(vazioTr(8, "Nenhuma mensagem registrada neste período."));
+  for (const x of linhas) {
+    const pc = el("td", pctTxt(x.a.cb, x.a.tr)); const b = el("span", undefined, "barra"); const i = el("i"); i.style.width = (x.a.tr ? Math.round((x.a.cb / x.a.tr) * 1000) / 10 : 0) + "%"; b.append(i); pc.append(b);
+    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.a.tr)), el("td", String(x.a.sem)), el("td", String(x.a.cb)), pc, el("td", durTxt(media(x.a))), el("td", String(x.a.lg))));
+  }
+  const tf = $("tabela").tFoot; tf.replaceChildren();
+  tf.append(linhaTr(el("td", "TOTAL", "esq"), el("td", "", "esq"), el("td", String(T.tr)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.tr)), el("td", durTxt(media(T))), el("td", String(T.lg))));
+}
+
+function desenharLongas(linhas, T) {
+  const tb = $("longas").tBodies[0]; tb.replaceChildren();
+  if (!linhas.length) tb.append(vazioTr(7, "Nenhuma ligação de 5 minutos neste período."));
+  for (const x of linhas) {
+    const nao = x.a.lgAv - x.a.lgTr;
+    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.a.lg)), el("td", String(x.a.lgTr)), el("td", pctTxt(x.a.lgTr, x.a.lgAv)), el("td", String(nao)), el("td", pctTxt(nao, x.a.lgAv))));
+  }
+  const tf = $("longas").tFoot; tf.replaceChildren();
+  const naoT = T.lgAv - T.lgTr;
+  tf.append(linhaTr(el("td", "TOTAL", "esq"), el("td", "", "esq"), el("td", String(T.lg)), el("td", String(T.lgTr)), el("td", pctTxt(T.lgTr, T.lgAv)), el("td", String(naoT)), el("td", pctTxt(naoT, T.lgAv))));
+  const semCod = T.lg - T.lgAv;
+  $("nota-longas").textContent = "Uma ligação de 5 min conta como transferida se a mesma ligação foi transferida depois (a transferência pode ter vindo de qualquer equipe)." + (semCod > 0 ? " " + semCod + " ligação(ões) antiga(s), sem o código da ligação no registro, não entram nas porcentagens." : "") + " Quem ainda está na ligação aparece como não transferida até ser transferida.";
+}
+
+function sinal(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
+function desenharMeioDia(L, G, linhas) {
+  const M = agregar(L.filter((c) => horaBR(c.t) < 12), G.filter((g) => horaBR(g.t) < 12));
+  const Tt = agregar(L.filter((c) => horaBR(c.t) >= 12), G.filter((g) => horaBR(g.t) >= 12));
+  const cb = $("comparacao").tBodies[0]; cb.replaceChildren();
+  const linha = (nome, a, b, dif, destaque) => cb.append(linhaTr(el("td", nome, "esq"), el("td", a), el("td", b), el("td", dif, "dif")));
+  const pp = (x, y) => (x === null || y === null ? "—" : sinal(Math.round((y - x) * 1000) / 10).replace(".", ",") + " p.p.");
+  linha("Ligações de 5 min", String(M.lg), String(Tt.lg), sinal(Tt.lg - M.lg));
+  linha("Transferências", String(M.tr), String(Tt.tr), sinal(Tt.tr - M.tr));
+  linha("Callbacks", String(M.cb), String(Tt.cb), sinal(Tt.cb - M.cb));
+  linha("Taxa de callback", pctTxt(M.cb, M.tr), pctTxt(Tt.cb, Tt.tr), pp(razao(M.cb, M.tr), razao(Tt.cb, Tt.tr)));
+  linha("Ligações de 5 min que viraram transferência", M.lgAv ? pct1(M.lgTr / M.lgAv) + " (" + M.lgTr + " de " + M.lgAv + ")" : "—", Tt.lgAv ? pct1(Tt.lgTr / Tt.lgAv) + " (" + Tt.lgTr + " de " + Tt.lgAv + ")" : "—", pp(razao(M.lgTr, M.lgAv), razao(Tt.lgTr, Tt.lgAv)));
+  const dm = media(M), dt = media(Tt);
+  linha("Duração média das transferências sem callback", durTxt(dm), durTxt(dt), dm === null || dt === null ? "—" : (dt - dm > 0 ? "+" : dt - dm < 0 ? "−" : "") + durTxt(Math.abs(dt - dm)));
+
+  // por hora (Brasília)
+  const h5 = new Array(24).fill(0), hT = new Array(24).fill(0);
+  for (const g of G) h5[horaBR(g.t)]++;
+  for (const c of L) hT[horaBR(c.t)]++;
+  const horas = []; for (let h = 0; h < 24; h++) if (h5[h] || hT[h]) horas.push(h);
+  const box = $("horas"); box.replaceChildren();
+  if (!horas.length) { box.append(el("div", "Sem movimento neste período.", "vazio")); }
+  else {
+    const maximo = Math.max(1, ...h5, ...hT);
+    box.append(el("div", "Hora", "cab"), el("div", "Ligações de 5 min", "cab"), el("div", "Transferências", "cab"));
+    const de = horas[0], ate = horas[horas.length - 1];
+    for (let h = de; h <= ate; h++) {
+      const cls = h === 12 ? " meio" : "";
+      const barra = (n, tipo) => { const b = el("div", undefined, "bar " + tipo + cls); const i = el("i"); i.style.width = Math.round((n / maximo) * 100) + "%"; b.append(i, el("span", String(n))); return b; };
+      box.append(el("div", String(h).padStart(2, "0") + "h", "h" + cls), barra(h5[h], "a"), barra(hT[h], "b"));
+    }
+  }
+
+  // por funcionário
+  const mb = $("meio").tBodies[0]; mb.replaceChildren();
+  if (!linhas.length) mb.append(vazioTr(8, "Nenhum movimento neste período."));
+  for (const x of ordenar("meio", linhas)) {
+    mb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.m.lg)), el("td", String(x.m.tr)), el("td", pctTxt(x.m.lgTr, x.m.lgAv)), el("td", String(x.t.lg)), el("td", String(x.t.tr)), el("td", pctTxt(x.t.lgTr, x.t.lgAv))));
+  }
+  return { M, T: Tt };
+}
+
 function desenhar() {
   const iv = intervalo();
   $("periodo").textContent = iv.rot;
-  const bruto = iv.invalido ? { linhas: [], lista: [] } : resumo(iv);
-  const linhas = ordenar(bruto.linhas, chavesTabela, ordem.tabela, (a, b) => txtCmp(a.f, b.f));
-  const lista = ordenar(bruto.lista, chavesDetalhe, ordem.detalhe, (a, b) => b.t - a.t);
-  marcarOrdem("tabela", ordem.tabela); marcarOrdem("detalhe", ordem.detalhe);
-  const T = linhas.reduce((t, l) => ({ total: t.total + l.total, sem: t.sem + l.sem, cb: t.cb + l.cb, lg: t.lg + l.lg, ds: t.ds + l.ds, nd: t.nd + l.nd }), { total: 0, sem: 0, cb: 0, lg: 0, ds: 0, nd: 0 });
+  const L = iv.invalido ? [] : D.ligacoes.filter((c) => dentro(c, iv));
+  const G = iv.invalido ? [] : D.longas.filter((c) => dentro(c, iv));
+  const todos = porFuncionario(L, G);
+  const T = agregar(L, G);
+  marcarOrdem("tabela"); marcarOrdem("longas"); marcarOrdem("meio"); marcarOrdem("detalhe");
 
-  const cs = $("cartoes"); cs.replaceChildren(
-    cartao("Transferências", T.total, "com e sem callback"),
+  $("cartoes").replaceChildren(
+    cartao("Transferências", T.tr, "com e sem callback"),
     cartao("Sem callback", T.sem, "atendidas e longas o bastante", "ok"),
     cartao("Callbacks", T.cb, "sem atendimento ou muito curtas", "alerta"),
-    cartao("Taxa de callback", pctTxt(T.cb, T.total), "callbacks ÷ transferências"),
+    cartao("Taxa de callback", pctTxt(T.cb, T.tr), "callbacks ÷ transferências"),
     cartao("Duração média", durTxt(media(T)), T.nd ? "de " + T.nd + " transferência" + (T.nd > 1 ? "s" : "") + " sem callback" : "sem duração registrada"),
     cartao("Ligações de 5 min", T.lg, "ainda no Stage 1"),
+    cartao("5 min que viraram transferência", pctTxt(T.lgTr, T.lgAv), T.lgAv ? T.lgTr + " de " + T.lgAv + " ligações de 5 min" : "sem dados"),
   );
 
-  const tb = $("tabela").tBodies[0]; tb.replaceChildren();
-  if (!linhas.length) { const tr = el("tr"); const td = el("td", "Nenhuma mensagem registrada neste período.", "vazio"); td.colSpan = 7; tr.append(td); tb.append(tr); }
-  for (const l of linhas) {
-    const tr = el("tr");
-    const pc = el("td", pctTxt(l.cb, l.total)); const b = el("span", undefined, "barra"); const i = el("i"); i.style.width = pct(l.cb, l.total) + "%"; b.append(i); pc.append(b);
-    tr.append(el("td", l.f, "esq"), el("td", String(l.total)), el("td", String(l.sem)), el("td", String(l.cb)), pc, el("td", durTxt(media(l))), el("td", String(l.lg)));
-    tb.append(tr);
-  }
-  const tf = $("tabela").tFoot; tf.replaceChildren();
-  const trT = el("tr"); trT.append(el("td", "TOTAL", "esq"), el("td", String(T.total)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.total)), el("td", durTxt(media(T))), el("td", String(T.lg)));
-  tf.append(trT);
+  desenharTransferencias(ordenar("tabela", todos), T);
+  desenharLongas(ordenar("longas", todos), T);
+  const mm = desenharMeioDia(L, G, todos);
 
+  const lista = ordenar("detalhe", L);
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
-  if (!lista.length) { const tr = el("tr"); const td = el("td", "Nenhuma ligação transferida neste período.", "vazio"); td.colSpan = 5; tr.append(td); db.append(tr); }
+  if (!lista.length) db.append(vazioTr(5, "Nenhuma ligação transferida neste período."));
   for (const c of lista) {
-    const tr = el("tr");
-    const quando = new Date(c.t);
     const sel = el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
-    tr.append(el("td", quando.toLocaleString("pt-BR"), "esq"), el("td", c.f, "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d)));
-    db.append(tr);
+    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d))));
   }
-  window.__relatorio = { linhas, total: T, periodo: iv.rot };
+  window.__relatorio = {
+    linhas: ordenar("tabela", todos), periodo: iv.rot,
+    total: { total: T.tr, sem: T.sem, cb: T.cb, lg: T.lg, ds: T.ds, nd: T.nd },
+    conv: { lg: T.lg, transferidas: T.lgTr, avaliadas: T.lgAv },
+    manha: { lg: mm.M.lg, tr: mm.M.tr, cb: mm.M.cb, lgTr: mm.M.lgTr, lgAv: mm.M.lgAv },
+    tarde: { lg: mm.T.lg, tr: mm.T.tr, cb: mm.T.cb, lgTr: mm.T.lgTr, lgAv: mm.T.lgAv },
+  };
 }
 
 function sincronizar() {
   for (const b of $("filtros").children) b.setAttribute("aria-pressed", String(b.dataset.p === estado.p));
   $("datas").hidden = estado.p !== "personalizado";
-  $("de").value = estado.de; $("ate").value = estado.ate; $("obs").checked = estado.obs;
+  $("de").value = estado.de; $("ate").value = estado.ate; $("obs").checked = estado.obs; $("pk").checked = estado.pk;
   desenhar();
 }
 
@@ -317,11 +482,14 @@ $("filtros").addEventListener("click", (e) => {
 $("de").addEventListener("input", () => { estado.de = $("de").value; if (!estado.ate || estado.ate < estado.de) estado.ate = estado.de; sincronizar(); });
 $("ate").addEventListener("input", () => { estado.ate = $("ate").value; sincronizar(); });
 $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desenhar(); });
+$("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar(); });
 $("csv").addEventListener("click", () => {
-  const { linhas, total } = window.__relatorio;
-  const cab = ["Funcionário (Callback Number)", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Duração média (min)", "Ligações de 5 min"];
-  const l = (x, nome) => [nome || x.f, x.total, x.sem, x.cb, pctTxt(x.cb, x.total), media(x) === null ? "" : (Math.round((media(x) / 60) * 100) / 100).toString().replace(".", ","), x.lg];
-  const linhasCsv = [cab, ...linhas.map((x) => l(x)), l(total, "TOTAL")];
+  const linhas = window.__relatorio.linhas;
+  const T = agregar(D.ligacoes.filter((c) => dentro(c, intervalo())), D.longas.filter((c) => dentro(c, intervalo())));
+  const cab = ["Funcionário", "Equipe", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Duração média (min)", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas"];
+  const min = (a) => (media(a) === null ? "" : (Math.round((media(a) / 60) * 100) / 100).toString().replace(".", ","));
+  const lin = (nome, eq, a) => [nome, eq, a.tr, a.sem, a.cb, pctTxt(a.cb, a.tr), min(a), a.lg, a.lgTr, pctTxt(a.lgTr, a.lgAv), a.lgAv - a.lgTr];
+  const linhasCsv = [cab, ...linhas.map((x) => lin(rotulo(x.f), equipeTxt(x.f), x.a)), lin("TOTAL", "", T)];
   const esc = (v) => { v = String(v); return /[;"\\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const blob = new Blob(["\\uFEFF" + linhasCsv.map((r) => r.map(esc).join(";")).join("\\r\\n") + "\\r\\n"], { type: "text/csv;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "relatorio-transferencias.csv"; a.click();

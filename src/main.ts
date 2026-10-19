@@ -152,6 +152,7 @@ async function principal(): Promise<void> {
     pausarDuranteConsulta: true,
     intervaloMs: cfg.monitor.intervaloMs,
     ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
+    apelidos: cfg.apelidos,
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,
     limpezaMs: 60_000,
@@ -384,7 +385,26 @@ ${t}
       },
     );
     const monitor = new Monitor(
-      { reader: leitor, tracker, fila, log, notificador, aoPerderSessao: garantir },
+      {
+        reader: leitor,
+        tracker,
+        fila,
+        log,
+        notificador,
+        aoPerderSessao: garantir,
+        ...(registro
+          ? {
+              aoFiltrar: (i) =>
+                registro.registrarSemMensagem({
+                  tipo: i.tipo,
+                  funcionario: i.callback,
+                  cliente: i.callee,
+                  ligacao: idDaLigacao(i.vinculo),
+                  ...(i.detalhe ? { detalhe: i.detalhe } : {}),
+                }),
+            }
+          : {}),
+      },
       opMonitor,
     );
     rl.on("line", (l) => {

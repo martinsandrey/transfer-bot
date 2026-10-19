@@ -22,6 +22,8 @@ export interface OpcoesMonitor {
   pausarDuranteConsulta?: boolean;
   /** Quais funcionários (penúltimo dígito do Callback Number do Stage 1) geram mensagem em cada grupo. Ausente = todos. */
   filtroFuncionarios?: FiltroFuncionarios;
+  /** Apelidos dos funcionários: nos avisos, o funcionário aparece como "Nome (número)". */
+  apelidos?: ReadonlyMap<string, string>;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -35,6 +37,14 @@ export interface DepsMonitor {
   notificador: Notificador;
   /** Chamado quando a sessão expira; deve devolver quando o login for refeito. */
   aoPerderSessao?: () => Promise<void>;
+  /** Evento que NÃO gerou mensagem por causa do filtro de funcionários (para o relatório ainda contá-lo). Tem telefones: não vai para o log. */
+  aoFiltrar?: (info: {
+    tipo: "transferencia" | "callback" | "longa";
+    callback: string;
+    callee: string;
+    vinculo: string;
+    detalhe?: string;
+  }) => void;
 }
 
 export function dormirComSinal(ms: number, sinal: AbortSignal): Promise<void> {
@@ -211,6 +221,21 @@ export class Monitor {
     const permitidos = grupo === "longa" ? filtro.longa : filtro.transferencia;
     const decisao = decidirFiltro(permitidos, ev.callback);
     if (decisao === "enviar") return true;
+    try {
+      this.deps.aoFiltrar?.({
+        tipo: grupo === "longa" ? "longa" : grupo === "callback" ? "callback" : "transferencia",
+        callback: ev.callback,
+        callee: ev.callee,
+        vinculo: ev.vinculo,
+        ...(ev.tipo === "callback"
+          ? {
+              detalhe: `CALLBACK (${ev.motivo === "ligacao_curta" && ev.duracaoSeg !== undefined ? `ligação de ${ev.duracaoSeg} s` : "ninguém atendeu"})`,
+            }
+          : {}),
+      });
+    } catch {
+      /* o registro nunca atrapalha o monitoramento */
+    }
     this.deps.log.info("Mensagem não gerada: funcionário fora do filtro", {
       evento: "funcionario_filtrado",
       idCurto: ev.ocorrencia,
@@ -221,10 +246,15 @@ export class Monitor {
     if (decisao === "indeterminado" && grupo !== "callback") {
       this.deps.notificador.alerta(
         "aviso",
-        `O Callback Number ${numeroVisivel(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
+        `O Callback Number ${this.funcionarioVisivel(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
       );
     }
     return false;
+  }
+
+  private funcionarioVisivel(callback: string): string {
+    const nome = this.op.apelidos?.get(callback.replace(/\D+/g, ""));
+    return nome ? `${nome} (${callback.trim()})` : callback.trim();
   }
 
   private tratar(ev: EventoTracker): void {
@@ -237,7 +267,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${numeroVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
+        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
@@ -251,7 +281,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `${ev.motivo === "ligacao_curta" ? `LIGAÇÃO CURTA (CALLBACK, ${ev.duracaoSeg ?? "?"} s)` : "NINGUÉM ATENDEU (CALLBACK)"}: cliente ${numeroVisivel(ev.callee)}, funcionário ${numeroVisivel(ev.callback)}.`,
+        `${ev.motivo === "ligacao_curta" ? `LIGAÇÃO CURTA (CALLBACK, ${ev.duracaoSeg ?? "?"} s)` : "NINGUÉM ATENDEU (CALLBACK)"}: cliente ${numeroVisivel(ev.callee)}, funcionário ${this.funcionarioVisivel(ev.callback)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "callback")) return;
@@ -264,7 +294,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${numeroVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
+        `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
         { windows: "informativo_5min" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "longa")) return;

@@ -1,4 +1,8 @@
-import { ARQUIVO_DURACOES, NOME_ARQUIVO } from "../registro/registro-arquivo.js";
+import {
+  ARQUIVO_DURACOES,
+  ARQUIVO_SEM_MENSAGEM,
+  NOME_ARQUIVO,
+} from "../registro/registro-arquivo.js";
 
 /**
  * Relatório por funcionário, calculado a partir dos .txt de registro (nenhum histórico estruturado é criado).
@@ -31,6 +35,7 @@ const CAMPO = (nome: string): RegExp => new RegExp(`\\|\\s*${nome}:\\s*(\\S+)`);
 const RE_FUNC = CAMPO("Funcionário");
 const RE_CLIENTE = CAMPO("Cliente");
 const RE_LIGACAO = CAMPO("Ligação");
+const RE_TIPO = /\|\s*Tipo:\s*(transferencia|callback|longa)\b/;
 const LINHA_CORPO = /^Line 1 number:\s*(\S+)/im;
 const LINHA_PH = /^Ph:\s*(\S+)/im;
 
@@ -44,9 +49,12 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
     const [, a, mes, d, h, mi, s, resto = ""] = atual.cab;
     const corpo = atual.corpo.join("\n");
     saida.push({
-      tipo: resto.includes("CALLBACK") ? "callback" : padrao,
+      tipo:
+        (RE_TIPO.exec(resto)?.[1] as TipoEntrada | undefined) ??
+        (resto.includes("CALLBACK") ? "callback" : padrao),
       quando: new Date(Number(a), Number(mes) - 1, Number(d), Number(h), Number(mi), Number(s)),
-      enviada: resto.startsWith("ENVIADA"),
+      // "SEM MENSAGEM (fora do filtro)": o evento aconteceu de verdade, só não gerou mensagem (conta como real, não como prévia).
+      enviada: resto.startsWith("ENVIADA") || resto.startsWith("SEM MENSAGEM"),
       funcionario:
         RE_FUNC.exec(resto)?.[1] ?? LINHA_CORPO.exec(corpo)?.[1]?.trim() ?? SEM_FUNCIONARIO,
       cliente: RE_CLIENTE.exec(resto)?.[1] ?? LINHA_PH.exec(corpo)?.[1]?.trim() ?? null,
@@ -95,6 +103,8 @@ export interface LigacaoLonga {
   funcionario: string;
   cliente: string | null;
   observacao: boolean;
+  /** A ligação de 5 min depois foi transferida (mesmo código da ligação); `null` = registro antigo, sem código (fora do cálculo). */
+  transferida: boolean | null;
 }
 
 /** Liga cada CALLBACK à transferência da mesma ligação e devolve as ligações transferidas e as de 5 min. */
@@ -108,7 +118,17 @@ export function montarLigacoes(
   const ordenadas = [...entradas].sort(
     (a, b) => a.quando.getTime() - b.quando.getTime() || a.ordem - b.ordem,
   );
-  const transf = ordenadas.filter((e) => e.tipo === "transferencia");
+  // Uma ligação com código aparece uma vez por tipo: repetições do mesmo código (mensagem reenviada após reinício) não contam de novo.
+  const vistos = new Set<string>();
+  const unicas = ordenadas.filter((e) => {
+    if (!e.ligacao || e.tipo === "callback") return true;
+    const chave = `${e.tipo}|${e.ligacao}|${e.enviada}`;
+    if (vistos.has(chave)) return false;
+    vistos.add(chave);
+    return true;
+  });
+  const transf = unicas.filter((e) => e.tipo === "transferencia");
+  const codigosTransferidos = new Set(transf.flatMap((t) => (t.ligacao ? [t.ligacao] : [])));
   const calls = ordenadas.filter((e) => e.tipo === "callback");
   const comCallback = new Set<Entrada>();
   const orfaos: Entrada[] = [];
@@ -167,13 +187,14 @@ export function montarLigacoes(
     })),
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
 
-  const longas = ordenadas
+  const longas = unicas
     .filter((e) => e.tipo === "longa")
     .map((e): LigacaoLonga => ({
       quando: e.quando,
       funcionario: e.funcionario,
       cliente: e.cliente,
       observacao: !e.enviada,
+      transferida: e.ligacao ? codigosTransferidos.has(e.ligacao) : null,
     }));
   return { ligacoes, longas };
 }
@@ -253,6 +274,9 @@ export interface LinhaRelatorio {
   mediaSeg: number | null;
   /** Quantas transferências sem callback entraram na média. */
   comDuracao: number;
+  /** Ligações de 5 min (com código) que depois foram transferidas, e quantas ligações de 5 min entram nesse cálculo. */
+  longasTransferidas: number;
+  longasAvaliadas: number;
 }
 
 export function resumir(
@@ -278,6 +302,8 @@ export function resumir(
           longas: 0,
           mediaSeg: null,
           comDuracao: 0,
+          longasTransferidas: 0,
+          longasAvaliadas: 0,
         }),
       );
     return l;
@@ -298,7 +324,15 @@ export function resumir(
   }
   for (const l of por.values())
     l.mediaSeg = l.comDuracao > 0 ? (somas.get(l.funcionario) ?? 0) / l.comDuracao : null;
-  for (const c of dados.longas) if (dentro(c.quando, c.observacao)) linha(c.funcionario).longas++;
+  for (const c of dados.longas) {
+    if (!dentro(c.quando, c.observacao)) continue;
+    const l = linha(c.funcionario);
+    l.longas++;
+    if (c.transferida !== null) {
+      l.longasAvaliadas++;
+      if (c.transferida) l.longasTransferidas++;
+    }
+  }
   return [...por.values()].sort(
     (a, b) => b.comCallback - a.comCallback || a.funcionario.localeCompare(b.funcionario),
   );
@@ -313,6 +347,8 @@ export function totalDe(linhas: readonly LinhaRelatorio[]): LinhaRelatorio {
     longas: 0,
     mediaSeg: null,
     comDuracao: 0,
+    longasTransferidas: 0,
+    longasAvaliadas: 0,
   };
   let soma = 0;
   for (const l of linhas) {
@@ -322,6 +358,8 @@ export function totalDe(linhas: readonly LinhaRelatorio[]): LinhaRelatorio {
     t.semCallback += l.semCallback;
     t.callbacks += l.callbacks;
     t.longas += l.longas;
+    t.longasTransferidas += l.longasTransferidas;
+    t.longasAvaliadas += l.longasAvaliadas;
   }
   t.mediaSeg = t.comDuracao > 0 ? soma / t.comDuracao : null;
   return t;
@@ -333,6 +371,7 @@ export const ARQUIVOS_DO_RELATORIO: ReadonlyArray<{
 }> = [
   { arquivo: NOME_ARQUIVO.transferencia, padrao: "transferencia" },
   { arquivo: NOME_ARQUIVO.longa, padrao: "longa" },
+  { arquivo: ARQUIVO_SEM_MENSAGEM, padrao: "transferencia" },
 ];
 
 export { ARQUIVO_DURACOES };

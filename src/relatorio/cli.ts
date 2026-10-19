@@ -2,6 +2,8 @@ import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { interpretarApelidos } from "../config/apelidos.js";
+import { interpretarDigitos } from "../monitor/filtro-funcionario.js";
 import { paginaHtml } from "./pagina.js";
 import {
   ARQUIVOS_DO_RELATORIO,
@@ -22,18 +24,28 @@ Uso: relatorio.bat [periodo]
   --nao-abrir   só grava o arquivo, sem abrir o navegador
 `;
 
-function pastaDeRegistros(): string {
+/** Lê só o que o relatório precisa do `.env` (sem exigir o resto da configuração). Valores inválidos são ignorados. */
+function lerEnv(): {
+  pasta: string;
+  apelidos: Map<string, string>;
+  equipePaquistanesDigitos: string[];
+} {
   let pasta = "registros";
+  let apelidos = new Map<string, string>();
+  let digitos: string[] = ["0"];
   try {
     if (existsSync(".env")) {
       const env = parseEnv(readFileSync(".env", "utf8").replace(/^\uFEFF/, ""));
       const v = (env["PASTA_REGISTROS"] ?? "").trim();
       if (v) pasta = v;
+      apelidos = interpretarApelidos(env["APELIDOS_FUNCIONARIOS"]).apelidos;
+      const d = interpretarDigitos((env["EQUIPE_PAQUISTANES_DIGITOS"] ?? "").trim() || "0");
+      if (d) digitos = [...d];
     }
   } catch {
     /* usa o padrão */
   }
-  return resolve(pasta);
+  return { pasta: resolve(pasta), apelidos, equipePaquistanesDigitos: digitos };
 }
 
 function abrirNoNavegador(arquivo: string): void {
@@ -88,7 +100,7 @@ function principal(): void {
     inicial = { periodo: resto[0] };
   }
 
-  const pasta = pastaDeRegistros();
+  const { pasta, apelidos, equipePaquistanesDigitos } = lerEnv();
   const entradas: Entrada[] = [];
   let achou = false;
   for (const { arquivo, padrao } of ARQUIVOS_DO_RELATORIO) {
@@ -111,7 +123,18 @@ function principal(): void {
   const dir = join(pasta, "relatorios");
   mkdirSync(dir, { recursive: true });
   const arquivo = join(dir, "relatorio.html");
-  writeFileSync(arquivo, paginaHtml({ geradoEm: new Date(), ligacoes, longas, inicial }), "utf8");
+  writeFileSync(
+    arquivo,
+    paginaHtml({
+      geradoEm: new Date(),
+      ligacoes,
+      longas,
+      inicial,
+      apelidos,
+      equipePaquistanesDigitos,
+    }),
+    "utf8",
+  );
   console.log(`\nRelatório gerado: ${arquivo}`);
   if (naoAbrir) return;
   console.log("Abrindo no navegador...\n");
