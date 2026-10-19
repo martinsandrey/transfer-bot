@@ -73,6 +73,9 @@ export interface TarefaTransferencia {
   /** CALLBACK: `confirmacao` da mensagem de transferência a que se responde, e o texto de reserva se ela não existir mais. */
   respostaA?: string;
   reserva?: string;
+  /** CALLBACK: por que contou (`sem_atendimento` ou `ligacao_curta`) e a duração da ligação curta. */
+  motivoCallback?: "sem_atendimento" | "ligacao_curta";
+  duracaoSeg?: number;
   /** Esta tarefa reaproveitou a mensagem já enviada ao grupo de 5 min (não consultou o cadastro). */
   reaproveitada?: boolean;
   /** `transferencia` = grupo das transferências; `longa` = ligação que atingiu o tempo mínimo em Stage 1 (segundo grupo). */
@@ -128,6 +131,8 @@ export interface DepsFila {
     /** Telefone do cliente (Callee Number) e código da ligação: o relatório liga o CALLBACK à transferência certa. */
     cliente: string;
     ligacao: string;
+    /** CALLBACK: motivo em texto curto (ex.: "ninguém atendeu", "ligação de 12 s"). */
+    detalhe?: string;
   }) => void;
   log: Logger;
   notificador: Notificador;
@@ -179,6 +184,12 @@ export class TaskQueue {
       estado: "detectada",
       callback: ev.callback,
       callee: ev.callee,
+      ...(ev.tipo === "callback"
+        ? {
+            motivoCallback: ev.motivo,
+            ...(ev.duracaoSeg !== undefined ? { duracaoSeg: ev.duracaoSeg } : {}),
+          }
+        : {}),
       tentativasConsulta: 0,
       tentativasEnvio: 0,
       historico: [{ estado: "detectada", em: this.agora() }],
@@ -221,6 +232,14 @@ export class TaskQueue {
           funcionario: t.callback,
           cliente: t.callee,
           ligacao: idDaLigacao(t.vinculo),
+          ...(t.tipo === "callback"
+            ? {
+                detalhe:
+                  t.motivoCallback === "ligacao_curta" && t.duracaoSeg !== undefined
+                    ? `ligação de ${t.duracaoSeg} s`
+                    : "ninguém atendeu",
+              }
+            : {}),
         });
       } catch {
         /* o registro nunca atrapalha o envio */

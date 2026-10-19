@@ -878,3 +878,150 @@ describe("Stage 3 Ringing: transferência ao tocar e CALLBACK se ninguém atende
     expect(tipos(alimentar(t, snap([]), snap([]), snap([]), snap([])))).toEqual(["callback"]);
   });
 });
+
+describe("CALLBACK também por ligação curta (atendida, mas com menos de N segundos)", () => {
+  const X = "CX";
+  const ST1 = (cb = "100001") => linha(cb, S1, "T1", X);
+  const RINGING = (cb: string, dur: number | null = 0) => ({
+    ...linha(cb, "Stage 3 Ringing", "U1", X),
+    callDurationSec: dur,
+  });
+  const AGENT3 = (cb: string, dur: number | null) => ({
+    ...linha(cb, S3, "U1", X),
+    callDurationSec: dur,
+  });
+  const ST4 = (cb: string, dur: number) => ({
+    ...linha(cb, "Stage 4 Agent", "U1", X),
+    callDurationSec: dur,
+  });
+  const mk = (minimo = 20) =>
+    tracker({ leiturasConfirmacao: 1, esperaCallbackMs: 3000, duracaoCallbackSeg: minimo });
+  const VAZIAS = () => [snap([]), snap([]), snap([]), snap([]), snap([])];
+
+  function comecar(t: CallTracker): EventoTracker[] {
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    return alimentar(t, snap([ST1(), RINGING("908301")]));
+  }
+
+  it("atendida por 12 s e a linha some: CALLBACK por ligação curta, com a duração, uma única vez", () => {
+    const t = mk();
+    comecar(t);
+    const ev = alimentar(
+      t,
+      snap([AGENT3("908301", 3)]),
+      snap([AGENT3("908301", 8)]),
+      snap([AGENT3("908301", 12)]),
+      ...VAZIAS(),
+    );
+    expect(tipos(ev)).toEqual(["callback"]);
+    expect(ev[0]).toMatchObject({
+      motivo: "ligacao_curta",
+      duracaoSeg: 12,
+      callback: "100001",
+      callee: X,
+    });
+  });
+
+  it("ligação de 35 s: sem CALLBACK; exatamente 20 s também não (só MENOS que o mínimo)", () => {
+    for (const dur of [35, 20]) {
+      const t = mk();
+      comecar(t);
+      const ev = alimentar(
+        t,
+        snap([AGENT3("908301", 5)]),
+        snap([AGENT3("908301", dur)]),
+        ...VAZIAS(),
+      );
+      expect(tipos(ev)).toEqual([]);
+    }
+    const t = mk();
+    comecar(t);
+    expect(tipos(alimentar(t, snap([AGENT3("908301", 19)]), ...VAZIAS()))).toEqual(["callback"]);
+  });
+
+  it("o mínimo vem da configuração: com 10 s, uma ligação de 12 s não é CALLBACK; com 0 desliga a regra", () => {
+    const t10 = mk(10);
+    comecar(t10);
+    expect(tipos(alimentar(t10, snap([AGENT3("908301", 12)]), ...VAZIAS()))).toEqual([]);
+    const t0 = mk(0);
+    comecar(t0);
+    expect(tipos(alimentar(t0, snap([AGENT3("908301", 2)]), ...VAZIAS()))).toEqual([]);
+  });
+
+  it("a linha passa para Stage 4 (continua na tabela): não decide nada; só vale a duração total", () => {
+    const t = mk();
+    comecar(t);
+    const ev = alimentar(
+      t,
+      snap([AGENT3("908301", 5)]),
+      snap([ST4("908301", 8)]), // 8 s e mudou de Stage: a ligação NÃO acabou
+      snap([ST4("908301", 9)]),
+      snap([ST4("908301", 10)]),
+      snap([ST4("908301", 60)]),
+      ...VAZIAS(),
+    );
+    expect(tipos(ev)).toEqual([]);
+  });
+
+  it("transferência já detectada em Stage 3 Agent (sem toque): ligação curta também vira CALLBACK", () => {
+    const t = mk();
+    alimentar(t, snap([]));
+    alimentar(t, snap([ST1()]));
+    const ev = alimentar(t, snap([AGENT3("908301", 1)]), snap([AGENT3("908301", 6)]), ...VAZIAS());
+    expect(tipos(ev)).toEqual(["transferencia", "callback"]);
+    expect(ev[1]).toMatchObject({ motivo: "ligacao_curta", duracaoSeg: 6 });
+  });
+
+  it("Call Duration ilegível: conta o tempo desde que o Stage 3 Agent apareceu", () => {
+    const t = mk(20);
+    comecar(t);
+    const ev = alimentar(
+      t,
+      snap([AGENT3("908301", null)]),
+      snap([AGENT3("908301", null)]),
+      snap([AGENT3("908301", null)]),
+      ...VAZIAS(),
+    );
+    expect(tipos(ev)).toEqual(["callback"]);
+    expect(ev[0]).toMatchObject({ motivo: "ligacao_curta" });
+    const longa = mk(2);
+    comecar(longa);
+    expect(
+      tipos(
+        alimentar(
+          longa,
+          snap([AGENT3("908301", null)]),
+          snap([AGENT3("908301", null)]),
+          snap([AGENT3("908301", null)]),
+          snap([AGENT3("908301", null)]),
+          ...VAZIAS(),
+        ),
+      ),
+    ).toEqual([]);
+  });
+
+  it("tocou e ninguém atendeu continua sendo CALLBACK (sem_atendimento), com a regra de duração ligada", () => {
+    const t = mk();
+    comecar(t);
+    const ev = alimentar(t, snap([RINGING("908301", 4)]), ...VAZIAS());
+    expect(tipos(ev)).toEqual(["callback"]);
+    expect(ev[0]).toMatchObject({ motivo: "sem_atendimento" });
+  });
+
+  it("janela sem leitura (consulta ao cadastro) não encerra a ligação nem gera CALLBACK", () => {
+    const t = mk();
+    comecar(t);
+    alimentar(t, snap([AGENT3("908301", 4)]));
+    t.marcarJanelaSemLeitura();
+    const ev = alimentar(t, snap([]), snap([AGENT3("908301", 40)]), snap([AGENT3("908301", 41)]));
+    expect(tipos(ev)).toEqual([]);
+  });
+
+  it("outra ligação do mesmo cliente depois: cada ligação decide a sua vez, sem repetir CALLBACK", () => {
+    const t = mk();
+    comecar(t);
+    const ev = alimentar(t, snap([AGENT3("908301", 5)]), ...VAZIAS(), ...VAZIAS());
+    expect(tipos(ev)).toEqual(["callback"]);
+  });
+});

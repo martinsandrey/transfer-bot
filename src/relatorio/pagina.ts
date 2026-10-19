@@ -142,7 +142,7 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
-      <li><b>Callbacks</b>: as que tocaram e ninguém atendeu.</li>
+      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco.</li>
     </ul>
     <div class="acoes">
       <button class="acao" id="csv">Baixar planilha (CSV)</button>
@@ -221,8 +221,8 @@ function desenhar() {
 
   const cs = $("cartoes"); cs.replaceChildren(
     cartao("Transferências", T.total, "com e sem callback"),
-    cartao("Atendidas", T.sem, "transferências sem callback", "ok"),
-    cartao("Callbacks", T.cb, "ninguém atendeu", "alerta"),
+    cartao("Sem callback", T.sem, "atendidas e longas o bastante", "ok"),
+    cartao("Callbacks", T.cb, "sem atendimento ou muito curtas", "alerta"),
     cartao("Taxa de callback", pctTxt(T.cb, T.total), "callbacks ÷ transferências"),
     cartao("Ligações de 5 min", T.lg, "ainda no Stage 1"),
   );
@@ -244,7 +244,7 @@ function desenhar() {
   for (const c of lista) {
     const tr = el("tr");
     const quando = new Date(c.t);
-    const sel = el("span", c.r === "c" ? "Callback — ninguém atendeu" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
+    const sel = el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "det-esq"); r.append(sel);
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));

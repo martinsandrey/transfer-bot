@@ -132,6 +132,7 @@ async function principal(): Promise<void> {
     ttlOcorrenciasMs: cfg.monitor.ttlOcorrenciasMin * 60_000,
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
     esperaCallbackMs: cfg.monitor.callbackEsperaMs,
+    duracaoCallbackSeg: cfg.monitor.callbackDuracaoSeg,
     // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
     ...(!simulado && cfg.telegram.destinoLonga
       ? { duracaoLongaSeg: cfg.duracaoLongaMin * 60 }

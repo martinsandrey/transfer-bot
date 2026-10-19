@@ -24,6 +24,8 @@ export interface AppConfig {
     janelaTransferenciaMs: number;
     /** Segundos sem nenhuma linha de Stage 3 (depois de tocar sem atender) antes do CALLBACK. */
     callbackEsperaMs: number;
+    /** Ligação atendida no Stage 3 com menos que isto (segundos) também conta como CALLBACK. 0 = desligado. */
+    callbackDuracaoSeg: number;
   };
   timeouts: { navegacaoMs: number; consultaMs: number };
   recargaOciosaMin: number;
@@ -126,6 +128,7 @@ const esquema = z.object({
   AUSENCIA_MAX_LEITURAS: inteiro("AUSENCIA_MAX_LEITURAS", 3, 1, 100),
   TTL_OCORRENCIAS_MIN: inteiro("TTL_OCORRENCIAS_MIN", 720, 1, 100000),
   CALLBACK_ESPERA_SEG: inteiro("CALLBACK_ESPERA_SEG", 3, 1, 120),
+  CALLBACK_DURACAO_SEG: inteiro("CALLBACK_DURACAO_SEG", 20, 0, 3600),
   JANELA_TRANSFERENCIA_SEG: inteiro("JANELA_TRANSFERENCIA_SEG", 60, 5, 600),
   TIMEOUT_NAVEGACAO_MS: inteiro("TIMEOUT_NAVEGACAO_MS", 30000, 1000, 600000),
   TIMEOUT_CONSULTA_MS: inteiro("TIMEOUT_CONSULTA_MS", 60000, 1000, 600000),
@@ -232,6 +235,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       ttlOcorrenciasMin: c.TTL_OCORRENCIAS_MIN,
       janelaTransferenciaMs: c.JANELA_TRANSFERENCIA_SEG * 1000,
       callbackEsperaMs: c.CALLBACK_ESPERA_SEG * 1000,
+      callbackDuracaoSeg: c.CALLBACK_DURACAO_SEG,
     },
     timeouts: { navegacaoMs: c.TIMEOUT_NAVEGACAO_MS, consultaMs: c.TIMEOUT_CONSULTA_MS },
     recargaOciosaMin: c.RECARGA_OCIOSA_MINUTOS,

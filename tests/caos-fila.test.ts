@@ -160,7 +160,8 @@ describe("caos na fila + Telegram (semente fixa, muitas execuções)", () => {
           if (tipos < 0.25) evs.push({ tipo: "ligacao_longa", chave: `L${i}`, ...base });
           if (tipos >= 0.15 && tipos < 0.9)
             evs.push({ tipo: "transferencia", chave: `T${i}`, fase: "ringing", ...base });
-          if (tipos >= 0.6) evs.push({ tipo: "callback", chave: `C${i}`, ...base });
+          if (tipos >= 0.6)
+            evs.push({ tipo: "callback", motivo: "sem_atendimento", chave: `C${i}`, ...base });
           for (const e of evs) {
             const t = fila.enqueue(e);
             if (t) criadas.push({ id: t.id, tipo: t.tipo, vinculo: vinc, callback });

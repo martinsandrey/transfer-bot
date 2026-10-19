@@ -68,6 +68,10 @@ export type EventoTracker =
       callback: string;
       callee: string;
       vinculo: string;
+      /** `sem_atendimento`: tocou e sumiu sem ninguém atender; `ligacao_curta`: foi atendida, mas durou menos que o mínimo. */
+      motivo: "sem_atendimento" | "ligacao_curta";
+      /** Duração (s) da ligação do Stage 3 quando `ligacao_curta`. */
+      duracaoSeg?: number;
     }
   /** Ligação que atingiu o tempo mínimo (ex.: 5 min) AINDA em Stage 1 (nunca depois de transferida). */
   | {
@@ -95,6 +99,12 @@ export interface OpcoesTracker {
   discriminador?: (row: CallRow) => string;
   /** Quanto tempo (ms) sem nenhuma linha de Stage 3 do mesmo Callee, depois de ter tocado sem atender, antes de emitir `callback` (padrão 3000). */
   esperaCallbackMs?: number;
+  /**
+   * Uma ligação atendida no Stage 3 que dure MENOS que isto (segundos) também conta como CALLBACK. A duração é a do "Call Duration"
+   * da linha do Stage 3 (maior valor visto antes de ela sumir); se a coluna não for legível, conta-se desde que o Stage 3 Agent
+   * apareceu. Ausente/0 = só conta CALLBACK quando ninguém atendeu.
+   */
+  duracaoCallbackSeg?: number;
   /** Duração (segundos) que uma ligação em Stage 1 precisa atingir para gerar `ligacao_longa`. Ausente/0 = desligado. */
   duracaoLongaSeg?: number;
   /** Diário de status (só para diagnóstico, sem telefones): chamado quando uma ocorrência surge, muda de status confirmado ou some. */
@@ -152,7 +162,17 @@ export class CallTracker {
   /** Stage 3 já transferidos (por Callee) cujo atendimento está sendo acompanhado. */
   private readonly seguimentos = new Map<
     string,
-    { vinculo: string; callback: string; ocId: string; atendida: boolean; ultimoStage3: number }
+    {
+      vinculo: string;
+      callback: string;
+      ocId: string;
+      atendida: boolean;
+      ultimoStage3: number;
+      /** Instante (ms) em que o Stage 3 Agent apareceu pela primeira vez. */
+      inicioAtendimento: number | null;
+      /** Maior "Call Duration" (s) visto nas linhas de Stage 3/4 desse Callee. */
+      maiorDuracaoSeg: number | null;
+    }
   >();
   private anomaliasAtivas = new Set<string>();
   private precisaBaseline = true;
@@ -482,6 +502,8 @@ export class CallTracker {
       ocId,
       atendida: fase === "agent",
       ultimoStage3: agora,
+      inicioAtendimento: fase === "agent" ? agora : null,
+      maiorDuracaoSeg: null,
     });
   }
 
@@ -490,8 +512,17 @@ export class CallTracker {
     if (this.seguimentos.size === 0) return;
     const comStage3 = new Set<string>();
     const comAgent = new Set<string>();
+    /** Callees que continuam na tabela em QUALQUER status (ex.: Stage 3 → Stage 4 não é fim de ligação). */
+    const naTabela = new Set<string>();
+    const duracoes = new Map<string, number>();
     for (const r of s.rows) {
+      naTabela.add(r.calleeNumber);
       const st = interpretarStatusDetalhado(r.callStatus);
+      if ((st.numero === 3 || st.numero === 4) && r.callDurationSec !== null)
+        duracoes.set(
+          r.calleeNumber,
+          Math.max(duracoes.get(r.calleeNumber) ?? 0, r.callDurationSec),
+        );
       if (st.numero !== 3) continue;
       comStage3.add(r.calleeNumber);
       if (st.sub === "agent") comAgent.add(r.calleeNumber);
@@ -502,30 +533,62 @@ export class CallTracker {
       if (p.agent) comAgent.add(p.calleeNumber);
     }
     const espera = this.op.esperaCallbackMs ?? 3000;
+    const minimoSeg = this.op.duracaoCallbackSeg ?? 0;
     for (const [callee, sg] of this.seguimentos) {
-      if (comAgent.has(callee)) sg.atendida = true;
+      if (comAgent.has(callee)) {
+        sg.atendida = true;
+        sg.inicioAtendimento ??= s.readAt;
+      }
       if (comStage3.has(callee) || cega) sg.ultimoStage3 = s.readAt;
+      const d = duracoes.get(callee);
+      if (d !== undefined && d > (sg.maiorDuracaoSeg ?? 0)) sg.maiorDuracaoSeg = d;
       if (sg.atendida) {
-        // atendida: nada mais a fazer; esquece quando a linha some
+        const sumiu = !naTabela.has(callee) && !cega;
+        if (sumiu && s.readAt - sg.ultimoStage3 >= espera && minimoSeg > 0) {
+          // Atendida e a linha sumiu: se durou menos que o mínimo, conta como CALLBACK.
+          const duracao =
+            sg.maiorDuracaoSeg ??
+            (sg.inicioAtendimento === null
+              ? null
+              : Math.round((sg.ultimoStage3 - sg.inicioAtendimento) / 1000));
+          this.seguimentos.delete(callee);
+          if (duracao !== null && duracao < minimoSeg)
+            this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
+          continue;
+        }
+        // atendida e sem regra de duração: nada mais a fazer; esquece quando a linha some
         if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 > 60_000)
           this.seguimentos.delete(callee);
         continue;
       }
       if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 >= espera) {
-        const chave = `C|${sg.vinculo}`;
         this.seguimentos.delete(callee);
-        if (this.emitidas.has(chave)) continue;
-        this.emitidas.set(chave, s.readAt);
-        eventos.push({
-          tipo: "callback",
-          ocorrencia: sg.ocId,
-          chave: createHash("sha256").update(chave).digest("hex").slice(0, 12),
-          callback: sg.callback,
-          callee,
-          vinculo: sg.vinculo,
-        });
+        this.emitirCallback(sg, callee, "sem_atendimento", undefined, s.readAt, eventos);
       }
     }
+  }
+
+  private emitirCallback(
+    sg: { vinculo: string; callback: string; ocId: string },
+    callee: string,
+    motivo: "sem_atendimento" | "ligacao_curta",
+    duracaoSeg: number | undefined,
+    agora: number,
+    eventos: EventoTracker[],
+  ): void {
+    const chave = `C|${sg.vinculo}`;
+    if (this.emitidas.has(chave)) return;
+    this.emitidas.set(chave, agora);
+    eventos.push({
+      tipo: "callback",
+      ocorrencia: sg.ocId,
+      chave: createHash("sha256").update(chave).digest("hex").slice(0, 12),
+      callback: sg.callback,
+      callee,
+      vinculo: sg.vinculo,
+      motivo,
+      ...(duracaoSeg !== undefined ? { duracaoSeg } : {}),
+    });
   }
 
   private aviso(codigo: CodigoAviso, oc: Ocorrencia): EventoTracker {

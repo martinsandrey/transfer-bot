@@ -522,6 +522,7 @@ describe("TaskQueue", () => {
     type Cb = Extract<EventoTracker, { tipo: "callback" }>;
     const cb = (vinc: string, chave = "C-" + vinc): Cb => ({
       tipo: "callback",
+      motivo: "sem_atendimento",
       ocorrencia: "o1",
       chave,
       vinculo: vinc,

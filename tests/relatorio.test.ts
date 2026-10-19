@@ -311,3 +311,47 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
     expect(erros).toEqual([]);
   }, 60_000);
 });
+
+describe("CALLBACK por ligação curta no registro e na configuração", () => {
+  it("o registro anota o motivo e o relatório continua ligando o callback à transferência", () => {
+    const pasta = mkdtempSync(join(tmpdir(), "rel-"));
+    const reg = new RegistroEmArquivo(pasta, undefined, () => new Date(2026, 9, 21, 9, 0, 0));
+    const lig = idDaLigacao("v1");
+    reg.registrar({
+      tipo: "transferencia",
+      estado: "enviada",
+      texto: "NAME: X",
+      funcionario: A,
+      cliente: "1",
+      ligacao: lig,
+    });
+    reg.registrar({
+      tipo: "callback",
+      estado: "enviada",
+      texto: "CALLBACK",
+      funcionario: A,
+      cliente: "1",
+      ligacao: lig,
+      detalhe: "ligação de 12 s",
+    });
+    const txt = readFileSync(join(pasta, "transferencias-concluidas.txt"), "utf8");
+    expect(txt).toContain("CALLBACK (ligação de 12 s)");
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes).toHaveLength(1);
+    expect(ligacoes[0]?.resultado).toBe("callback");
+  });
+  it("CALLBACK_DURACAO_SEG: padrão 20, configurável, 0 desliga, inválido dá erro", async () => {
+    const { validarConfig } = await import("../src/config/config.js");
+    const base = { SITE_URL: "https://exemplo.invalid/" };
+    expect(validarConfig(base).monitor.callbackDuracaoSeg).toBe(20);
+    expect(validarConfig({ ...base, CALLBACK_DURACAO_SEG: "30" }).monitor.callbackDuracaoSeg).toBe(
+      30,
+    );
+    expect(validarConfig({ ...base, CALLBACK_DURACAO_SEG: "0" }).monitor.callbackDuracaoSeg).toBe(
+      0,
+    );
+    expect(() => validarConfig({ ...base, CALLBACK_DURACAO_SEG: "vinte" })).toThrow(
+      /CALLBACK_DURACAO_SEG/,
+    );
+  });
+});

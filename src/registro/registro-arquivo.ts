@@ -15,6 +15,8 @@ export interface RegistroDeMensagem {
   /** Telefone do cliente (Callee Number) e código da ligação (ver `idDaLigacao`). */
   cliente?: string;
   ligacao?: string;
+  /** CALLBACK: motivo (ex.: "ninguém atendeu" ou "ligação de 12 s"). */
+  detalhe?: string;
 }
 
 export const NOME_ARQUIVO: Record<TipoRegistro, string> = {
@@ -44,7 +46,7 @@ export class RegistroEmArquivo {
       const rotulo = r.estado === "enviada" ? "ENVIADA" : "OBSERVAÇÃO (não enviada)";
       const nota =
         r.tipo === "callback"
-          ? " | CALLBACK (ninguém atendeu)"
+          ? ` | CALLBACK (${r.detalhe ?? "ninguém atendeu"})`
           : r.reaproveitada
             ? " | mensagem do grupo de 5 min"
             : "";

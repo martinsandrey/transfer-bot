@@ -66,7 +66,7 @@ Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparec
 
 - A mensagem de transferência sai **assim que o Stage 3 aparece tocando** (`Stage 3 Ringing`), sem esperar alguém atender. Se o Stage 3 já aparecer atendido (`Stage 3 Agent`), sai do mesmo jeito.
 - Se alguém atende (aparece `Stage 3 Agent` para o mesmo cliente), **não sai mais nada**.
-- Se o Stage 3 tocou e a ligação sumiu **sem ninguém atender**, o programa espera `CALLBACK_ESPERA_SEG` segundos (padrão 3, para o toque poder passar a outro agente) e **responde "CALLBACK"** à mensagem de transferência no mesmo grupo. Só acontece se a mensagem de transferência foi enviada; se a original foi apagada, envia "CALLBACK" com o telefone e o Line 1 number.
+- Se o Stage 3 tocou e a ligação sumiu **sem ninguém atender**, o programa espera `CALLBACK_ESPERA_SEG` segundos (padrão 3, para o toque poder passar a outro agente) e **responde "CALLBACK"** à mensagem de transferência no mesmo grupo. Também é CALLBACK a ligação que **foi atendida mas durou menos de `CALLBACK_DURACAO_SEG` segundos** (padrão 20; `0` desliga; vale o "Call Duration" da linha do Stage 3, e a decisão sai quando a linha some da tabela). Só acontece se a mensagem de transferência foi enviada; se a original foi apagada, envia "CALLBACK" com o telefone e o Line 1 number.
 - O CALLBACK também é registrado em `registros\transferencias-concluidas.txt`, marcado.
 
 ## Segundo grupo (ligações longas)

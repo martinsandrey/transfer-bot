@@ -243,14 +243,15 @@ export class Monitor {
       if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "callback") {
-      log.info("Ninguém atendeu o Stage 3", {
+      log.info("CALLBACK detectado", {
         evento: "callback",
+        motivo: ev.motivo,
         idCurto: ev.ocorrencia,
         callbackMascarado: mascararTelefone(ev.callback),
       });
       notificador.alerta(
         "aviso",
-        `NINGUÉM ATENDEU (CALLBACK): cliente ${numeroVisivel(ev.callee)}, funcionário ${numeroVisivel(ev.callback)}.`,
+        `${ev.motivo === "ligacao_curta" ? `LIGAÇÃO CURTA (CALLBACK, ${ev.duracaoSeg ?? "?"} s)` : "NINGUÉM ATENDEU (CALLBACK)"}: cliente ${numeroVisivel(ev.callee)}, funcionário ${numeroVisivel(ev.callback)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "callback")) return;
