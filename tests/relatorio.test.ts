@@ -1,60 +1,119 @@
 import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { paginaHtml } from "../src/relatorio/pagina.js";
+import { RegistroEmArquivo } from "../src/registro/registro-arquivo.js";
 import {
-  formatarCsv,
-  formatarTabela,
   lerRegistro,
+  montarLigacoes,
   periodoNomeado,
   periodoPorDatas,
   resumir,
   SEM_FUNCIONARIO,
+  totalDe,
 } from "../src/relatorio/relatorio.js";
-import { RegistroEmArquivo } from "../src/registro/registro-arquivo.js";
+import { idDaLigacao } from "../src/util/id-ligacao.js";
+import { CHROMIUM_DE_TESTE, navegadorDeTeste } from "./helpers/navegador-teste.js";
+import type { HospedeNavegador } from "../src/navegador/navegador.js";
 
-const bloco = (ts: string, estado: string, nota: string, func: string, corpo = "NAME: X") =>
-  `===== ${ts} | ${estado}${nota} ${func ? `| Funcionário: ${func} ` : ""}=====\n${corpo}\n\n`;
+interface B {
+  ts: string;
+  func?: string;
+  cli?: string;
+  lig?: string;
+  cb?: boolean;
+  obs?: boolean;
+  corpo?: string;
+}
+const bloco = (b: B): string =>
+  `===== ${b.ts} | ${b.obs ? "OBSERVAÇÃO (não enviada)" : "ENVIADA"}${b.cb ? " | CALLBACK (ninguém atendeu)" : ""}${
+    b.func ? ` | Funcionário: ${b.func}` : ""
+  }${b.cli ? ` | Cliente: ${b.cli}` : ""}${b.lig ? ` | Ligação: ${b.lig}` : ""} =====\n${b.corpo ?? (b.cb ? "CALLBACK" : "NAME: X")}\n\n`;
 
-// 19/10/2026 é uma segunda-feira
-const AGORA = new Date(2026, 9, 21, 15, 0, 0); // quarta-feira
-
-const TRANSF =
-  bloco("2026-10-21 09:00:00", "ENVIADA", "", "5500000111") +
-  bloco("2026-10-21 10:00:00", "ENVIADA", "", "5500000111") +
-  bloco("2026-10-21 11:00:00", "ENVIADA", "", "5500000121") +
-  bloco(
-    "2026-10-21 10:01:00",
-    "ENVIADA",
-    " | CALLBACK (ninguém atendeu)",
-    "5500000111",
-    "CALLBACK",
-  ) +
-  bloco("2026-10-20 09:00:00", "ENVIADA", "", "5500000111") +
-  bloco("2026-10-14 09:00:00", "ENVIADA", "", "5500000121") +
-  bloco("2026-10-21 12:00:00", "OBSERVAÇÃO (não enviada)", "", "5500000131");
-const LONGA =
-  bloco("2026-10-21 09:30:00", "ENVIADA", "", "5500000101") +
-  bloco("2026-10-21 09:40:00", "ENVIADA", "", "5500000111");
+// 21/10/2026 é uma quarta-feira
+const AGORA = new Date(2026, 9, 21, 15, 0, 0);
+const A = "5500000111";
+const B2 = "5500000121";
 
 describe("lerRegistro", () => {
-  it("lê blocos, marca callbacks e usa o funcionário do cabeçalho", () => {
-    const e = lerRegistro(TRANSF, "transferencia");
-    expect(e).toHaveLength(7);
-    expect(e.filter((x) => x.tipo === "callback")).toHaveLength(1);
-    expect(e[0]?.funcionario).toBe("5500000111");
-    expect(e[6]?.enviada).toBe(false);
+  it("lê funcionário, cliente e código da ligação do cabeçalho; marca callbacks", () => {
+    const e = lerRegistro(
+      bloco({ ts: "2026-10-21 09:00:00", func: A, cli: "5511987654321", lig: "abc" }) +
+        bloco({ ts: "2026-10-21 09:01:00", func: A, cli: "5511987654321", lig: "abc", cb: true }),
+      "transferencia",
+    );
+    expect(e.map((x) => [x.tipo, x.funcionario, x.cliente, x.ligacao])).toEqual([
+      ["transferencia", A, "5511987654321", "abc"],
+      ["callback", A, "5511987654321", "abc"],
+    ]);
   });
-  it("registro antigo (sem funcionário no cabeçalho): usa 'Line 1 number' do corpo; callback antigo vira não identificado", () => {
-    const antigo =
-      bloco("2026-10-17 09:00:00", "ENVIADA", "", "", "NAME: X\nLine 1 number: 5500000111\nNOTE:") +
-      bloco("2026-10-17 09:01:00", "ENVIADA", " | CALLBACK (ninguém atendeu)", "", "CALLBACK");
-    const e = lerRegistro(antigo, "transferencia");
-    expect(e[0]?.funcionario).toBe("5500000111");
+  it("registro antigo: usa 'Line 1 number' e 'Ph' do texto; callback antigo vira não identificado", () => {
+    const e = lerRegistro(
+      bloco({
+        ts: "2026-10-17 09:00:00",
+        corpo: "NAME: X\nPh: 5511900\nLine 1 number: 5500000111\nNOTE:",
+      }) + bloco({ ts: "2026-10-17 09:01:00", cb: true }),
+      "transferencia",
+    );
+    expect(e[0]).toMatchObject({ funcionario: "5500000111", cliente: "5511900", ligacao: null });
     expect(e[1]?.funcionario).toBe(SEM_FUNCIONARIO);
   });
   it("aceita CRLF", () => {
-    expect(lerRegistro(TRANSF.replace(/\n/g, "\r\n"), "transferencia")).toHaveLength(7);
+    const t = bloco({ ts: "2026-10-21 09:00:00", func: A }).replace(/\n/g, "\r\n");
+    expect(lerRegistro(t, "transferencia")).toHaveLength(1);
+  });
+});
+
+describe("montarLigacoes: cada callback é ligado à transferência certa", () => {
+  it("pelo código da ligação, mesmo fora de ordem e do mesmo funcionário (o callback NÃO é igual ao total)", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1", cli: "111" }) +
+      bloco({ ts: "2026-10-21 09:02:00", func: A, lig: "L2", cli: "222" }) +
+      bloco({ ts: "2026-10-21 09:03:00", func: A, lig: "L3", cli: "333" }) +
+      // só a L1 deu callback, mas o aviso chegou depois das outras transferências
+      bloco({ ts: "2026-10-21 09:04:00", func: A, lig: "L1", cli: "111", cb: true });
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes.map((l) => [l.cliente, l.resultado])).toEqual([
+      ["111", "callback"],
+      ["222", "atendida"],
+      ["333", "atendida"],
+    ]);
+  });
+  it("registro antigo: liga ao último do mesmo funcionário ainda sem callback, dentro da janela", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 09:00:00", func: A }) +
+      bloco({ ts: "2026-10-21 09:01:00", func: B2 }) +
+      bloco({ ts: "2026-10-21 09:02:00", func: A, cb: true });
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes.map((l) => [l.funcionario, l.resultado])).toEqual([
+      [A, "callback"],
+      [B2, "atendida"],
+    ]);
+  });
+  it("callback antigo sem funcionário vai para a transferência anterior mais próxima; fora da janela vira órfão", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 08:00:00", func: A }) +
+      bloco({ ts: "2026-10-21 09:00:00", func: B2 }) +
+      bloco({ ts: "2026-10-21 09:01:00", cb: true }) +
+      bloco({ ts: "2026-10-21 14:00:00", cb: true });
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes.find((l) => l.funcionario === B2)?.resultado).toBe("callback");
+    expect(ligacoes.find((l) => l.funcionario === A)?.resultado).toBe("atendida");
+    expect(ligacoes.filter((l) => l.semTransferencia)).toHaveLength(1);
+  });
+  it("cada transferência recebe no máximo um callback; prévia não casa com enviada", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1" }) +
+      bloco({ ts: "2026-10-21 09:01:00", func: A, lig: "L1", cb: true }) +
+      bloco({ ts: "2026-10-21 09:02:00", func: A, lig: "L1", cb: true }) +
+      bloco({ ts: "2026-10-21 10:00:00", func: A, lig: "L9", obs: true }) +
+      bloco({ ts: "2026-10-21 10:01:00", func: A, lig: "L9", cb: true });
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes.filter((l) => l.resultado === "callback" && !l.semTransferencia)).toHaveLength(
+      1,
+    );
+    expect(ligacoes.filter((l) => l.semTransferencia)).toHaveLength(2);
   });
 });
 
@@ -69,92 +128,186 @@ describe("períodos", () => {
     expect(n("tudo")?.de).toBeNull();
     expect(n("xx")).toBeNull();
   });
-  it("datas: inclusivas; inválidas dão null", () => {
-    const p = periodoPorDatas("2026-10-14", "2026-10-14");
-    expect(p?.ate).toEqual(new Date(2026, 9, 15));
+  it("datas inclusivas; inválidas dão null; domingo fica na semana da segunda anterior", () => {
+    expect(periodoPorDatas("2026-10-14", "2026-10-14")?.ate).toEqual(new Date(2026, 9, 15));
     expect(periodoPorDatas("2026-02-30", undefined)).toBeNull();
     expect(periodoPorDatas("2026-10-20", "2026-10-19")).toBeNull();
-    expect(periodoPorDatas("abc", undefined)).toBeNull();
-  });
-  it("domingo pertence à semana que começou na segunda anterior", () => {
     expect(periodoNomeado("semana", new Date(2026, 9, 25, 10))?.de).toEqual(new Date(2026, 9, 19));
   });
 });
 
+const TRANSF =
+  bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1", cli: "111" }) +
+  bloco({ ts: "2026-10-21 09:01:00", func: A, lig: "L1", cli: "111", cb: true }) +
+  bloco({ ts: "2026-10-21 10:00:00", func: A, lig: "L2", cli: "222" }) +
+  bloco({ ts: "2026-10-21 11:00:00", func: B2, lig: "L3", cli: "333" }) +
+  bloco({ ts: "2026-10-20 09:00:00", func: A, lig: "L4", cli: "444" }) +
+  bloco({ ts: "2026-10-14 09:00:00", func: B2, lig: "L5", cli: "555" }) +
+  bloco({ ts: "2026-10-21 12:00:00", func: "5500000131", lig: "L6", obs: true });
+const LONGA =
+  bloco({ ts: "2026-10-21 09:30:00", func: "5500000101" }) +
+  bloco({ ts: "2026-10-21 09:40:00", func: A });
+const dados = () => ({
+  ...montarLigacoes(
+    [...lerRegistro(TRANSF, "transferencia"), ...lerRegistro(LONGA, "longa")].map((e, i) => ({
+      ...e,
+      ordem: i,
+    })),
+  ),
+});
+
 describe("resumir", () => {
-  const entradas = [...lerRegistro(TRANSF, "transferencia"), ...lerRegistro(LONGA, "longa")];
-  it("hoje: transferências com/sem callback, callbacks e ligações de 5 min por funcionário", () => {
-    const l = resumir(entradas, periodoNomeado("hoje", AGORA) as never);
-    const a = l.find((x) => x.funcionario === "5500000111");
-    expect(a).toMatchObject({ comCallback: 2, callbacks: 1, semCallback: 1, longas: 1 });
-    expect(l.find((x) => x.funcionario === "5500000121")).toMatchObject({
-      comCallback: 1,
-      callbacks: 0,
+  it("hoje: com/sem callback, callbacks e 5 min por funcionário", () => {
+    const l = resumir(dados(), periodoNomeado("hoje", AGORA) as never);
+    expect(l.find((x) => x.funcionario === A)).toMatchObject({
+      comCallback: 2,
       semCallback: 1,
-      longas: 0,
+      callbacks: 1,
+      longas: 1,
+    });
+    expect(l.find((x) => x.funcionario === B2)).toMatchObject({
+      comCallback: 1,
+      semCallback: 1,
+      callbacks: 0,
     });
     expect(l.find((x) => x.funcionario === "5500000101")).toMatchObject({
       comCallback: 0,
       longas: 1,
     });
-    expect(l.find((x) => x.funcionario === "5500000131")).toBeUndefined(); // só observação
+    expect(l.find((x) => x.funcionario === "5500000131")).toBeUndefined();
+    expect(totalDe(l)).toMatchObject({ comCallback: 3, semCallback: 2, callbacks: 1, longas: 2 });
   });
-  it("semana pega ontem também; tudo pega o dia 14; observação só se pedida", () => {
-    const sem = resumir(entradas, periodoNomeado("semana", AGORA) as never);
-    expect(sem.find((x) => x.funcionario === "5500000111")?.comCallback).toBe(3);
-    const tudo = resumir(entradas, periodoNomeado("tudo", AGORA) as never);
-    expect(tudo.find((x) => x.funcionario === "5500000121")?.comCallback).toBe(2);
-    const obs = resumir(entradas, periodoNomeado("hoje", AGORA) as never, true);
-    expect(obs.find((x) => x.funcionario === "5500000131")?.comCallback).toBe(1);
-  });
-  it("callback sem a transferência no período nunca dá número negativo", () => {
-    const so = lerRegistro(
-      bloco(
-        "2026-10-21 10:01:00",
-        "ENVIADA",
-        " | CALLBACK (ninguém atendeu)",
-        "5500000111",
-        "CALLBACK",
-      ),
-      "transferencia",
-    );
-    expect(resumir(so, periodoNomeado("hoje", AGORA) as never)[0]?.semCallback).toBe(0);
-  });
-  it("tabela e CSV trazem total e números completos", () => {
-    const p = periodoNomeado("hoje", AGORA) as never;
-    const l = resumir(entradas, p);
-    expect(formatarTabela(l, p)).toContain("5500000111");
-    expect(formatarTabela(l, p)).toContain("TOTAL");
-    const csv = formatarCsv(l);
-    expect(csv.startsWith("﻿")).toBe(true);
-    expect(csv).toContain("5500000111;1;1;2;1");
-    expect(formatarTabela([], p)).toContain("nenhuma mensagem");
+  it("semana, tudo e observação", () => {
+    const d = dados();
+    expect(
+      resumir(d, periodoNomeado("semana", AGORA) as never).find((x) => x.funcionario === A)
+        ?.comCallback,
+    ).toBe(3);
+    expect(
+      resumir(d, periodoNomeado("tudo", AGORA) as never).find((x) => x.funcionario === B2)
+        ?.comCallback,
+    ).toBe(2);
+    expect(
+      resumir(d, periodoNomeado("hoje", AGORA) as never, true).find(
+        (x) => x.funcionario === "5500000131",
+      )?.comCallback,
+    ).toBe(1);
   });
 });
 
-describe("registro grava o funcionário e o relatório o lê de volta", () => {
-  it("ida e volta", () => {
+describe("registro grava funcionário, cliente e código da ligação", () => {
+  it("ida e volta, e o CALLBACK usa o mesmo código da transferência", () => {
     const pasta = mkdtempSync(join(tmpdir(), "rel-"));
     const reg = new RegistroEmArquivo(pasta, undefined, () => new Date(2026, 9, 21, 9, 0, 0));
+    const lig = idDaLigacao("5500000111|T1|111");
     reg.registrar({
       tipo: "transferencia",
       estado: "enviada",
       texto: "NAME: X",
-      funcionario: "5500000111",
+      funcionario: A,
+      cliente: "111",
+      ligacao: lig,
     });
     reg.registrar({
       tipo: "callback",
       estado: "enviada",
       texto: "CALLBACK",
-      funcionario: "5500000111",
+      funcionario: A,
+      cliente: "111",
+      ligacao: lig,
     });
     const txt = readFileSync(join(pasta, "transferencias-concluidas.txt"), "utf8");
-    expect(txt).toContain("| Funcionário: 5500000111 =====");
-    const e = lerRegistro(txt, "transferencia");
-    expect(e.map((x) => [x.tipo, x.funcionario])).toEqual([
-      ["transferencia", "5500000111"],
-      ["callback", "5500000111"],
-    ]);
-    writeFileSync(join(pasta, "x"), "");
+    expect(txt).not.toContain("5500000111|T1");
+    const { ligacoes } = montarLigacoes(lerRegistro(txt, "transferencia"));
+    expect(ligacoes).toHaveLength(1);
+    expect(ligacoes[0]).toMatchObject({ funcionario: A, cliente: "111", resultado: "callback" });
+    expect(idDaLigacao("a")).not.toBe(idDaLigacao("b"));
   });
+});
+
+describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () => {
+  let host: HospedeNavegador;
+  let arquivo: string;
+  beforeAll(async () => {
+    host = await navegadorDeTeste();
+    const agora = new Date();
+    const h = (min: number) =>
+      new Date(agora.getFullYear(), agora.getMonth(), agora.getDate(), 0, 0, 5 + min);
+    const ontem = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate() - 1, 12, 0, 0);
+    arquivo = join(mkdtempSync(join(tmpdir(), "pag-")), "r.html");
+    writeFileSync(
+      arquivo,
+      paginaHtml({
+        geradoEm: agora,
+        longas: [{ quando: h(1), funcionario: A, cliente: "9", observacao: false }],
+        ligacoes: [
+          {
+            quando: h(1),
+            funcionario: A,
+            cliente: "111",
+            resultado: "callback",
+            observacao: false,
+            semTransferencia: false,
+          },
+          {
+            quando: h(2),
+            funcionario: A,
+            cliente: "222",
+            resultado: "atendida",
+            observacao: false,
+            semTransferencia: false,
+          },
+          {
+            quando: h(3),
+            funcionario: B2,
+            cliente: "<b>x</b>",
+            resultado: "atendida",
+            observacao: false,
+            semTransferencia: false,
+          },
+          {
+            quando: ontem,
+            funcionario: B2,
+            cliente: "444",
+            resultado: "callback",
+            observacao: false,
+            semTransferencia: false,
+          },
+          {
+            quando: h(4),
+            funcionario: A,
+            cliente: "555",
+            resultado: "atendida",
+            observacao: true,
+            semTransferencia: false,
+          },
+        ],
+        inicial: { periodo: "hoje" },
+      }),
+      "utf8",
+    );
+  }, 60_000);
+  afterAll(async () => host?.encerrar());
+
+  it("mostra os números certos por filtro, sem erro de script e sem interpretar HTML dos dados", async () => {
+    const pagina = host.paginaPrincipal();
+    const erros: string[] = [];
+    pagina.on("pageerror", (e) => erros.push(String(e)));
+    await pagina.goto(`file://${arquivo}`);
+    const lerTotais = () =>
+      pagina.evaluate(
+        () => (window as unknown as { __relatorio: { total: unknown } }).__relatorio.total,
+      );
+    expect(await lerTotais()).toEqual({ total: 3, sem: 2, cb: 1, lg: 1 }); // hoje, sem prévias
+    await pagina.click('button[data-p="ontem"]');
+    expect(await lerTotais()).toEqual({ total: 1, sem: 0, cb: 1, lg: 0 });
+    await pagina.click('button[data-p="tudo"]');
+    expect(await lerTotais()).toEqual({ total: 4, sem: 2, cb: 2, lg: 1 });
+    await pagina.click('button[data-p="hoje"]');
+    await pagina.check("#obs");
+    expect(await lerTotais()).toEqual({ total: 4, sem: 3, cb: 1, lg: 1 });
+    expect(await pagina.locator("#detalhe tbody b").count()).toBe(0); // dado nunca vira HTML
+    expect(await pagina.locator("#tabela tbody tr").first().innerText()).toContain(A);
+    expect(erros).toEqual([]);
+  }, 60_000);
 });

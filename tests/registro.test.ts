@@ -71,7 +71,9 @@ describe("registro das mensagens em .txt", () => {
     const t = ler(pasta, "transferencia");
     const l = ler(pasta, "longa");
     expect(t.match(/=====/g)).toHaveLength(4); // 2 blocos × 2 marcas
-    expect(t).toContain("===== 2026-10-17 01:35:11 | ENVIADA | Funcionário: 100001 =====");
+    expect(t).toContain(
+      "===== 2026-10-17 01:35:11 | ENVIADA | Funcionário: 100001 | Cliente: 011900000001 | Ligação: ",
+    );
     expect(t).toContain("NAME: Fulano Ficticio");
     expect(l.match(/=====/g)).toHaveLength(2);
     expect(t).not.toContain("5 min");

@@ -1,3 +1,4 @@
+import { idDaLigacao } from "../util/id-ligacao.js";
 import type {
   CustomerLookup,
   CustomerRecord,
@@ -124,6 +125,9 @@ export interface DepsFila {
     reaproveitada: boolean;
     /** Callback Number do Stage 1 (o funcionário que fez a transferência): entra no registro para o relatório. */
     funcionario: string;
+    /** Telefone do cliente (Callee Number) e código da ligação: o relatório liga o CALLBACK à transferência certa. */
+    cliente: string;
+    ligacao: string;
   }) => void;
   log: Logger;
   notificador: Notificador;
@@ -215,6 +219,8 @@ export class TaskQueue {
           texto: t.mensagem,
           reaproveitada: t.reaproveitada === true,
           funcionario: t.callback,
+          cliente: t.callee,
+          ligacao: idDaLigacao(t.vinculo),
         });
       } catch {
         /* o registro nunca atrapalha o envio */

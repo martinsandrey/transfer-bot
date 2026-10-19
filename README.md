@@ -71,6 +71,10 @@ Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparec
 
 ## Segundo grupo (ligações longas)
 
+### Relatório por funcionário
+
+Abra **`relatorio.bat`**: o navegador abre uma página com o relatório e os filtros **Hoje, Ontem, Esta semana, Últimos 7 dias, Este mês, Tudo** e **Escolher datas**. Mostra, por funcionário (Callback Number do Stage 1): transferências com callback (todas), sem callback (atendidas), callbacks (ninguém atendeu), % de callback e ligações de 5 min, mais o total, a lista ligação a ligação e um botão para baixar a planilha (CSV). O arquivo fica em `registros\relatorios\relatorio.html`. O relatório é calculado a partir dos `.txt` de registro: cada ligação recebe um código no cabeçalho do registro, e o CALLBACK é ligado à transferência da MESMA ligação por esse código (registros antigos, sem código, são ligados por proximidade e funcionário).
+
 ### Funcionários por dígito
 
 O Callback Number do Stage 1 (quem fez a transferência) termina em três dígitos `[linha][dono][qualquer]`: o antepenúltimo é a linha

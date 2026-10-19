@@ -2,10 +2,11 @@ import { NOME_ARQUIVO } from "../registro/registro-arquivo.js";
 
 /**
  * Relatório por funcionário, calculado a partir dos .txt de registro (nenhum histórico estruturado é criado).
- * Uma mensagem de transferência é enviada assim que o Stage 3 toca; o CALLBACK é o aviso de que ninguém atendeu. Portanto:
- *  - "com callback" = todas as transferências (mensagens de transferência);
- *  - "callbacks" = quantas delas ninguém atendeu;
- *  - "sem callback" = com callback − callbacks (as atendidas).
+ *
+ * Cada LIGAÇÃO transferida gera uma mensagem de transferência (quando o Stage 3 toca) e, se ninguém atender, um CALLBACK. O
+ * registro grava um código da ligação no cabeçalho de cada bloco; o relatório liga o CALLBACK à transferência pelo código.
+ * Registros antigos (sem código) são ligados por proximidade: o CALLBACK vai para a transferência mais recente ainda sem
+ * CALLBACK, do mesmo funcionário (quando o funcionário é conhecido), dentro de `JANELA_PAREAMENTO_MS`.
  */
 
 export type TipoEntrada = "transferencia" | "callback" | "longa";
@@ -15,13 +16,23 @@ export interface Entrada {
   quando: Date;
   enviada: boolean;
   funcionario: string;
+  cliente: string | null;
+  /** Código da ligação (registros novos). */
+  ligacao: string | null;
+  /** Ordem do bloco no arquivo (desempate). */
+  ordem: number;
 }
 
 export const SEM_FUNCIONARIO = "(não identificado)";
+export const JANELA_PAREAMENTO_MS = 30 * 60_000;
 
 const CABECALHO = /^===== (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) \| ([^\n]*?) =====$/;
-const LINHA_FUNC = /\|\s*Funcionário:\s*(\S+)/;
+const CAMPO = (nome: string): RegExp => new RegExp(`\\|\\s*${nome}:\\s*(\\S+)`);
+const RE_FUNC = CAMPO("Funcionário");
+const RE_CLIENTE = CAMPO("Cliente");
+const RE_LIGACAO = CAMPO("Ligação");
 const LINHA_CORPO = /^Line 1 number:\s*(\S+)/im;
+const LINHA_PH = /^Ph:\s*(\S+)/im;
 
 /** Lê os blocos de um arquivo de registro. `padrao` = tipo das mensagens do arquivo (callbacks são detectados pela marca). */
 export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): Entrada[] {
@@ -32,13 +43,15 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
     if (!atual) return;
     const [, a, mes, d, h, mi, s, resto = ""] = atual.cab;
     const corpo = atual.corpo.join("\n");
-    const funcionario =
-      LINHA_FUNC.exec(resto)?.[1] ?? LINHA_CORPO.exec(corpo)?.[1]?.trim() ?? SEM_FUNCIONARIO;
     saida.push({
       tipo: resto.includes("CALLBACK") ? "callback" : padrao,
       quando: new Date(Number(a), Number(mes) - 1, Number(d), Number(h), Number(mi), Number(s)),
       enviada: resto.startsWith("ENVIADA"),
-      funcionario,
+      funcionario:
+        RE_FUNC.exec(resto)?.[1] ?? LINHA_CORPO.exec(corpo)?.[1]?.trim() ?? SEM_FUNCIONARIO,
+      cliente: RE_CLIENTE.exec(resto)?.[1] ?? LINHA_PH.exec(corpo)?.[1]?.trim() ?? null,
+      ligacao: RE_LIGACAO.exec(resto)?.[1] ?? null,
+      ordem: saida.length,
     });
   };
   for (const linha of linhas) {
@@ -50,6 +63,102 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
   }
   fechar();
   return saida;
+}
+
+export interface Ligacao {
+  /** Momento da transferência (para CALLBACK sem transferência registrada: o momento do CALLBACK). */
+  quando: Date;
+  funcionario: string;
+  cliente: string | null;
+  /** `callback` = ninguém atendeu; `atendida` = não houve CALLBACK. */
+  resultado: "atendida" | "callback";
+  /** Foi só prévia do modo observação (nada enviado). */
+  observacao: boolean;
+  /** O CALLBACK não tem a transferência correspondente no registro. */
+  semTransferencia: boolean;
+}
+
+export interface LigacaoLonga {
+  quando: Date;
+  funcionario: string;
+  cliente: string | null;
+  observacao: boolean;
+}
+
+/** Liga cada CALLBACK à transferência da mesma ligação e devolve as ligações transferidas e as de 5 min. */
+export function montarLigacoes(entradas: readonly Entrada[]): {
+  ligacoes: Ligacao[];
+  longas: LigacaoLonga[];
+} {
+  const ordenadas = [...entradas].sort(
+    (a, b) => a.quando.getTime() - b.quando.getTime() || a.ordem - b.ordem,
+  );
+  const transf = ordenadas.filter((e) => e.tipo === "transferencia");
+  const calls = ordenadas.filter((e) => e.tipo === "callback");
+  const comCallback = new Set<Entrada>();
+  const orfaos: Entrada[] = [];
+
+  // 1) Registros novos: o código da ligação liga os dois.
+  const porCodigo = new Map<string, Entrada[]>();
+  for (const t of transf)
+    if (t.ligacao) porCodigo.set(t.ligacao, [...(porCodigo.get(t.ligacao) ?? []), t]);
+  const semCodigo: Entrada[] = [];
+  for (const c of calls) {
+    if (!c.ligacao) {
+      semCodigo.push(c);
+      continue;
+    }
+    const alvo = (porCodigo.get(c.ligacao) ?? []).find(
+      (t) => t.enviada === c.enviada && !comCallback.has(t),
+    );
+    if (alvo) comCallback.add(alvo);
+    else orfaos.push(c);
+  }
+  // 2) Registros antigos: a transferência mais recente, ainda sem CALLBACK, do mesmo funcionário, antes do CALLBACK.
+  for (const c of semCodigo) {
+    const alvo = [...transf]
+      .reverse()
+      .find(
+        (t) =>
+          !comCallback.has(t) &&
+          t.enviada === c.enviada &&
+          t.quando <= c.quando &&
+          c.quando.getTime() - t.quando.getTime() <= JANELA_PAREAMENTO_MS &&
+          (c.funcionario === SEM_FUNCIONARIO || t.funcionario === c.funcionario) &&
+          (c.cliente === null || t.cliente === null || c.cliente === t.cliente),
+      );
+    if (alvo) comCallback.add(alvo);
+    else orfaos.push(c);
+  }
+
+  const ligacoes: Ligacao[] = [
+    ...transf.map((t): Ligacao => ({
+      quando: t.quando,
+      funcionario: t.funcionario,
+      cliente: t.cliente,
+      resultado: comCallback.has(t) ? "callback" : "atendida",
+      observacao: !t.enviada,
+      semTransferencia: false,
+    })),
+    ...orfaos.map((c): Ligacao => ({
+      quando: c.quando,
+      funcionario: c.funcionario,
+      cliente: c.cliente,
+      resultado: "callback",
+      observacao: !c.enviada,
+      semTransferencia: true,
+    })),
+  ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
+
+  const longas = ordenadas
+    .filter((e) => e.tipo === "longa")
+    .map((e): LigacaoLonga => ({
+      quando: e.quando,
+      funcionario: e.funcionario,
+      cliente: e.cliente,
+      observacao: !e.enviada,
+    }));
+  return { ligacoes, longas };
 }
 
 export interface Periodo {
@@ -64,31 +173,33 @@ const somarDias = (d: Date, n: number): Date =>
 const fmtData = (d: Date): string =>
   `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 
+export const NOMES_DE_PERIODO = ["hoje", "ontem", "semana", "7dias", "mes", "tudo"] as const;
+
 /** `ate` é exclusivo. Nomes: hoje, ontem, semana (desde segunda-feira), 7dias, mes (desde o dia 1), tudo. */
 export function periodoNomeado(nome: string, agora: Date): Periodo | null {
   const hoje = inicioDoDia(agora);
   switch (nome) {
     case "hoje":
-      return { de: hoje, ate: somarDias(hoje, 1), rotulo: `hoje (${fmtData(hoje)})` };
+      return { de: hoje, ate: somarDias(hoje, 1), rotulo: `Hoje (${fmtData(hoje)})` };
     case "ontem": {
       const o = somarDias(hoje, -1);
-      return { de: o, ate: hoje, rotulo: `ontem (${fmtData(o)})` };
+      return { de: o, ate: hoje, rotulo: `Ontem (${fmtData(o)})` };
     }
     case "semana": {
       const dias = (hoje.getDay() + 6) % 7; // segunda = 0
       const seg = somarDias(hoje, -dias);
-      return { de: seg, ate: somarDias(hoje, 1), rotulo: `esta semana (desde ${fmtData(seg)})` };
+      return { de: seg, ate: somarDias(hoje, 1), rotulo: `Esta semana (desde ${fmtData(seg)})` };
     }
     case "7dias": {
       const ini = somarDias(hoje, -6);
-      return { de: ini, ate: somarDias(hoje, 1), rotulo: `últimos 7 dias (desde ${fmtData(ini)})` };
+      return { de: ini, ate: somarDias(hoje, 1), rotulo: `Últimos 7 dias (desde ${fmtData(ini)})` };
     }
     case "mes": {
       const ini = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-      return { de: ini, ate: somarDias(hoje, 1), rotulo: `este mês (desde ${fmtData(ini)})` };
+      return { de: ini, ate: somarDias(hoje, 1), rotulo: `Este mês (desde ${fmtData(ini)})` };
     }
     case "tudo":
-      return { de: null, ate: null, rotulo: "todo o período registrado" };
+      return { de: null, ate: null, rotulo: "Todo o período registrado" };
     default:
       return null;
   }
@@ -114,101 +225,59 @@ export function periodoPorDatas(de: string, ate: string | undefined): Periodo | 
 
 export interface LinhaRelatorio {
   funcionario: string;
-  semCallback: number;
-  callbacks: number;
+  /** Todas as transferências do funcionário (inclui as que deram CALLBACK). */
   comCallback: number;
+  /** Transferências atendidas (sem CALLBACK). */
+  semCallback: number;
+  /** Transferências em que ninguém atendeu. */
+  callbacks: number;
   longas: number;
 }
 
 export function resumir(
-  entradas: readonly Entrada[],
+  dados: { ligacoes: readonly Ligacao[]; longas: readonly LigacaoLonga[] },
   periodo: Periodo,
   incluirObservacao = false,
 ): LinhaRelatorio[] {
-  const por = new Map<string, { t: number; c: number; l: number }>();
-  for (const e of entradas) {
-    if (!e.enviada && !incluirObservacao) continue;
-    if (periodo.de && e.quando < periodo.de) continue;
-    if (periodo.ate && e.quando >= periodo.ate) continue;
-    const x = por.get(e.funcionario) ?? { t: 0, c: 0, l: 0 };
-    if (e.tipo === "transferencia") x.t++;
-    else if (e.tipo === "callback") x.c++;
-    else x.l++;
-    por.set(e.funcionario, x);
+  const dentro = (q: Date, obs: boolean): boolean =>
+    (incluirObservacao || !obs) &&
+    !(periodo.de && q < periodo.de) &&
+    !(periodo.ate && q >= periodo.ate);
+  const por = new Map<string, LinhaRelatorio>();
+  const linha = (f: string): LinhaRelatorio => {
+    let l = por.get(f);
+    if (!l)
+      por.set(f, (l = { funcionario: f, comCallback: 0, semCallback: 0, callbacks: 0, longas: 0 }));
+    return l;
+  };
+  for (const c of dados.ligacoes) {
+    if (!dentro(c.quando, c.observacao)) continue;
+    const l = linha(c.funcionario);
+    l.comCallback++;
+    if (c.resultado === "callback") l.callbacks++;
+    else l.semCallback++;
   }
-  return [...por.entries()]
-    .map(([funcionario, x]) => ({
-      funcionario,
-      comCallback: x.t,
-      callbacks: x.c,
-      semCallback: Math.max(0, x.t - x.c),
-      longas: x.l,
-    }))
-    .sort((a, b) => b.comCallback - a.comCallback || a.funcionario.localeCompare(b.funcionario));
+  for (const c of dados.longas) if (dentro(c.quando, c.observacao)) linha(c.funcionario).longas++;
+  return [...por.values()].sort(
+    (a, b) => b.comCallback - a.comCallback || a.funcionario.localeCompare(b.funcionario),
+  );
 }
-
-const COLUNAS = [
-  "Funcionário (Callback Number)",
-  "Transferências sem callback",
-  "Callbacks",
-  "Transferências com callback",
-  "Ligações de 5 min",
-] as const;
-
-const valores = (l: LinhaRelatorio): string[] => [
-  l.funcionario,
-  String(l.semCallback),
-  String(l.callbacks),
-  String(l.comCallback),
-  String(l.longas),
-];
 
 export function totalDe(linhas: readonly LinhaRelatorio[]): LinhaRelatorio {
   const t: LinhaRelatorio = {
     funcionario: "TOTAL",
+    comCallback: 0,
     semCallback: 0,
     callbacks: 0,
-    comCallback: 0,
     longas: 0,
   };
   for (const l of linhas) {
+    t.comCallback += l.comCallback;
     t.semCallback += l.semCallback;
     t.callbacks += l.callbacks;
-    t.comCallback += l.comCallback;
     t.longas += l.longas;
   }
   return t;
-}
-
-/** Tabela de texto para o console. */
-export function formatarTabela(linhas: readonly LinhaRelatorio[], periodo: Periodo): string {
-  const corpo = [...linhas, totalDe(linhas)].map(valores);
-  const larguras = COLUNAS.map((c, i) =>
-    Math.max(c.length, ...corpo.map((l) => (l[i] ?? "").length)),
-  );
-  const fmt = (cel: readonly string[]): string =>
-    cel
-      .map((c, i) => (i === 0 ? c.padEnd(larguras[i] ?? 0) : c.padStart(larguras[i] ?? 0)))
-      .join(" | ");
-  const sep = larguras.map((n) => "-".repeat(n)).join("-+-");
-  const linhasTxt = corpo.map(fmt);
-  const total = linhasTxt.pop() ?? "";
-  return [
-    `Relatório de transferências — ${periodo.rotulo}`,
-    "",
-    fmt([...COLUNAS]),
-    sep,
-    ...(linhasTxt.length ? linhasTxt : ["(nenhuma mensagem registrada neste período)"]),
-    sep,
-    total,
-  ].join("\n");
-}
-
-/** CSV para abrir no Excel em português (separador `;`, UTF-8 com BOM). */
-export function formatarCsv(linhas: readonly LinhaRelatorio[]): string {
-  const esc = (v: string): string => (/[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
-  const todas = [[...COLUNAS], ...[...linhas, totalDe(linhas)].map(valores)];
-  return "﻿" + todas.map((l) => l.map(esc).join(";")).join("\r\n") + "\r\n";
 }
 
 export const ARQUIVOS_DO_RELATORIO: ReadonlyArray<{

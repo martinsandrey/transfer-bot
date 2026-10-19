@@ -12,6 +12,9 @@ export interface RegistroDeMensagem {
   reaproveitada?: boolean;
   /** Callback Number do Stage 1 (funcionário que transferiu): vai no cabeçalho do bloco, para o relatório (`relatorio.bat`). */
   funcionario?: string;
+  /** Telefone do cliente (Callee Number) e código da ligação (ver `idDaLigacao`). */
+  cliente?: string;
+  ligacao?: string;
 }
 
 export const NOME_ARQUIVO: Record<TipoRegistro, string> = {
@@ -46,7 +49,9 @@ export class RegistroEmArquivo {
             ? " | mensagem do grupo de 5 min"
             : "";
       const func = r.funcionario ? ` | Funcionário: ${r.funcionario.replace(/\s+/g, "")}` : "";
-      const bloco = `===== ${carimbo} | ${rotulo}${nota}${func} =====\n${r.texto}\n\n`;
+      const cli = r.cliente ? ` | Cliente: ${r.cliente.replace(/\s+/g, "")}` : "";
+      const lig = r.ligacao ? ` | Ligação: ${r.ligacao}` : "";
+      const bloco = `===== ${carimbo} | ${rotulo}${nota}${func}${cli}${lig} =====\n${r.texto}\n\n`;
       appendFileSync(join(this.pasta, NOME_ARQUIVO[r.tipo]), bloco, { encoding: "utf8" });
     } catch (e) {
       if (!this.avisou) {

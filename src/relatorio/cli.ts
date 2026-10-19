@@ -1,24 +1,23 @@
+import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
+import { paginaHtml } from "./pagina.js";
 import {
   ARQUIVOS_DO_RELATORIO,
-  formatarCsv,
-  formatarTabela,
   lerRegistro,
-  periodoNomeado,
+  montarLigacoes,
+  NOMES_DE_PERIODO,
   periodoPorDatas,
-  resumir,
   type Entrada,
-  type Periodo,
 } from "./relatorio.js";
 
 const AJUDA = `
-Uso: relatorio.bat [periodo] [opções]
-  hoje | ontem | semana (desde segunda) | 7dias | mes (desde o dia 1) | tudo
-  de=AAAA-MM-DD [ate=AAAA-MM-DD]   intervalo de datas (inclusive); só "de" = um dia
-  observacao                       inclui também o que foi só prévia (modo observação, nada enviado)
-Sem argumentos o padrão é "hoje". Cada execução também grava um .csv (abre no Excel) na pasta "relatorios" dentro de PASTA_REGISTROS.
+Uso: relatorio.bat [periodo]
+  Abre uma página no navegador com o relatório. Os filtros (hoje, ontem, semana, 7 dias, mês, tudo, datas) ficam na própria página.
+  O argumento só escolhe o filtro que já vem marcado ao abrir:
+  hoje | ontem | semana | 7dias | mes | tudo | de=AAAA-MM-DD [ate=AAAA-MM-DD]
+  --nao-abrir   só grava o arquivo, sem abrir o navegador
 `;
 
 function pastaDeRegistros(): string {
@@ -35,6 +34,22 @@ function pastaDeRegistros(): string {
   return resolve(pasta);
 }
 
+function abrirNoNavegador(arquivo: string): void {
+  try {
+    const [cmd, args]: [string, string[]] =
+      process.platform === "win32"
+        ? ["cmd", ["/c", "start", "", arquivo]]
+        : process.platform === "darwin"
+          ? ["open", [arquivo]]
+          : ["xdg-open", [arquivo]];
+    const filho = spawn(cmd, args, { detached: true, stdio: "ignore", windowsHide: true });
+    filho.on("error", () => undefined);
+    filho.unref();
+  } catch {
+    /* o arquivo continua gravado; o caminho é mostrado abaixo */
+  }
+}
+
 function principal(): void {
   const args = process.argv
     .slice(2)
@@ -44,37 +59,37 @@ function principal(): void {
     console.log(AJUDA);
     return;
   }
-  const incluirObservacao = args.some((a) => a.toLowerCase().replace(/^-+/, "") === "observacao");
-  const resto = args.filter((a) => a.toLowerCase().replace(/^-+/, "") !== "observacao");
+  const naoAbrir = args.includes("--nao-abrir");
+  const resto = args
+    .filter((a) => a !== "--nao-abrir")
+    .map((a) => a.toLowerCase().replace(/^-+/, ""));
   const valorDe = (nome: string): string | undefined =>
-    resto.find((a) => a.toLowerCase().replace(/^-+/, "").startsWith(`${nome}=`))?.split("=")[1];
-  let periodo: Periodo | null;
+    resto.find((a) => a.startsWith(`${nome}=`))?.split("=")[1];
+  let inicial: { periodo: string; de?: string; ate?: string } = { periodo: "hoje" };
   const de = valorDe("de");
   if (de !== undefined) {
-    periodo = periodoPorDatas(de, valorDe("ate"));
-    if (!periodo) {
+    const ate = valorDe("ate");
+    if (!periodoPorDatas(de, ate)) {
       console.error(
         '\nData inválida. Use o formato AAAA-MM-DD, ex.: de=2026-10-01 ate=2026-10-19 ("ate" não pode ser antes de "de").\n',
       );
       process.exitCode = 1;
       return;
     }
-  } else {
-    const nome = (resto[0] ?? "hoje").toLowerCase().replace(/^-+/, "");
-    periodo = periodoNomeado(nome, new Date());
-    if (!periodo) {
+    inicial = { periodo: "personalizado", de, ...(ate !== undefined ? { ate } : {}) };
+  } else if (resto[0] !== undefined) {
+    if (!(NOMES_DE_PERIODO as readonly string[]).includes(resto[0])) {
       console.error(`\nPeríodo "${resto[0]}" desconhecido.${AJUDA}`);
       process.exitCode = 1;
       return;
     }
+    inicial = { periodo: resto[0] };
   }
 
   const pasta = pastaDeRegistros();
   const entradas: Entrada[] = [];
   let achou = false;
-  for (const { arquivo, padrao } of new Map(
-    ARQUIVOS_DO_RELATORIO.map((x) => [x.arquivo + x.padrao, x]),
-  ).values()) {
+  for (const { arquivo, padrao } of ARQUIVOS_DO_RELATORIO) {
     const caminho = join(pasta, arquivo);
     if (!existsSync(caminho)) continue;
     achou = true;
@@ -86,24 +101,15 @@ function principal(): void {
     );
     return;
   }
-  const linhas = resumir(entradas, periodo, incluirObservacao);
-  console.log(`\n${formatarTabela(linhas, periodo)}\n`);
-  if (!incluirObservacao)
-    console.log(
-      "(Só mensagens realmente enviadas. Para incluir as prévias do modo observação: observacao)",
-    );
-  try {
-    const dir = join(pasta, "relatorios");
-    mkdirSync(dir, { recursive: true });
-    const nome = `relatorio-${new Date().toISOString().slice(0, 10)}-${periodo.rotulo
-      .normalize("NFD")
-      .replace(/[^A-Za-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "")}.csv`;
-    writeFileSync(join(dir, nome), formatarCsv(linhas), "utf8");
-    console.log(`Planilha salva em: ${join(dir, nome)}\n`);
-  } catch {
-    console.log("Não consegui salvar a planilha (.csv); a tabela acima continua valendo.\n");
-  }
+  const { ligacoes, longas } = montarLigacoes(entradas);
+  const dir = join(pasta, "relatorios");
+  mkdirSync(dir, { recursive: true });
+  const arquivo = join(dir, "relatorio.html");
+  writeFileSync(arquivo, paginaHtml({ geradoEm: new Date(), ligacoes, longas, inicial }), "utf8");
+  console.log(`\nRelatório gerado: ${arquivo}`);
+  if (naoAbrir) return;
+  console.log("Abrindo no navegador...\n");
+  abrirNoNavegador(arquivo);
 }
 
 principal();
