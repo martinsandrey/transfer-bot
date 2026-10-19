@@ -170,3 +170,7 @@ Causa provável (o reenvio automático da rodada de 2026-10-17 + conferência fr
 ## Filtro de funcionários por dígito (2026-10-19)
 
 Pedido do usuário: o Callback Number do Stage 1 termina em `[linha][dono][qualquer]`; o penúltimo dígito diz de quem é o funcionário (0 = equipe do paquistanês, 1 = a do usuário). Todos geram mensagem no grupo de 5 min, mas só os do usuário no grupo de transferências. Implementado em `src/monitor/filtro-funcionario.ts` e aplicado no `Monitor` antes de enfileirar; configurável por `PENULTIMO_DIGITO_TRANSFERENCIA` (padrão `1`) e `PENULTIMO_DIGITO_5MIN` (padrão `*` = todos), com lista (`0,1`) ou `*`. O CALLBACK segue o filtro das transferências (só responde a mensagem que foi enviada). Número com menos de 2 dígitos e filtro ativo: não gera mensagem e avisa. Log `funcionario_filtrado` (telefone mascarado). A linha (antepenúltimo dígito) ainda não é usada; filtrar por ela seria uma variável análoga. 287 testes.
+
+## CALLBACK não respondia à mensagem (2026-10-19)
+
+Causa: em `main.ts` o embrulho do enviador (que imprime "Mensagem enviada") descartava as opções de envio (`responderA`/`reserva`) e a função `reler`; por isso o CALLBACK saía como mensagem solta (ou nem lia a mensagem editada do grupo de 5 min). Corrigido: embrulho movido para `src/telegram/com-aviso.ts`, que repassa tudo, com teste. 288 testes.

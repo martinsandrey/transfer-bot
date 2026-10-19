@@ -21,6 +21,7 @@ import { Monitor } from "./monitor/monitor.js";
 import { adquirirTrava } from "./util/instancia-unica.js";
 import { RegistroEmArquivo } from "./registro/registro-arquivo.js";
 import { ClienteGramJS } from "./telegram/cliente-gramjs.js";
+import { comAviso } from "./telegram/com-aviso.js";
 import { EnviadorTelegram } from "./telegram/enviador-telegram.js";
 import { iniciarNavegador } from "./navegador/navegador.js";
 import { criarNotificador } from "./notificador/notificador.js";
@@ -249,16 +250,6 @@ async function principal(): Promise<void> {
       destino,
       timeoutEnvioMs,
       esperaMaximaFloodMs: 60_000,
-    });
-    const comAviso = (e: EnviadorTelegram, rotulo: string): MessageSender => ({
-      send: async (texto, chave) => {
-        const r = await e.send(texto, chave);
-        const hora = new Date().toLocaleTimeString("pt-BR", { hour12: false });
-        if (r.tipo === "enviada")
-          console.log(`[${hora}] Mensagem enviada ao Telegram (${rotulo}).`);
-        return r;
-      },
-      verify: (chave) => e.verify(chave),
     });
     sender = comAviso(telegram, "transferência");
     if (cfg.telegram.destinoLonga) {
