@@ -1,3 +1,6 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { Page } from "playwright";
 import type { HospedeNavegador } from "../src/navegador/navegador.js";
@@ -131,4 +134,41 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("relatório no navegador: atualização auto
       .toContain("Sem conexão com o relatório");
     expect(await linhas()).toBe(4);
   });
+});
+
+describe.skipIf(!CHROMIUM_DE_TESTE)("relatório no navegador: duração média", () => {
+  it("usa a duração até a transferência, não a do Stage 3 (e ignora a que não tem esse dado)", async () => {
+    const reg =
+      bloco(em(9, 0), "908113", "0111", "aaa") +
+      bloco(em(9, 10), "908113", "0222", "bbb") +
+      bloco(em(9, 20), "908113", "0333", "ccc");
+    const m = montarLigacoes(
+      lerRegistro(reg, "transferencia"),
+      new Map([
+        ["aaa", 600],
+        ["bbb", 900],
+        ["ccc", 700],
+      ]),
+      new Map(),
+      {
+        ateTransferencia: new Map([
+          ["aaa", 100],
+          ["bbb", 200],
+        ]),
+      },
+    );
+    const pasta = mkdtempSync(join(tmpdir(), "tb-dm-"));
+    const arq = join(pasta, "r.html");
+    writeFileSync(arq, paginaHtml({ geradoEm: new Date(), ...m, inicial: { periodo: "hoje" } }));
+    const host = await navegadorDeTeste();
+    try {
+      const pagina = host.paginaPrincipal();
+      await pagina.goto(`file://${arq}`);
+      const cartao = pagina.locator("#cartoes .cartao", { hasText: "Duração média" });
+      expect(await cartao.innerText()).toMatch(/(^|\s)2 min 30 s/);
+      expect(await cartao.innerText()).toContain("2 transferências");
+    } finally {
+      await host.encerrar();
+    }
+  }, 60_000);
 });

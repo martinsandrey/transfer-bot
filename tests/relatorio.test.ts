@@ -6,6 +6,7 @@ import { paginaHtml } from "../src/relatorio/pagina.js";
 import { RegistroEmArquivo } from "../src/registro/registro-arquivo.js";
 import {
   lerDuracoes,
+  lerDuracoesAteTransferencia,
   lerRegistro,
   montarLigacoes,
   periodoNomeado,
@@ -252,6 +253,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             observacao: false,
             semTransferencia: false,
             duracaoSeg: null,
+            duracaoAteTransfSeg: null,
           },
           {
             quando: h(2),
@@ -261,6 +263,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             observacao: false,
             semTransferencia: false,
             duracaoSeg: 120,
+            duracaoAteTransfSeg: 120,
           },
           {
             quando: h(3),
@@ -270,6 +273,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             observacao: false,
             semTransferencia: false,
             duracaoSeg: 300,
+            duracaoAteTransfSeg: 300,
           },
           {
             quando: ontem,
@@ -279,6 +283,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             observacao: false,
             semTransferencia: false,
             duracaoSeg: null,
+            duracaoAteTransfSeg: null,
           },
           {
             quando: h(4),
@@ -288,6 +293,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("página HTML (navegador de verdade)", () =>
             observacao: true,
             semTransferencia: false,
             duracaoSeg: 600,
+            duracaoAteTransfSeg: 600,
           },
         ],
         inicial: { periodo: "hoje" },
@@ -393,7 +399,9 @@ describe("duração média das transferências sem callback", () => {
       ["L3", 999],
       ["L5", 30],
     ]);
-    const d = montarLigacoes(lerRegistro(txt, "transferencia"), duracoes);
+    const d = montarLigacoes(lerRegistro(txt, "transferencia"), duracoes, new Map(), {
+      ateTransferencia: duracoes,
+    });
     const linhas = resumir(d, periodoNomeado("hoje", AGORA) as never);
     const a = linhas.find((x) => x.funcionario === A);
     expect(a).toMatchObject({
@@ -405,6 +413,36 @@ describe("duração média das transferências sem callback", () => {
     });
     expect(linhas.find((x) => x.funcionario === B2)).toMatchObject({ mediaSeg: 30, comDuracao: 1 });
     expect(totalDe(linhas)).toMatchObject({ comDuracao: 3, mediaSeg: 130 });
+  });
+  it("a média usa só a duração até a transferência; a duração do Stage 3 não entra (e registro antigo fica de fora)", () => {
+    const txt =
+      bloco({ ts: "2026-10-21 09:00:00", func: A, lig: "L1" }) +
+      bloco({ ts: "2026-10-21 10:00:00", func: A, lig: "L2" }) +
+      bloco({ ts: "2026-10-21 11:00:00", func: A, lig: "L3" });
+    const stage3 = new Map([
+      ["L1", 600],
+      ["L2", 900],
+      ["L3", 700],
+    ]);
+    const ate = lerDuracoesAteTransferencia(
+      "2026-10-21 09:10:00 | Ligação: L1 | Duração: 600 s | Até a transferência: 100 s\n" +
+        "2026-10-21 10:15:00 | Ligação: L2 | Duração: 900 s | Até a transferência: 200 s\r\n" +
+        "2026-10-21 11:12:00 | Ligação: L3 | Duração: 700 s\n",
+    );
+    expect([...ate]).toEqual([
+      ["L1", 100],
+      ["L2", 200],
+    ]);
+    const d = montarLigacoes(lerRegistro(txt, "transferencia"), stage3, new Map(), {
+      ateTransferencia: ate,
+    });
+    expect(d.ligacoes.map((l) => [l.duracaoSeg, l.duracaoAteTransfSeg])).toEqual([
+      [600, 100],
+      [900, 200],
+      [700, null],
+    ]);
+    const a = resumir(d, periodoNomeado("hoje", AGORA) as never)[0];
+    expect(a).toMatchObject({ semCallback: 3, comDuracao: 2, mediaSeg: 150 });
   });
   it("sem nenhuma duração registrada: média nula (a página mostra um traço)", () => {
     const d = montarLigacoes(
@@ -424,9 +462,14 @@ describe("duração média das transferências sem callback", () => {
       cliente: "1",
       ligacao: lig,
     });
-    reg.registrarDuracao({ ligacao: lig, duracaoSeg: 143.4 });
-    const m = lerDuracoes(readFileSync(join(pasta, "duracoes.txt"), "utf8"));
+    reg.registrarDuracao({ ligacao: lig, duracaoSeg: 143.4, ateTransferenciaSeg: 61.2 });
+    const txtDur = readFileSync(join(pasta, "duracoes.txt"), "utf8");
+    expect(txtDur).toContain("| Duração: 143 s | Até a transferência: 61 s\n");
+    const m = lerDuracoes(txtDur);
     expect(m.get(lig)).toBe(143);
+    expect(lerDuracoesAteTransferencia(txtDur).get(lig)).toBe(61);
+    reg.registrarDuracao({ ligacao: "outra", duracaoSeg: 10, ateTransferenciaSeg: null });
+    expect(readFileSync(join(pasta, "duracoes.txt"), "utf8")).toMatch(/Duração: 10 s\n$/);
     const d = montarLigacoes(
       lerRegistro(
         readFileSync(join(pasta, "transferencias-concluidas.txt"), "utf8"),

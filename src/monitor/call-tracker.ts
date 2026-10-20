@@ -128,6 +128,8 @@ export interface OpcoesTracker {
     callback: string;
     callee: string;
     duracaoSeg: number;
+    /** Duração (s) que a ligação já tinha quando foi transferida para o Stage 3; `null` se a coluna não estava legível. */
+    ateTransferenciaSeg: number | null;
   }) => void;
   /**
    * Evidência real (2026-10-16): na transferência a linha do Stage 1 SOME e aparece OUTRA linha em "Stage 3 Agent", com outro
@@ -143,6 +145,8 @@ interface OrigemStage1 {
   discriminador: string;
   ocId: string;
   ultimaVez: number;
+  /** Último "Call Duration" (s) lido nesta linha de origem: quanto a ligação já tinha de duração quando foi transferida. */
+  duracaoSeg: number | null;
 }
 
 interface Ocorrencia {
@@ -158,6 +162,8 @@ interface Ocorrencia {
   callee: string;
   /** Linha nova em Stage 3 ligada (pelo Callee) a uma linha de Stage 1 Agent: aguarda N leituras para virar transferência. */
   origemPendente: OrigemStage1 | null;
+  /** Último "Call Duration" (s) visto enquanto a linha estava num status de origem (Stage 1 Agent / Manual Call). */
+  duracaoOrigemSeg: number | null;
   /** Leituras seguidas com o status confirmado atual. */
   leiturasNoStatus: number;
   /** `ligacao_longa` já emitida (ou ocorrência que já nasceu longa na linha de base: não conta). */
@@ -192,6 +198,8 @@ export class CallTracker {
       inicioAtendimento: number | null;
       /** Maior "Call Duration" (s) visto nas linhas de Stage 3/4 desse Callee. */
       maiorDuracaoSeg: number | null;
+      /** "Call Duration" (s) que a ligação já tinha no Stage 1 quando foi transferida (última leitura da linha de origem). */
+      duracaoAteTransferenciaSeg: number | null;
     }
   >();
   private anomaliasAtivas = new Set<string>();
@@ -298,6 +306,7 @@ export class CallTracker {
           ausencias: 0,
           viuStage1Agent: ehOrigemDeTransferencia(status),
           callee: row.calleeNumber,
+          duracaoOrigemSeg: ehOrigemDeTransferencia(status) ? row.callDurationSec : null,
           origemPendente: null,
           leiturasNoStatus: 1,
           longaEmitida: baseline && this.longa(row.callDurationSec),
@@ -309,6 +318,8 @@ export class CallTracker {
         continue;
       }
       oc.callee = row.calleeNumber;
+      if (ehOrigemDeTransferencia(status) && row.callDurationSec !== null)
+        oc.duracaoOrigemSeg = row.callDurationSec;
 
       oc.ausencias = 0;
       if (cega) {
@@ -393,6 +404,7 @@ export class CallTracker {
       discriminador: oc.discriminador,
       ocId: oc.id,
       ultimaVez: agora,
+      duracaoSeg: oc.duracaoOrigemSeg,
     });
   }
 
@@ -439,6 +451,7 @@ export class CallTracker {
         agora,
         eventos,
         st.sub === "agent" ? "agent" : "ringing",
+        o.duracaoSeg,
       );
     }
   }
@@ -482,6 +495,7 @@ export class CallTracker {
         agora,
         eventos,
         para.sub === "agent" ? "agent" : "ringing",
+        oc.duracaoOrigemSeg,
       );
       return;
     }
@@ -497,6 +511,7 @@ export class CallTracker {
     agora: number,
     eventos: EventoTracker[],
     fase: "ringing" | "agent",
+    duracaoOrigemSeg: number | null,
   ): void {
     const chave = `${callbackOrigem}|${discriminadorOrigem}`;
     if (this.emitidas.has(chave)) {
@@ -524,6 +539,7 @@ export class CallTracker {
       ultimoStage3: agora,
       inicioAtendimento: fase === "agent" ? agora : null,
       maiorDuracaoSeg: null,
+      duracaoAteTransferenciaSeg: duracaoOrigemSeg,
     });
   }
 
@@ -580,6 +596,7 @@ export class CallTracker {
               callback: sg.callback,
               callee,
               duracaoSeg: duracao,
+              ateTransferenciaSeg: sg.duracaoAteTransferenciaSeg,
             });
           continue;
         }

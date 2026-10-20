@@ -26,6 +26,7 @@ const L = (
   observacao: false,
   semTransferencia: false,
   duracaoSeg: d,
+  duracaoAteTransfSeg: d,
 });
 
 // B: 3 transferências (1 callback), C: 2 (0 callback, sem duração), A: 1 (1 callback)

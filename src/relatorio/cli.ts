@@ -14,6 +14,7 @@ import {
   ARQUIVOS_DO_RELATORIO,
   ARQUIVO_DURACOES,
   lerDuracoes,
+  lerDuracoesAteTransferencia,
   lerRegistro,
   montarLigacoes,
   NOMES_DE_PERIODO,
@@ -103,7 +104,7 @@ async function principal(): Promise<void> {
       entradas,
       lerDuracoes(ler(ARQUIVO_DURACOES) ?? ""),
       lerCallbacksManuais(ler(ARQUIVO_CALLBACKS_MANUAIS) ?? ""),
-      { religacao },
+      { religacao, ateTransferencia: lerDuracoesAteTransferencia(ler(ARQUIVO_DURACOES) ?? "") },
     );
   };
   const pagina = (servidor?: { token: string }): string | null => {

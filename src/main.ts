@@ -132,7 +132,11 @@ async function principal(): Promise<void> {
 
   // O registro em arquivo é criado mais abaixo; o rastreador chama este gancho quando uma ligação atendida termina.
   const ganchos: {
-    encerrada?: (i: { vinculo: string; duracaoSeg: number }) => void;
+    encerrada?: (i: {
+      vinculo: string;
+      duracaoSeg: number;
+      ateTransferenciaSeg: number | null;
+    }) => void;
   } = {};
   const tracker = new CallTracker({
     leiturasConfirmacao: cfg.monitor.leiturasConfirmacao,
@@ -233,7 +237,11 @@ async function principal(): Promise<void> {
   if (registro) {
     console.log(`Registro das mensagens em: ${cfg.pastaRegistros}`);
     ganchos.encerrada = (i) =>
-      registro.registrarDuracao({ ligacao: idDaLigacao(i.vinculo), duracaoSeg: i.duracaoSeg });
+      registro.registrarDuracao({
+        ligacao: idDaLigacao(i.vinculo),
+        duracaoSeg: i.duracaoSeg,
+        ateTransferenciaSeg: i.ateTransferenciaSeg,
+      });
   }
   let sender: MessageSender = new EnviadorConsole();
   let senderLonga: MessageSender | undefined;

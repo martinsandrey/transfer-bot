@@ -13,6 +13,7 @@ import { lerEnv } from "../src/relatorio/env.js";
 import { dadosDasLigacoes, paginaHtml } from "../src/relatorio/pagina.js";
 import {
   lerDuracoes,
+  lerDuracoesAteTransferencia,
   lerRegistro,
   montarLigacoes,
   resumir,
@@ -48,7 +49,7 @@ const bloco = (b: T): string =>
     b.c ? ` | Cliente: ${b.c}` : ""
   }${b.lig ? ` | Ligação: ${b.lig}` : ""} =====\n${b.cb ? "CALLBACK" : "NAME: X"}\n\n`;
 const dur = (lig: string, s: number): string =>
-  `${carimbo(em(23, 0))} | Ligação: ${lig} | Duração: ${s} s\n`;
+  `${carimbo(em(23, 0))} | Ligação: ${lig} | Duração: ${s} s | Até a transferência: ${s} s\n`;
 
 const PADRAO = { religacao: { janelaMs: 60 * 60_000, duracaoMinSeg: 20 } };
 function montar(blocos: T[], duracoes = "", manuais = "", op = PADRAO) {
@@ -56,7 +57,7 @@ function montar(blocos: T[], duracoes = "", manuais = "", op = PADRAO) {
     lerRegistro(blocos.map(bloco).join(""), "transferencia"),
     lerDuracoes(duracoes),
     lerCallbacksManuais(manuais),
-    op,
+    { ...op, ateTransferencia: lerDuracoesAteTransferencia(duracoes) },
   );
 }
 const tudo = { de: null, ate: null, rotulo: "" };

@@ -32,6 +32,7 @@ export function dadosDasLigacoes(ligacoes: readonly Ligacao[]): unknown[] {
     o: l.observacao ? 1 : 0,
     s: l.semTransferencia ? 1 : 0,
     d: l.duracaoSeg,
+    u: l.duracaoAteTransfSeg,
     k: l.chave ?? null,
     m: l.manual ? 1 : 0,
     // callback removido pela religação: não conta; `rm` = quando e quem fez a nova transferência atendida
@@ -208,7 +209,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
       <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo pouco depois (por qualquer funcionário) e dessa vez foi atendido, o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
-      <li><b>Duração média</b>: média do tempo das transferências atendidas e sem callback (só entram as que têm a duração registrada).</li>
+      <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para o Stage 3 (o tempo antes da transferência, não o da conversa com o funcionário do Stage 3), nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
     </ul>
     <div class="acoes">
       <button class="acao" id="csv">Baixar planilha (CSV)</button>
@@ -268,7 +269,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
         <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
         <th class="esq" data-k="c" data-tipo="txt"><button type="button">Cliente</button></th>
         <th class="esq" data-k="r" data-tipo="txt"><button type="button">Resultado</button></th>
-        <th data-k="d"><button type="button">Duração</button></th>
+        <th data-k="u"><button type="button">Duração até a transferência</button></th>
         <th class="esq">Corrigir</th>
       </tr></thead>
       <tbody></tbody>
@@ -337,7 +338,7 @@ const dentro = (c, iv) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)) && !
 /* ---- agregação ---- */
 function agregar(L, G) {
   const a = { tr: 0, sem: 0, cb: 0, lg: 0, lgAv: 0, lgTr: 0, ds: 0, nd: 0 };
-  for (const c of L) { a.tr++; if (c.r === "c") a.cb++; else { a.sem++; if (c.d !== null && c.d !== undefined) { a.ds += c.d; a.nd++; } } }
+  for (const c of L) { a.tr++; if (c.r === "c") a.cb++; else { a.sem++; if (c.u !== null && c.u !== undefined) { a.ds += c.u; a.nd++; } } }
   for (const g of G) { a.lg++; if (g.x !== null && g.x !== undefined) { a.lgAv++; if (g.x) a.lgTr++; } }
   return a;
 }
@@ -379,7 +380,7 @@ const chavesFunc = {
   lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
   lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
 };
-const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
+const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), u: (c) => (c.r === "c" ? null : c.u) };
 const ORD = {
   tabela: { k: "tr", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
   longas: { k: "lg", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
@@ -521,7 +522,7 @@ function desenhar() {
       b.addEventListener("click", () => abrirConfirmacao(c));
       acao.append(b);
     }
-    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d)), acao));
+    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.u)), acao));
     if (c.rm) db.lastChild.classList.add("removida");
   }
   window.__relatorio = {

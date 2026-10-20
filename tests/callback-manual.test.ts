@@ -79,7 +79,7 @@ describe("callbacks marcados no relatório: cálculo", () => {
   const dur = new Map([["aaa", 200]]);
 
   it("a transferência marcada vira callback (manual), sai da duração média e o resto não muda", () => {
-    const antes = montarLigacoes(entradas, dur);
+    const antes = montarLigacoes(entradas, dur, new Map(), { ateTransferencia: dur });
     const t0 = totalDe(resumir(antes, { de: null, ate: null, rotulo: "" }));
     expect(t0).toMatchObject({
       comCallback: 3,
@@ -94,7 +94,7 @@ describe("callbacks marcados no relatório: cálculo", () => {
       [`T:${carimbo(em(9, 20))}|908114`, true],
       ["L:bbb", true], // já era callback pelo bot: nada muda
     ]);
-    const depois = montarLigacoes(entradas, dur, manuais);
+    const depois = montarLigacoes(entradas, dur, manuais, { ateTransferencia: dur });
     const t1 = totalDe(resumir(depois, { de: null, ate: null, rotulo: "" }));
     expect(t1).toMatchObject({
       comCallback: 3,
@@ -116,7 +116,9 @@ describe("callbacks marcados no relatório: cálculo", () => {
     });
 
     // desmarcada = volta a ser atendida, com a duração
-    const desfeita = montarLigacoes(entradas, dur, new Map([["L:aaa", false]]));
+    const desfeita = montarLigacoes(entradas, dur, new Map([["L:aaa", false]]), {
+      ateTransferencia: dur,
+    });
     expect(desfeita.ligacoes.find((l) => l.chave === "L:aaa")).toMatchObject({
       resultado: "atendida",
       manual: false,
@@ -215,6 +217,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("relatório no navegador: botão Marcar como
       lerRegistro(registro, "transferencia"),
       new Map([["aaa", 200]]),
       lerCallbacksManuais(existsSync(arqManuais) ? readFileSync(arqManuais, "utf8") : ""),
+      { ateTransferencia: new Map([["aaa", 200]]) },
     );
   const TOKEN = "a1".repeat(24);
   const total = () =>

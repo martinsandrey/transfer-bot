@@ -84,6 +84,16 @@ export function lerDuracoes(texto: string): Map<string, number> {
   return mapa;
 }
 
+/** Duração (s) que cada ligação já tinha quando foi transferida (campo "Até a transferência" de duracoes.txt; só registros novos). */
+export function lerDuracoesAteTransferencia(texto: string): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const linha of texto.replace(/\r\n?/g, "\n").split("\n")) {
+    const m = /\|\s*Ligação:\s*(\S+)\s*\|.*\|\s*Até a transferência:\s*(\d+)\s*s/.exec(linha);
+    if (m) mapa.set(m[1] as string, Number(m[2]));
+  }
+  return mapa;
+}
+
 export interface Ligacao {
   /** Momento da transferência (para CALLBACK sem transferência registrada: o momento do CALLBACK). */
   quando: Date;
@@ -97,6 +107,11 @@ export interface Ligacao {
   semTransferencia: boolean;
   /** Duração (s) da ligação atendida no Stage 3; `null` se não foi registrada (ligações antigas) ou se foi CALLBACK (exceto o marcado à mão). */
   duracaoSeg: number | null;
+  /**
+   * Quanto a ligação já durava quando foi transferida para o Stage 3 (é a que entra na duração média); `null` se não foi
+   * registrada (registros anteriores a esta versão) ou se foi CALLBACK. Como `duracaoSeg`, é guardada na marcação manual.
+   */
+  duracaoAteTransfSeg: number | null;
   /** Identifica a transferência para marcá-la como callback no relatório (ver `callbacks-manuais.ts`); ausente no CALLBACK sem transferência. */
   chave?: string;
   /** CALLBACK marcado à mão no relatório (o bot tinha registrado como atendida). */
@@ -120,6 +135,8 @@ export interface OpcoesMontagem {
    * `janelaMs` 0 = desligado.
    */
   religacao?: { janelaMs: number; duracaoMinSeg: number };
+  /** Duração até a transferência por código de ligação (ver `lerDuracoesAteTransferencia`). */
+  ateTransferencia?: ReadonlyMap<string, number>;
 }
 
 const soDigitos = (s: string | null): string => (s ?? "").replace(/\D+/g, "");
@@ -247,6 +264,8 @@ export function montarLigacoes(
         semTransferencia: false,
         // A marcação manual guarda a duração medida: "Desfazer" no relatório volta a mostrá-la (callbacks nunca entram na média).
         duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
+        duracaoAteTransfSeg:
+          comCallback.has(t) || !t.ligacao ? null : (op.ateTransferencia?.get(t.ligacao) ?? null),
         chave,
         manual,
         ...(doBot ? { quandoCallback: doBot.quando } : {}),
@@ -260,6 +279,7 @@ export function montarLigacoes(
       observacao: !c.enviada,
       semTransferencia: true,
       duracaoSeg: null,
+      duracaoAteTransfSeg: null,
       quandoCallback: c.quando,
     })),
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
@@ -394,9 +414,9 @@ export function resumir(
     if (c.resultado === "callback") l.callbacks++;
     else {
       l.semCallback++;
-      if (c.duracaoSeg !== null) {
+      if (c.duracaoAteTransfSeg !== null) {
         l.comDuracao++;
-        somas.set(c.funcionario, (somas.get(c.funcionario) ?? 0) + c.duracaoSeg);
+        somas.set(c.funcionario, (somas.get(c.funcionario) ?? 0) + c.duracaoAteTransfSeg);
       }
     }
   }

@@ -1072,7 +1072,11 @@ describe("duração da ligação atendida (para o relatório)", () => {
   });
   const VAZIAS = () => [snap([]), snap([]), snap([]), snap([]), snap([])];
   function rodar(minimo: number, ...snaps: TableSnapshot[]) {
-    const fim: Array<{ vinculo: string; duracaoSeg: number }> = [];
+    const fim: Array<{
+      vinculo: string;
+      duracaoSeg: number;
+      ateTransferenciaSeg: number | null;
+    }> = [];
     const t = tracker({
       leiturasConfirmacao: 1,
       esperaCallbackMs: 3000,
@@ -1106,6 +1110,54 @@ describe("duração da ligação atendida (para o relatório)", () => {
     const { fim, ev } = rodar(0, snap([ST1, AG(2)]), snap([AG(9)]), ...VAZIAS());
     expect(tipos(ev)).toEqual(["transferencia"]);
     expect(fim[0]?.duracaoSeg).toBe(9);
+  });
+  it("informa quanto a ligação já durava no Stage 1 quando foi transferida (última leitura da origem)", () => {
+    const st1 = (dur: number | null) => ({ ...ST1, callDurationSec: dur });
+    const t = tracker({
+      leiturasConfirmacao: 1,
+      esperaCallbackMs: 3000,
+      duracaoCallbackSeg: 20,
+      aoEncerrarLigacao: (i) => fim.push(i),
+    });
+    const fim: Array<{ duracaoSeg: number; ateTransferenciaSeg: number | null }> = [];
+    alimentar(t, snap([]));
+    alimentar(t, snap([st1(40)]));
+    alimentar(t, snap([st1(95)]));
+    // a linha do Stage 1 some e a do Stage 3 aparece: a duração da transferência é a última lida no Stage 1
+    alimentar(t, snap([AG(3)]), snap([AG(60)]), snap([AG(185)]), ...VAZIAS(), ...VAZIAS());
+    expect(fim).toHaveLength(1);
+    expect(fim[0]).toMatchObject({ duracaoSeg: 185, ateTransferenciaSeg: 95 });
+  });
+  it("origem sem Call Duration legível: até a transferência fica nula (a duração do Stage 3 continua registrada)", () => {
+    const fim: Array<{ duracaoSeg: number; ateTransferenciaSeg: number | null }> = [];
+    const t = tracker({
+      leiturasConfirmacao: 1,
+      esperaCallbackMs: 3000,
+      duracaoCallbackSeg: 20,
+      aoEncerrarLigacao: (i) => fim.push(i),
+    });
+    alimentar(t, snap([]));
+    alimentar(t, snap([{ ...ST1, callDurationSec: null }]));
+    alimentar(t, snap([AG(3)]), snap([AG(60)]), ...VAZIAS(), ...VAZIAS());
+    expect(fim[0]).toMatchObject({ duracaoSeg: 60, ateTransferenciaSeg: null });
+  });
+  it("mesma linha que muda de Stage 1 Agent para Stage 3 Agent: vale a última leitura do Stage 1, não a do Stage 3", () => {
+    const fim: Array<{ duracaoSeg: number; ateTransferenciaSeg: number | null }> = [];
+    const t = tracker({
+      leiturasConfirmacao: 1,
+      esperaCallbackMs: 3000,
+      duracaoCallbackSeg: 20,
+      aoEncerrarLigacao: (i) => fim.push(i),
+    });
+    const mesma = (status: string, dur: number) => ({
+      ...linha("100001", status, "T1", X),
+      callDurationSec: dur,
+    });
+    alimentar(t, snap([]));
+    alimentar(t, snap([mesma(S1, 40)]), snap([mesma(S1, 95)]));
+    const ev = alimentar(t, snap([mesma(S3, 96)]), snap([mesma(S3, 300)]), ...VAZIAS());
+    expect(tipos(ev)).toContain("transferencia");
+    expect(fim[0]).toMatchObject({ duracaoSeg: 300, ateTransferenciaSeg: 95 });
   });
   it("tocou e ninguém atendeu: sem duração", () => {
     const { fim } = rodar(

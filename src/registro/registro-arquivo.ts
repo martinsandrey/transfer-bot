@@ -47,13 +47,20 @@ export class RegistroEmArquivo {
     private readonly agora: () => Date = () => new Date(),
   ) {}
 
-  /** Uma linha: quando terminou, código da ligação (o mesmo do cabeçalho das mensagens) e a duração em segundos. */
-  registrarDuracao(r: { ligacao: string; duracaoSeg: number }): void {
+  /**
+   * Uma linha: quando terminou, código da ligação (o mesmo do cabeçalho das mensagens), a duração em segundos e, se legível,
+   * quanto a ligação já durava quando foi transferida ("Até a transferência"; é esta que entra na duração média do relatório).
+   */
+  registrarDuracao(r: {
+    ligacao: string;
+    duracaoSeg: number;
+    ateTransferenciaSeg?: number | null;
+  }): void {
     try {
       mkdirSync(this.pasta, { recursive: true });
       appendFileSync(
         join(this.pasta, ARQUIVO_DURACOES),
-        `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s\n`,
+        `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s${r.ateTransferenciaSeg == null ? "" : ` | Até a transferência: ${Math.max(0, Math.round(r.ateTransferenciaSeg))} s`}\n`,
         { encoding: "utf8" },
       );
     } catch (e) {

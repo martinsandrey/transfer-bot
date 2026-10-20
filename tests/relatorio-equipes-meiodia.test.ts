@@ -193,6 +193,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       observacao: false,
       semTransferencia: false,
       duracaoSeg: d,
+      duracaoAteTransfSeg: d,
     });
     const lon = (h: number, f: string, x: boolean | null) => ({
       quando: brt(h),
