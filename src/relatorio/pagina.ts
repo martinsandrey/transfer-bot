@@ -42,6 +42,16 @@ export function dadosDasLigacoes(ligacoes: readonly Ligacao[]): unknown[] {
   }));
 }
 
+export function dadosDasLongas(longas: DadosDaPagina["longas"]): unknown[] {
+  return longas.map((l) => ({
+    t: l.quando.getTime(),
+    f: l.funcionario,
+    c: l.cliente,
+    o: l.observacao ? 1 : 0,
+    x: l.transferida === null ? null : l.transferida ? 1 : 0,
+  }));
+}
+
 /**
  * Página HTML autônoma (sem internet, sem bibliotecas): filtros de período, equipe e ordenação funcionam dentro da própria página.
  * Os dados (telefones de clientes) ficam só no arquivo local, que fica na pasta de registros (ignorada pelo git).
@@ -50,13 +60,7 @@ export function paginaHtml(d: DadosDaPagina): string {
   const dados = {
     gerado: d.geradoEm.getTime(),
     ligacoes: dadosDasLigacoes(d.ligacoes),
-    longas: d.longas.map((l) => ({
-      t: l.quando.getTime(),
-      f: l.funcionario,
-      c: l.cliente,
-      o: l.observacao ? 1 : 0,
-      x: l.transferida === null ? null : l.transferida ? 1 : 0,
-    })),
+    longas: dadosDasLongas(d.longas),
     ap: Object.fromEntries(d.apelidos ?? []),
     pk: [...(d.equipePaquistanesDigitos ?? ["0"])],
     inicial: d.inicial,
@@ -162,6 +166,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
 <main>
   <h1>Relatório de transferências</h1>
   <p class="sub" id="gerado"></p>
+  <p class="sub sem-print" id="vivo" hidden><span id="vivo-txt"></span> <button type="button" class="mini" id="vivo-btn">Pausar atualização</button></p>
 
   <section class="painel" aria-label="Filtros">
     <div class="filtros" id="filtros">
@@ -583,6 +588,7 @@ $("conf-sim").addEventListener("click", async () => {
     const resp = await fetch("/marcar", { method: "POST", headers: { "Content-Type": "application/json", "X-Token": D.srv.token }, body: JSON.stringify({ chave: c.k, marcar }) });
     const r = await resp.json().catch(() => ({}));
     if (!resp.ok || !r.ok) throw new Error(r.erro || "falha " + resp.status);
+    vivo.versao++;
     if (Array.isArray(r.ligacoes)) D.ligacoes = r.ligacoes; // recalculado no servidor (inclui a regra da religação)
     else for (const x of D.ligacoes) if (x.k === c.k) { x.m = marcar ? 1 : 0; x.r = marcar ? "c" : "a"; }
     $("confirma").close();
@@ -596,6 +602,45 @@ $("detalhe").classList.toggle("sem-acao", !D.srv);
 $("nota-acao").textContent = D.srv
   ? "Se uma ligação registrada como atendida na verdade foi callback, use “Marcar como callback”. A correção vale só para o relatório (nada é enviado ao Telegram) e fica gravada em callbacks-manuais.txt, na pasta de registros."
   : "Para marcar uma ligação como callback, abra o relatório pelo relatorio.bat e deixe a janela dele aberta enquanto usa a página.";
+
+/* ---- atualização automática (só quando aberta pelo relatorio.bat): relê os registros a cada 10 s ---- */
+const INTERVALO_VIVO_MS = 10000;
+const vivo = { pausado: false, ocupado: false, versao: 0, falhas: 0 };
+const hhmmss = (d) => d.toLocaleTimeString("pt-BR", { hour12: false });
+function textoVivo(t) { $("vivo-txt").textContent = t; }
+async function atualizar() {
+  if (!D.srv || vivo.pausado || vivo.ocupado || document.hidden || $("confirma").open) return;
+  vivo.ocupado = true;
+  const v = vivo.versao; // se uma marcação terminar enquanto isto roda, esta resposta já está velha
+  try {
+    const resp = await fetch("/dados", { headers: { "X-Token": D.srv.token }, cache: "no-store" });
+    if (!resp.ok) throw new Error("falha " + resp.status);
+    const r = await resp.json();
+    if (v !== vivo.versao || $("confirma").open || !Array.isArray(r.ligacoes) || !Array.isArray(r.longas)) return;
+    if (JSON.stringify([r.ligacoes, r.longas]) !== JSON.stringify([D.ligacoes, D.longas])) {
+      D.ligacoes = r.ligacoes; D.longas = r.longas; desenhar();
+    }
+    vivo.falhas = 0;
+    $("gerado").textContent = "Atualizado às " + hhmmss(new Date());
+    textoVivo("Atualização automática a cada " + INTERVALO_VIVO_MS / 1000 + " s.");
+  } catch (e) {
+    vivo.falhas++;
+    textoVivo("Sem conexão com o relatório (a janela do relatorio.bat foi fechada?). Os números abaixo podem estar desatualizados.");
+  } finally { vivo.ocupado = false; }
+}
+if (D.srv) {
+  $("vivo").hidden = false;
+  textoVivo("Atualização automática a cada " + INTERVALO_VIVO_MS / 1000 + " s.");
+  $("vivo-btn").addEventListener("click", () => {
+    vivo.pausado = !vivo.pausado;
+    $("vivo-btn").textContent = vivo.pausado ? "Retomar atualização" : "Pausar atualização";
+    textoVivo(vivo.pausado ? "Atualização automática pausada." : "Atualização automática a cada " + INTERVALO_VIVO_MS / 1000 + " s.");
+    if (!vivo.pausado) void atualizar();
+  });
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) void atualizar(); });
+  window.__atualizarAgora = atualizar;
+  setInterval(() => void atualizar(), INTERVALO_VIVO_MS);
+}
 
 $("gerado").textContent = "Gerado em " + new Date(D.gerado).toLocaleString("pt-BR");
 estado.p = D.inicial.periodo || "hoje"; estado.de = D.inicial.de || ""; estado.ate = D.inicial.ate || "";

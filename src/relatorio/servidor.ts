@@ -16,6 +16,8 @@ export interface OpcoesServidor {
   marcar: (chave: string, marcar: boolean) => boolean;
   /** Ligações recalculadas depois da marcação (a página troca as suas por estas). */
   ligacoes?: () => unknown[];
+  /** Dados atuais (registros lidos de novo) para a atualização automática da página. */
+  dados?: () => { ligacoes: unknown[]; longas: unknown[] };
   porta?: number;
 }
 
@@ -77,6 +79,15 @@ export function iniciarServidor(op: OpcoesServidor): Promise<ServidorRelatorio> 
             "Link vencido. Abra o relatorio.bat de novo.",
           );
         return responder(res, 200, "text/html; charset=utf-8", op.pagina());
+      }
+      if (req.method === "GET" && url.pathname === "/dados" && op.dados) {
+        if (!igual(String(req.headers["x-token"] ?? ""), op.token))
+          return json(res, 403, { ok: false, erro: "link vencido; abra o relatorio.bat de novo" });
+        try {
+          return json(res, 200, op.dados());
+        } catch {
+          return json(res, 500, { ok: false, erro: "não consegui ler os registros" });
+        }
       }
       if (req.method === "POST" && url.pathname === "/marcar") {
         if (!igual(String(req.headers["x-token"] ?? ""), op.token))

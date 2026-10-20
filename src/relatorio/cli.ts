@@ -7,7 +7,7 @@ import {
   lerCallbacksManuais,
   linhaDeMarcacao,
 } from "./callbacks-manuais.js";
-import { dadosDasLigacoes, paginaHtml } from "./pagina.js";
+import { dadosDasLigacoes, dadosDasLongas, paginaHtml } from "./pagina.js";
 import { lerEnv } from "./env.js";
 import { iniciarServidor } from "./servidor.js";
 import {
@@ -28,7 +28,7 @@ Uso: relatorio.bat [periodo]
   hoje | ontem | semana | 7dias | mes | tudo | de=AAAA-MM-DD [ate=AAAA-MM-DD]
   --nao-abrir   só grava o arquivo, sem abrir o navegador
 
-Enquanto a janela do relatorio.bat estiver aberta, a página permite marcar uma ligação como callback (só no relatório).
+Enquanto a janela do relatorio.bat estiver aberta, a página se atualiza sozinha a cada 10 s e permite marcar uma ligação como callback (só no relatório).
 `;
 
 function abrirNoNavegador(arquivo: string): void {
@@ -140,6 +140,13 @@ async function principal(): Promise<void> {
     token,
     pagina: () => pagina({ token }) ?? "",
     ligacoes: () => dadosDasLigacoes(montar()?.ligacoes ?? []),
+    dados: () => {
+      const m = montar();
+      return {
+        ligacoes: dadosDasLigacoes(m?.ligacoes ?? []),
+        longas: dadosDasLongas(m?.longas ?? []),
+      };
+    },
     marcar: (chave, marcar) => {
       if (!(montar()?.ligacoes ?? []).some((l) => l.chave === chave)) return false;
       mkdirSync(pasta, { recursive: true });
