@@ -1,7 +1,7 @@
 # Transfer Bot
 
 Programa para Windows que abre um navegador dedicado, monitora a tabela de chamadas (Voice Call Status) de um sistema web, detecta
-transferências (`Stage 1 Agent` → `Stage 3 Agent`), consulta o cliente na Customer Data List (**somente leitura**), monta a mensagem
+transferências (`Stage 1 Agent` ou `Stage 1 Manual Call` → `Stage 3 Agent`), consulta o cliente na Customer Data List (**somente leitura**), monta a mensagem
 de `config\mensagem.txt` e a envia pelo Telegram (conta pessoal). Por padrão ele só **mostra** a mensagem no console (modo observação).
 
 Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAUDE.md`](CLAUDE.md).

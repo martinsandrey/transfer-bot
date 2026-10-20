@@ -194,6 +194,43 @@ describe("CallTracker: transferência = linha do Stage 1 some e aparece outra em
     expect(ev[0]).toMatchObject({ tipo: "transferencia", callback: ORIGEM, callee: CLIENTE });
   });
 
+  it("ligação MANUAL (Stage 1 Manual Call) transferida ao Stage 3, com a linha manual ainda na tabela por mais alguns segundos: uma transferência, sem aviso (caso real de 20/10)", () => {
+    const t = tracker();
+    const manual = linha(ORIGEM, "Stage 1 Manual Call", "20:00:00", CLIENTE);
+    alimentar(t, snap([]));
+    alimentar(t, snap([manual]), snap([manual]), snap([manual]), snap([manual]), snap([manual]));
+    const ev = alimentar(
+      t,
+      snap([manual, linha(DESTINO, "Stage 3 Ringing", "20:14:00", CLIENTE)]),
+      snap([manual, linha(DESTINO, "Stage 3 Ringing", "20:14:00", CLIENTE)]),
+      snap([manual, linha(DESTINO, "Stage 3 Ringing", "20:14:00", CLIENTE)]),
+      snap([linha(DESTINO, S3, "20:14:00", CLIENTE)]),
+      snap([linha(DESTINO, S3, "20:14:00", CLIENTE)]),
+    );
+    expect(tipos(ev)).toEqual(["transferencia"]);
+    expect(ev[0]).toMatchObject({ tipo: "transferencia", callback: ORIGEM, callee: CLIENTE });
+  });
+
+  it("ligação manual cuja linha some antes de o Stage 3 aparecer (dentro da janela) também é transferência", () => {
+    const t = tracker();
+    const manual = linha(ORIGEM, "Stage 1 Manual Call", "20:00:00", CLIENTE);
+    alimentar(t, snap([]));
+    alimentar(t, snap([manual]), snap([manual]), snap([manual]));
+    alimentar(t, snap([]), snap([]));
+    expect(tipos(alimentar(t, snap([s3()]), snap([s3()]), snap([s3()])))).toEqual([
+      "transferencia",
+    ]);
+  });
+
+  it("Stage 3 de OUTRO cliente enquanto uma ligação manual está na tabela continua sem origem (aviso)", () => {
+    const t = tracker({ leiturasConfirmacao: 1 });
+    alimentar(t, snap([]));
+    alimentar(t, snap([linha(ORIGEM, "Stage 1 Manual Call", "20:00:00", "OUTRO")]));
+    expect(
+      tipos(alimentar(t, snap([linha(ORIGEM, "Stage 1 Manual Call", "20:00:00", "OUTRO"), s3()]))),
+    ).toEqual(["aviso:visto_primeira_vez_stage3"]);
+  });
+
   it("troca no mesmo instante (Stage 1 e Stage 3 na mesma leitura) e com a linha do Stage 1 ainda presente também funcionam", () => {
     const t = tracker();
     alimentar(t, snap([]));

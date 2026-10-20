@@ -42,6 +42,15 @@ export function interpretarStatus(texto: string): Stage {
   }
 }
 
+/**
+ * Status de Stage 1 de onde uma transferência pode sair: "Stage 1 Agent" (evidência do recon) e "Stage 1 Manual Call" (ligação
+ * feita à mão pelo funcionário; evidência do usuário em 2026-10-20: uma ligação manual transferida ao Stage 3 não gerou mensagem
+ * porque só o Agent era aceito como origem). "Stage 1 Ringing" continua não sendo origem.
+ */
+export function ehOrigemDeTransferencia(s: Pick<StatusInterpretado, "numero" | "sub">): boolean {
+  return s.numero === 1 && (s.sub === "agent" || s.sub === "manual call");
+}
+
 export type CodigoAviso =
   | "visto_primeira_vez_stage3"
   | "sequencia_inesperada"
@@ -287,7 +296,7 @@ export class CallTracker {
           candidato: null,
           baseline,
           ausencias: 0,
-          viuStage1Agent: status.numero === 1 && status.sub === "agent",
+          viuStage1Agent: ehOrigemDeTransferencia(status),
           callee: row.calleeNumber,
           origemPendente: null,
           leiturasNoStatus: 1,
@@ -319,7 +328,7 @@ export class CallTracker {
       oc.confirmado = status;
       oc.candidato = null;
       oc.leiturasNoStatus = this.op.leiturasConfirmacao;
-      if (status.numero === 1 && status.sub === "agent") oc.viuStage1Agent = true;
+      if (ehOrigemDeTransferencia(status)) oc.viuStage1Agent = true;
       this.op.aoMudarStatus?.({ id: oc.id, de: de.chave, para: status.chave });
       this.aplicarTransicao(oc, de, status, row, s.readAt, eventos);
       this.aposLeitura(oc, row, s.readAt, eventos);
@@ -349,7 +358,7 @@ export class CallTracker {
     baseline: boolean,
     eventos: EventoTracker[],
   ): void {
-    if (status.numero === 1 && status.sub === "agent") this.registrarOrigem(oc, agora);
+    if (ehOrigemDeTransferencia(status)) this.registrarOrigem(oc, agora);
     if (baseline) {
       if (status.numero === 3) this.stage3Conhecidos.set(oc.callee, agora);
       return;
@@ -410,7 +419,7 @@ export class CallTracker {
         });
       }
     }
-    if (st.numero === 1 && st.sub === "agent") this.registrarOrigem(oc, agora);
+    if (ehOrigemDeTransferencia(st)) this.registrarOrigem(oc, agora);
     if (st.numero === 3 && !oc.origemPendente) this.stage3Conhecidos.set(oc.callee, agora);
     if (
       oc.origemPendente &&
@@ -460,7 +469,7 @@ export class CallTracker {
     if (de.numero === 4 || para.numero === 4) return; // Stage 4: o usuário pediu para não fazer nada (sem tarefa, sem aviso)
     if (de.numero === 1 && para.numero === 2) return; // não é do interesse
     if (de.numero === 1 && para.numero === 3) {
-      if (!(de.sub === "agent" || oc.viuStage1Agent)) {
+      if (!(ehOrigemDeTransferencia(de) || oc.viuStage1Agent)) {
         eventos.push(this.aviso("sequencia_inesperada", oc)); // nunca foi "Stage 1 Agent"
         return;
       }
