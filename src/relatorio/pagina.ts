@@ -10,6 +10,8 @@ export interface DadosDaPagina {
   apelidos?: ReadonlyMap<string, string>;
   /** Penúltimos dígitos da equipe do paquistanês (a caixa "Mostrar equipe do paquistanês" usa isto). */
   equipePaquistanesDigitos?: readonly string[];
+  /** Página servida pelo `relatorio.bat` (servidor local): habilita "Marcar como callback". Sem isto, a página só mostra. */
+  servidor?: { token: string };
 }
 
 /** JSON seguro para ficar dentro de um <script> (nunca fecha a tag nem quebra a linha). */
@@ -35,6 +37,8 @@ export function paginaHtml(d: DadosDaPagina): string {
       o: l.observacao ? 1 : 0,
       s: l.semTransferencia ? 1 : 0,
       d: l.duracaoSeg,
+      k: l.chave ?? null,
+      m: l.manual ? 1 : 0,
     })),
     longas: d.longas.map((l) => ({
       t: l.quando.getTime(),
@@ -46,6 +50,7 @@ export function paginaHtml(d: DadosDaPagina): string {
     ap: Object.fromEntries(d.apelidos ?? []),
     pk: [...(d.equipePaquistanesDigitos ?? ["0"])],
     inicial: d.inicial,
+    srv: d.servidor ? { token: d.servidor.token } : null,
   };
   return PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados));
 }
@@ -125,7 +130,20 @@ h3{font-size:15px;margin:18px 0 8px}
 .bar i{display:block;height:12px;border-radius:4px;min-width:2px}
 .bar.a i{background:var(--alerta)} .bar.b i{background:var(--ok)}
 .leg{display:flex;gap:16px;color:var(--suave);font-size:12px;margin:0 0 8px}
-@media print{ .filtros,.datas,.opc,.acoes{display:none} body{background:#fff} }
+.mini{font:inherit;font-size:13px;border:1px solid var(--linha);background:var(--cartao);color:var(--texto);padding:4px 10px;border-radius:999px;cursor:pointer}
+.mini:hover{border-color:var(--alerta);color:var(--alerta)}
+.mini:focus-visible{outline:2px solid var(--marca);outline-offset:2px}
+.sem-acao th:last-child,.sem-acao td:last-child{display:none}
+dialog{border:1px solid var(--linha);border-radius:14px;background:var(--cartao);color:var(--texto);box-shadow:0 10px 30px rgba(0,0,0,.25);padding:20px 22px;max-width:440px;width:calc(100% - 32px)}
+dialog::backdrop{background:rgba(15,20,25,.45)}
+dialog h2{margin:0 0 10px}
+dialog dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:12px 0}
+dialog dt{color:var(--suave)} dialog dd{margin:0;font-weight:600}
+dialog .botoes{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
+dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff;font-weight:600}
+@media (prefers-color-scheme: dark){dialog .confirmar{color:#1b1400}}
+.erro{color:var(--alerta);font-weight:600;min-height:1em;margin:8px 0 0}
+@media print{ .filtros,.datas,.opc,.acoes,.sem-print{display:none} body{background:#fff} #detalhe th:last-child,#detalhe td:last-child{display:none} }
 </style>
 </head>
 <body>
@@ -226,6 +244,7 @@ h3{font-size:15px;margin:18px 0 8px}
 
   <section class="painel">
     <h2>Ligações do período</h2>
+    <p class="explica sem-print" id="nota-acao"></p>
     <div class="rolagem"><table id="detalhe">
       <thead><tr>
         <th class="esq" data-k="t"><button type="button">Data e hora</button></th>
@@ -233,10 +252,26 @@ h3{font-size:15px;margin:18px 0 8px}
         <th class="esq" data-k="c" data-tipo="txt"><button type="button">Cliente</button></th>
         <th class="esq" data-k="r" data-tipo="txt"><button type="button">Resultado</button></th>
         <th data-k="d"><button type="button">Duração</button></th>
+        <th class="esq">Corrigir</th>
       </tr></thead>
       <tbody></tbody>
     </table></div>
   </section>
+
+  <dialog id="confirma" aria-labelledby="conf-titulo">
+    <h2 id="conf-titulo"></h2>
+    <p id="conf-texto" class="explica"></p>
+    <dl>
+      <dt>Data e hora</dt><dd id="conf-quando"></dd>
+      <dt>Funcionário</dt><dd id="conf-func"></dd>
+      <dt>Cliente</dt><dd id="conf-cliente"></dd>
+    </dl>
+    <p class="erro" id="conf-erro" role="alert"></p>
+    <div class="botoes">
+      <button type="button" class="acao" id="conf-nao">Cancelar</button>
+      <button type="button" class="acao confirmar" id="conf-sim"></button>
+    </div>
+  </dialog>
 
   <footer>Gerado a partir dos registros em texto do programa. Os horários da lista são os do computador onde o programa roda; a divisão do meio-dia usa o horário de Brasília.</footer>
 </main>
@@ -450,13 +485,21 @@ function desenhar() {
 
   const lista = ordenar("detalhe", L);
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
-  if (!lista.length) db.append(vazioTr(5, "Nenhuma ligação transferida neste período."));
+  if (!lista.length) db.append(vazioTr(6, "Nenhuma ligação transferida neste período."));
   for (const c of lista) {
     const sel = el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
+    if (c.m) r.append(" ", el("span", "(marcado no relatório)", "explica"));
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
-    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d))));
+    const acao = el("td", undefined, "esq");
+    if (D.srv && c.k && (c.m || c.r === "a")) {
+      const b = el("button", c.m ? "Desfazer" : "Marcar como callback", "mini");
+      b.type = "button";
+      b.addEventListener("click", () => abrirConfirmacao(c));
+      acao.append(b);
+    }
+    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d)), acao));
   }
   window.__relatorio = {
     linhas: ordenar("tabela", todos), periodo: iv.rot,
@@ -495,6 +538,45 @@ $("csv").addEventListener("click", () => {
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "relatorio-transferencias.csv"; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
+
+/* ---- marcar como callback (só no relatório; precisa do relatorio.bat aberto) ---- */
+let pendente = null;
+function abrirConfirmacao(c) {
+  pendente = c;
+  const marcar = !c.m;
+  $("conf-titulo").textContent = marcar ? "Marcar esta ligação como callback?" : "Desfazer a marcação de callback?";
+  $("conf-texto").textContent = marcar
+    ? "O relatório passa a contar esta transferência como callback. Nada é enviado ao Telegram. Dá para desfazer depois."
+    : "A ligação volta a contar como atendida, como o programa registrou.";
+  $("conf-sim").textContent = marcar ? "Marcar como callback" : "Desfazer";
+  $("conf-quando").textContent = new Date(c.t).toLocaleString("pt-BR");
+  $("conf-func").textContent = rotulo(c.f);
+  $("conf-cliente").textContent = c.c || "—";
+  $("conf-erro").textContent = "";
+  $("conf-sim").disabled = false;
+  $("confirma").showModal();
+}
+$("conf-nao").addEventListener("click", () => $("confirma").close());
+$("conf-sim").addEventListener("click", async () => {
+  const c = pendente; if (!c) return;
+  const marcar = !c.m;
+  $("conf-sim").disabled = true; $("conf-erro").textContent = "";
+  try {
+    const resp = await fetch("/marcar", { method: "POST", headers: { "Content-Type": "application/json", "X-Token": D.srv.token }, body: JSON.stringify({ chave: c.k, marcar }) });
+    const r = await resp.json().catch(() => ({}));
+    if (!resp.ok || !r.ok) throw new Error(r.erro || "falha " + resp.status);
+    for (const x of D.ligacoes) if (x.k === c.k) { x.m = marcar ? 1 : 0; x.r = marcar ? "c" : "a"; }
+    $("confirma").close();
+    desenhar();
+  } catch (e) {
+    $("conf-erro").textContent = "Não consegui salvar (" + (e && e.message ? e.message : e) + "). A janela do relatorio.bat foi fechada? Abra o relatorio.bat de novo.";
+    $("conf-sim").disabled = false;
+  }
+});
+$("detalhe").classList.toggle("sem-acao", !D.srv);
+$("nota-acao").textContent = D.srv
+  ? "Se uma ligação registrada como atendida na verdade foi callback, use “Marcar como callback”. A correção vale só para o relatório (nada é enviado ao Telegram) e fica gravada em callbacks-manuais.txt, na pasta de registros."
+  : "Para marcar uma ligação como callback, abra o relatório pelo relatorio.bat e deixe a janela dele aberta enquanto usa a página.";
 
 $("gerado").textContent = "Gerado em " + new Date(D.gerado).toLocaleString("pt-BR");
 estado.p = D.inicial.periodo || "hoje"; estado.de = D.inicial.de || ""; estado.ate = D.inicial.ate || "";

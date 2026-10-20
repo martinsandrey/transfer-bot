@@ -3,6 +3,7 @@ import {
   ARQUIVO_SEM_MENSAGEM,
   NOME_ARQUIVO,
 } from "../registro/registro-arquivo.js";
+import { chaveDaTransferencia } from "./callbacks-manuais.js";
 
 /**
  * Relatório por funcionário, calculado a partir dos .txt de registro (nenhum histórico estruturado é criado).
@@ -94,8 +95,12 @@ export interface Ligacao {
   observacao: boolean;
   /** O CALLBACK não tem a transferência correspondente no registro. */
   semTransferencia: boolean;
-  /** Duração (s) da ligação atendida no Stage 3; `null` se não foi registrada (ligações antigas) ou se foi CALLBACK. */
+  /** Duração (s) da ligação atendida no Stage 3; `null` se não foi registrada (ligações antigas) ou se foi CALLBACK (exceto o marcado à mão). */
   duracaoSeg: number | null;
+  /** Identifica a transferência para marcá-la como callback no relatório (ver `callbacks-manuais.ts`); ausente no CALLBACK sem transferência. */
+  chave?: string;
+  /** CALLBACK marcado à mão no relatório (o bot tinha registrado como atendida). */
+  manual?: boolean;
 }
 
 export interface LigacaoLonga {
@@ -111,6 +116,8 @@ export interface LigacaoLonga {
 export function montarLigacoes(
   entradas: readonly Entrada[],
   duracoes: ReadonlyMap<string, number> = new Map(),
+  /** Marcações feitas no relatório (chave → marcada como callback). */
+  manuais: ReadonlyMap<string, boolean> = new Map(),
 ): {
   ligacoes: Ligacao[];
   longas: LigacaoLonga[];
@@ -167,15 +174,23 @@ export function montarLigacoes(
   }
 
   const ligacoes: Ligacao[] = [
-    ...transf.map((t): Ligacao => ({
-      quando: t.quando,
-      funcionario: t.funcionario,
-      cliente: t.cliente,
-      resultado: comCallback.has(t) ? "callback" : "atendida",
-      observacao: !t.enviada,
-      semTransferencia: false,
-      duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
-    })),
+    ...transf.map((t): Ligacao => {
+      const chave = chaveDaTransferencia(t);
+      const manual = !comCallback.has(t) && manuais.get(chave) === true;
+      const callback = comCallback.has(t) || manual;
+      return {
+        quando: t.quando,
+        funcionario: t.funcionario,
+        cliente: t.cliente,
+        resultado: callback ? "callback" : "atendida",
+        observacao: !t.enviada,
+        semTransferencia: false,
+        // A marcação manual guarda a duração medida: "Desfazer" no relatório volta a mostrá-la (callbacks nunca entram na média).
+        duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
+        chave,
+        manual,
+      };
+    }),
     ...orfaos.map((c): Ligacao => ({
       quando: c.quando,
       funcionario: c.funcionario,

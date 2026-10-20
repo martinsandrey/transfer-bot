@@ -1,10 +1,17 @@
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { interpretarApelidos } from "../config/apelidos.js";
 import { interpretarDigitos } from "../monitor/filtro-funcionario.js";
+import {
+  ARQUIVO_CALLBACKS_MANUAIS,
+  lerCallbacksManuais,
+  linhaDeMarcacao,
+} from "./callbacks-manuais.js";
 import { paginaHtml } from "./pagina.js";
+import { iniciarServidor } from "./servidor.js";
 import {
   ARQUIVOS_DO_RELATORIO,
   ARQUIVO_DURACOES,
@@ -22,6 +29,8 @@ Uso: relatorio.bat [periodo]
   O argumento só escolhe o filtro que já vem marcado ao abrir:
   hoje | ontem | semana | 7dias | mes | tudo | de=AAAA-MM-DD [ate=AAAA-MM-DD]
   --nao-abrir   só grava o arquivo, sem abrir o navegador
+
+Enquanto a janela do relatorio.bat estiver aberta, a página permite marcar uma ligação como callback (só no relatório).
 `;
 
 /** Lê só o que o relatório precisa do `.env` (sem exigir o resto da configuração). Valores inválidos são ignorados. */
@@ -64,7 +73,7 @@ function abrirNoNavegador(arquivo: string): void {
   }
 }
 
-function principal(): void {
+async function principal(): Promise<void> {
   const args = process.argv
     .slice(2)
     .map((a) => a.trim())
@@ -101,44 +110,88 @@ function principal(): void {
   }
 
   const { pasta, apelidos, equipePaquistanesDigitos } = lerEnv();
-  const entradas: Entrada[] = [];
-  let achou = false;
-  for (const { arquivo, padrao } of ARQUIVOS_DO_RELATORIO) {
+  const ler = (arquivo: string): string | null => {
     const caminho = join(pasta, arquivo);
-    if (!existsSync(caminho)) continue;
-    achou = true;
-    entradas.push(...lerRegistro(readFileSync(caminho, "utf8"), padrao));
-  }
-  if (!achou) {
+    return existsSync(caminho) ? readFileSync(caminho, "utf8") : null;
+  };
+  /** Lê os registros de novo (o bot pode ter gravado ligações novas desde a última vez). */
+  const montar = (): ReturnType<typeof montarLigacoes> | null => {
+    const entradas: Entrada[] = [];
+    let achou = false;
+    for (const { arquivo, padrao } of ARQUIVOS_DO_RELATORIO) {
+      const texto = ler(arquivo);
+      if (texto === null) continue;
+      achou = true;
+      entradas.push(...lerRegistro(texto, padrao));
+    }
+    if (!achou) return null;
+    return montarLigacoes(
+      entradas,
+      lerDuracoes(ler(ARQUIVO_DURACOES) ?? ""),
+      lerCallbacksManuais(ler(ARQUIVO_CALLBACKS_MANUAIS) ?? ""),
+    );
+  };
+  const pagina = (servidor?: { token: string }): string | null => {
+    const m = montar();
+    return m
+      ? paginaHtml({
+          geradoEm: new Date(),
+          ...m,
+          inicial,
+          apelidos,
+          equipePaquistanesDigitos,
+          ...(servidor ? { servidor } : {}),
+        })
+      : null;
+  };
+
+  const html = pagina();
+  if (html === null) {
     console.log(
       `\nNenhum registro encontrado em "${pasta}". O programa grava os registros enquanto roda (REGISTRAR_MENSAGENS=true).\n`,
     );
     return;
   }
-  const arquivoDuracoes = join(pasta, ARQUIVO_DURACOES);
-  const duracoes = existsSync(arquivoDuracoes)
-    ? lerDuracoes(readFileSync(arquivoDuracoes, "utf8"))
-    : new Map<string, number>();
-  const { ligacoes, longas } = montarLigacoes(entradas, duracoes);
   const dir = join(pasta, "relatorios");
   mkdirSync(dir, { recursive: true });
   const arquivo = join(dir, "relatorio.html");
-  writeFileSync(
-    arquivo,
-    paginaHtml({
-      geradoEm: new Date(),
-      ligacoes,
-      longas,
-      inicial,
-      apelidos,
-      equipePaquistanesDigitos,
-    }),
-    "utf8",
-  );
+  writeFileSync(arquivo, html, "utf8");
   console.log(`\nRelatório gerado: ${arquivo}`);
   if (naoAbrir) return;
-  console.log("Abrindo no navegador...\n");
-  abrirNoNavegador(arquivo);
+
+  // Servidor local: a página aberta por ele permite marcar callbacks (gravados em callbacks-manuais.txt).
+  const token = randomBytes(24).toString("hex");
+  const servidor = await iniciarServidor({
+    token,
+    pagina: () => pagina({ token }) ?? "",
+    marcar: (chave, marcar) => {
+      if (!(montar()?.ligacoes ?? []).some((l) => l.chave === chave)) return false;
+      mkdirSync(pasta, { recursive: true });
+      appendFileSync(
+        join(pasta, ARQUIVO_CALLBACKS_MANUAIS),
+        linhaDeMarcacao(chave, marcar, new Date()),
+        {
+          encoding: "utf8",
+        },
+      );
+      console.log(
+        `${marcar ? "Marcada como callback" : "Marcação desfeita"} (${new Date().toLocaleTimeString("pt-BR", { hour12: false })}).`,
+      );
+      return true;
+    },
+  });
+  console.log(
+    `Abrindo no navegador...\nSe fechar a aba, abra de novo este endereço: ${servidor.url}\n\nDeixe esta janela aberta enquanto usa o relatório: é ela que grava as ligações marcadas como callback.\nPara terminar, feche esta janela (ou Ctrl+C).\n`,
+  );
+  abrirNoNavegador(servidor.url);
+  const parar = (): void => {
+    void servidor.fechar().then(() => process.exit(0));
+  };
+  process.on("SIGINT", parar);
+  process.on("SIGTERM", parar);
 }
 
-principal();
+principal().catch((e: unknown) => {
+  console.error(`\nErro no relatório: ${e instanceof Error ? e.message : String(e)}\n`);
+  process.exitCode = 1;
+});
