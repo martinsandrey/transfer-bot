@@ -57,9 +57,9 @@ export function verificarSenha(tentativa: string, registro: RegistroDeSenha): bo
 
 /** Registro da senha de liberação do envio real. Gerado com `gerarRegistro`; a senha em si não está em lugar nenhum. */
 export const REGISTRO_DA_SENHA: RegistroDeSenha = {
-  salHex: "632f1f7afcff98336fdde1aa2f65ea25",
+  salHex: "2f426f2b202787165b029c0dc32a7c4f",
   hashHex:
-    "dc122e05ecc23b63cf6fd10314679fe3a7cac20eb08de2a9afb57f8889ff95c4d7deb55c02932626c90521494078da06f5b0645767e4d71f8d4a8d587620f5db",
+    "7d1cc4c76f37bb177786cfcf2c4e4f3c5bc77d7a3f7808dbde2dfc89e16bc535e32ab2e2523f589afb6406963b28364b168d64add06e373415e1b639862f15b4",
   custoN: 131072,
   r: 8,
   p: 1,
