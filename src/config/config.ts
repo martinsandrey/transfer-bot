@@ -136,6 +136,8 @@ const esquema = z.object({
   TTL_OCORRENCIAS_MIN: inteiro("TTL_OCORRENCIAS_MIN", 720, 1, 100000),
   CALLBACK_ESPERA_SEG: inteiro("CALLBACK_ESPERA_SEG", 3, 1, 120),
   CALLBACK_DURACAO_SEG: inteiro("CALLBACK_DURACAO_SEG", 20, 0, 3600),
+  // Só o relatório usa (relatorio/cli.ts lê direto do .env); validado aqui para o erro aparecer em português ao iniciar.
+  CALLBACK_RELIGACAO_MIN: inteiro("CALLBACK_RELIGACAO_MIN", 60, 0, 1440),
   JANELA_TRANSFERENCIA_SEG: inteiro("JANELA_TRANSFERENCIA_SEG", 60, 5, 600),
   TIMEOUT_NAVEGACAO_MS: inteiro("TIMEOUT_NAVEGACAO_MS", 30000, 1000, 600000),
   TIMEOUT_CONSULTA_MS: inteiro("TIMEOUT_CONSULTA_MS", 60000, 1000, 600000),

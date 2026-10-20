@@ -1,16 +1,14 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { parseEnv } from "node:util";
-import { interpretarApelidos } from "../config/apelidos.js";
-import { interpretarDigitos } from "../monitor/filtro-funcionario.js";
+import { join } from "node:path";
 import {
   ARQUIVO_CALLBACKS_MANUAIS,
   lerCallbacksManuais,
   linhaDeMarcacao,
 } from "./callbacks-manuais.js";
-import { paginaHtml } from "./pagina.js";
+import { dadosDasLigacoes, paginaHtml } from "./pagina.js";
+import { lerEnv } from "./env.js";
 import { iniciarServidor } from "./servidor.js";
 import {
   ARQUIVOS_DO_RELATORIO,
@@ -32,30 +30,6 @@ Uso: relatorio.bat [periodo]
 
 Enquanto a janela do relatorio.bat estiver aberta, a página permite marcar uma ligação como callback (só no relatório).
 `;
-
-/** Lê só o que o relatório precisa do `.env` (sem exigir o resto da configuração). Valores inválidos são ignorados. */
-function lerEnv(): {
-  pasta: string;
-  apelidos: Map<string, string>;
-  equipePaquistanesDigitos: string[];
-} {
-  let pasta = "registros";
-  let apelidos = new Map<string, string>();
-  let digitos: string[] = ["0"];
-  try {
-    if (existsSync(".env")) {
-      const env = parseEnv(readFileSync(".env", "utf8").replace(/^\uFEFF/, ""));
-      const v = (env["PASTA_REGISTROS"] ?? "").trim();
-      if (v) pasta = v;
-      apelidos = interpretarApelidos(env["APELIDOS_FUNCIONARIOS"]).apelidos;
-      const d = interpretarDigitos((env["EQUIPE_PAQUISTANES_DIGITOS"] ?? "").trim() || "0");
-      if (d) digitos = [...d];
-    }
-  } catch {
-    /* usa o padrão */
-  }
-  return { pasta: resolve(pasta), apelidos, equipePaquistanesDigitos: digitos };
-}
 
 function abrirNoNavegador(arquivo: string): void {
   try {
@@ -109,7 +83,7 @@ async function principal(): Promise<void> {
     inicial = { periodo: resto[0] };
   }
 
-  const { pasta, apelidos, equipePaquistanesDigitos } = lerEnv();
+  const { pasta, apelidos, equipePaquistanesDigitos, religacao } = lerEnv();
   const ler = (arquivo: string): string | null => {
     const caminho = join(pasta, arquivo);
     return existsSync(caminho) ? readFileSync(caminho, "utf8") : null;
@@ -129,6 +103,7 @@ async function principal(): Promise<void> {
       entradas,
       lerDuracoes(ler(ARQUIVO_DURACOES) ?? ""),
       lerCallbacksManuais(ler(ARQUIVO_CALLBACKS_MANUAIS) ?? ""),
+      { religacao },
     );
   };
   const pagina = (servidor?: { token: string }): string | null => {
@@ -164,6 +139,7 @@ async function principal(): Promise<void> {
   const servidor = await iniciarServidor({
     token,
     pagina: () => pagina({ token }) ?? "",
+    ligacoes: () => dadosDasLigacoes(montar()?.ligacoes ?? []),
     marcar: (chave, marcar) => {
       if (!(montar()?.ligacoes ?? []).some((l) => l.chave === chave)) return false;
       mkdirSync(pasta, { recursive: true });

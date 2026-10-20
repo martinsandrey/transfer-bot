@@ -22,6 +22,26 @@ function jsonSeguro(v: unknown): string {
     .replace(/\u2029/g, "\\u2029");
 }
 
+/** Ligações no formato compacto da página (também devolvido pelo servidor depois de uma marcação, para a página se recalcular). */
+export function dadosDasLigacoes(ligacoes: readonly Ligacao[]): unknown[] {
+  return ligacoes.map((l) => ({
+    t: l.quando.getTime(),
+    f: l.funcionario,
+    c: l.cliente,
+    r: l.resultado === "callback" ? "c" : "a",
+    o: l.observacao ? 1 : 0,
+    s: l.semTransferencia ? 1 : 0,
+    d: l.duracaoSeg,
+    k: l.chave ?? null,
+    m: l.manual ? 1 : 0,
+    // callback removido pela religação: não conta; `rm` = quando e quem fez a nova transferência atendida
+    rm: l.callbackRemovido
+      ? { t: l.callbackRemovido.quando.getTime(), f: l.callbackRemovido.funcionario }
+      : null,
+    sb: l.substituiu ?? 0,
+  }));
+}
+
 /**
  * Página HTML autônoma (sem internet, sem bibliotecas): filtros de período, equipe e ordenação funcionam dentro da própria página.
  * Os dados (telefones de clientes) ficam só no arquivo local, que fica na pasta de registros (ignorada pelo git).
@@ -29,17 +49,7 @@ function jsonSeguro(v: unknown): string {
 export function paginaHtml(d: DadosDaPagina): string {
   const dados = {
     gerado: d.geradoEm.getTime(),
-    ligacoes: d.ligacoes.map((l) => ({
-      t: l.quando.getTime(),
-      f: l.funcionario,
-      c: l.cliente,
-      r: l.resultado === "callback" ? "c" : "a",
-      o: l.observacao ? 1 : 0,
-      s: l.semTransferencia ? 1 : 0,
-      d: l.duracaoSeg,
-      k: l.chave ?? null,
-      m: l.manual ? 1 : 0,
-    })),
+    ligacoes: dadosDasLigacoes(d.ligacoes),
     longas: d.longas.map((l) => ({
       t: l.quando.getTime(),
       f: l.funcionario,
@@ -110,6 +120,8 @@ tbody tr:hover{background:var(--fundo)}
 tfoot td{font-weight:700;border-bottom:0;border-top:2px solid var(--linha)}
 .selo{display:inline-block;padding:2px 10px;border-radius:999px;font-size:12px;font-weight:600}
 .selo.ok{background:var(--ok-fraco);color:var(--ok)} .selo.alerta{background:var(--alerta-fraco);color:var(--alerta)}
+.selo.neutro{background:var(--linha);color:var(--suave);text-decoration:line-through}
+tr.removida td{color:var(--suave)}
 .barra{display:inline-block;width:70px;height:7px;border-radius:99px;background:var(--linha);vertical-align:middle;margin-left:8px;overflow:hidden}
 .barra i{display:block;height:100%;background:var(--alerta)}
 .vazio{color:var(--suave);text-align:center;padding:26px 0}
@@ -190,7 +202,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
-      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco.</li>
+      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo pouco depois (por qualquer funcionário) e dessa vez foi atendido, o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
       <li><b>Duração média</b>: média do tempo das transferências atendidas e sem callback (só entram as que têm a duração registrada).</li>
     </ul>
     <div class="acoes">
@@ -313,6 +325,8 @@ function intervalo() {
     }
   }
 }
+/* callback removido pela religação: aparece na lista, mas não conta (a nova transferência atendida conta no lugar dela) */
+const conta = (c) => !c.rm;
 const dentro = (c, iv) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)) && !(iv.de && c.t < iv.de.getTime()) && !(iv.ate && c.t >= iv.ate.getTime());
 
 /* ---- agregação ---- */
@@ -360,7 +374,7 @@ const chavesFunc = {
   lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
   lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
 };
-const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
+const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), d: (c) => (c.r === "c" ? null : c.d) };
 const ORD = {
   tabela: { k: "tr", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
   longas: { k: "lg", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
@@ -463,7 +477,8 @@ function desenharMeioDia(L, G, linhas) {
 function desenhar() {
   const iv = intervalo();
   $("periodo").textContent = iv.rot;
-  const L = iv.invalido ? [] : D.ligacoes.filter((c) => dentro(c, iv));
+  const todasL = iv.invalido ? [] : D.ligacoes.filter((c) => dentro(c, iv));
+  const L = todasL.filter(conta);
   const G = iv.invalido ? [] : D.longas.filter((c) => dentro(c, iv));
   const todos = porFuncionario(L, G);
   const T = agregar(L, G);
@@ -483,12 +498,14 @@ function desenhar() {
   desenharLongas(ordenar("longas", todos), T);
   const mm = desenharMeioDia(L, G, todos);
 
-  const lista = ordenar("detalhe", L);
+  const lista = ordenar("detalhe", todasL);
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
   if (!lista.length) db.append(vazioTr(6, "Nenhuma ligação transferida neste período."));
   for (const c of lista) {
-    const sel = el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
+    const sel = c.rm ? el("span", "Callback removido", "selo neutro") : el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
+    if (c.rm) r.append(" ", el("span", "(o cliente foi transferido de novo em " + new Date(c.rm.t).toLocaleString("pt-BR") + " por " + rotulo(c.rm.f) + " e atendido; conta como uma só transferência, na nova)", "explica"));
+    if (c.sb) r.append(" ", el("span", "(substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente)", "explica"));
     if (c.m) r.append(" ", el("span", "(marcado no relatório)", "explica"));
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
@@ -500,6 +517,7 @@ function desenhar() {
       acao.append(b);
     }
     db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.d)), acao));
+    if (c.rm) db.lastChild.classList.add("removida");
   }
   window.__relatorio = {
     linhas: ordenar("tabela", todos), periodo: iv.rot,
@@ -528,7 +546,7 @@ $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desen
 $("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar(); });
 $("csv").addEventListener("click", () => {
   const linhas = window.__relatorio.linhas;
-  const T = agregar(D.ligacoes.filter((c) => dentro(c, intervalo())), D.longas.filter((c) => dentro(c, intervalo())));
+  const T = agregar(D.ligacoes.filter((c) => conta(c) && dentro(c, intervalo())), D.longas.filter((c) => dentro(c, intervalo())));
   const cab = ["Funcionário", "Equipe", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Duração média (min)", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas"];
   const min = (a) => (media(a) === null ? "" : (Math.round((media(a) / 60) * 100) / 100).toString().replace(".", ","));
   const lin = (nome, eq, a) => [nome, eq, a.tr, a.sem, a.cb, pctTxt(a.cb, a.tr), min(a), a.lg, a.lgTr, pctTxt(a.lgTr, a.lgAv), a.lgAv - a.lgTr];
@@ -565,7 +583,8 @@ $("conf-sim").addEventListener("click", async () => {
     const resp = await fetch("/marcar", { method: "POST", headers: { "Content-Type": "application/json", "X-Token": D.srv.token }, body: JSON.stringify({ chave: c.k, marcar }) });
     const r = await resp.json().catch(() => ({}));
     if (!resp.ok || !r.ok) throw new Error(r.erro || "falha " + resp.status);
-    for (const x of D.ligacoes) if (x.k === c.k) { x.m = marcar ? 1 : 0; x.r = marcar ? "c" : "a"; }
+    if (Array.isArray(r.ligacoes)) D.ligacoes = r.ligacoes; // recalculado no servidor (inclui a regra da religação)
+    else for (const x of D.ligacoes) if (x.k === c.k) { x.m = marcar ? 1 : 0; x.r = marcar ? "c" : "a"; }
     $("confirma").close();
     desenhar();
   } catch (e) {

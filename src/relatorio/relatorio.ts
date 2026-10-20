@@ -101,6 +101,63 @@ export interface Ligacao {
   chave?: string;
   /** CALLBACK marcado à mão no relatório (o bot tinha registrado como atendida). */
   manual?: boolean;
+  /** CALLBACK do bot: quando ele foi registrado. */
+  quandoCallback?: Date;
+  /**
+   * CALLBACK do bot desfeito porque o MESMO cliente foi transferido de novo (por qualquer funcionário) e dessa vez foi atendido
+   * por tempo suficiente, dentro da janela (ver `OpcoesMontagem.religacao`). A ligação deixa de contar: ela e a nova viram UMA
+   * transferência normal, contada na nova.
+   */
+  callbackRemovido?: { quando: Date; funcionario: string };
+  /** Nova transferência atendida que absorveu tantos CALLBACKs anteriores do mesmo cliente. */
+  substituiu?: number;
+}
+
+export interface OpcoesMontagem {
+  /**
+   * Religação: CALLBACK do bot é desfeito se o mesmo cliente for transferido de novo até `janelaMs` depois do CALLBACK e essa nova
+   * transferência tiver sido atendida e durado pelo menos `duracaoMinSeg` (duração registrada em duracoes.txt). Ausente ou
+   * `janelaMs` 0 = desligado.
+   */
+  religacao?: { janelaMs: number; duracaoMinSeg: number };
+}
+
+const soDigitos = (s: string | null): string => (s ?? "").replace(/\D+/g, "");
+
+/** Aplica a regra da religação (ver `OpcoesMontagem.religacao`) na lista já montada. */
+function aplicarReligacao(
+  ligacoes: Ligacao[],
+  op: { janelaMs: number; duracaoMinSeg: number },
+): void {
+  // Candidatas a "nova transferência": atendidas (nem CALLBACK do bot nem marcadas à mão) com duração registrada suficiente.
+  const atendidas = ligacoes.filter(
+    (l) =>
+      !l.semTransferencia &&
+      l.resultado === "atendida" &&
+      l.duracaoSeg !== null &&
+      l.duracaoSeg >= op.duracaoMinSeg &&
+      soDigitos(l.cliente) !== "",
+  );
+  for (const l of ligacoes) {
+    // Só o CALLBACK do bot (o marcado à mão no relatório é decisão do usuário e fica como está).
+    if (l.resultado !== "callback" || l.manual || !l.quandoCallback) continue;
+    const cliente = soDigitos(l.cliente);
+    if (cliente === "") continue;
+    const ate = l.quandoCallback.getTime() + op.janelaMs;
+    const nova = atendidas
+      .filter(
+        (o) =>
+          o !== l &&
+          o.observacao === l.observacao &&
+          soDigitos(o.cliente) === cliente &&
+          o.quando.getTime() > l.quando.getTime() &&
+          o.quando.getTime() <= ate,
+      )
+      .sort((a, b) => a.quando.getTime() - b.quando.getTime())[0];
+    if (!nova) continue;
+    l.callbackRemovido = { quando: nova.quando, funcionario: nova.funcionario };
+    nova.substituiu = (nova.substituiu ?? 0) + 1;
+  }
 }
 
 export interface LigacaoLonga {
@@ -118,6 +175,7 @@ export function montarLigacoes(
   duracoes: ReadonlyMap<string, number> = new Map(),
   /** Marcações feitas no relatório (chave → marcada como callback). */
   manuais: ReadonlyMap<string, boolean> = new Map(),
+  op: OpcoesMontagem = {},
 ): {
   ligacoes: Ligacao[];
   longas: LigacaoLonga[];
@@ -137,7 +195,8 @@ export function montarLigacoes(
   const transf = unicas.filter((e) => e.tipo === "transferencia");
   const codigosTransferidos = new Set(transf.flatMap((t) => (t.ligacao ? [t.ligacao] : [])));
   const calls = ordenadas.filter((e) => e.tipo === "callback");
-  const comCallback = new Set<Entrada>();
+  /** Transferência → o CALLBACK ligado a ela. */
+  const comCallback = new Map<Entrada, Entrada>();
   const orfaos: Entrada[] = [];
 
   // 1) Registros novos: o código da ligação liga os dois.
@@ -153,7 +212,7 @@ export function montarLigacoes(
     const alvo = (porCodigo.get(c.ligacao) ?? []).find(
       (t) => t.enviada === c.enviada && !comCallback.has(t),
     );
-    if (alvo) comCallback.add(alvo);
+    if (alvo) comCallback.set(alvo, c);
     else orfaos.push(c);
   }
   // 2) Registros antigos: a transferência mais recente, ainda sem CALLBACK, do mesmo funcionário, antes do CALLBACK.
@@ -169,15 +228,16 @@ export function montarLigacoes(
           (c.funcionario === SEM_FUNCIONARIO || t.funcionario === c.funcionario) &&
           (c.cliente === null || t.cliente === null || c.cliente === t.cliente),
       );
-    if (alvo) comCallback.add(alvo);
+    if (alvo) comCallback.set(alvo, c);
     else orfaos.push(c);
   }
 
   const ligacoes: Ligacao[] = [
     ...transf.map((t): Ligacao => {
       const chave = chaveDaTransferencia(t);
-      const manual = !comCallback.has(t) && manuais.get(chave) === true;
-      const callback = comCallback.has(t) || manual;
+      const doBot = comCallback.get(t);
+      const manual = !doBot && manuais.get(chave) === true;
+      const callback = !!doBot || manual;
       return {
         quando: t.quando,
         funcionario: t.funcionario,
@@ -189,6 +249,7 @@ export function montarLigacoes(
         duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
         chave,
         manual,
+        ...(doBot ? { quandoCallback: doBot.quando } : {}),
       };
     }),
     ...orfaos.map((c): Ligacao => ({
@@ -199,8 +260,10 @@ export function montarLigacoes(
       observacao: !c.enviada,
       semTransferencia: true,
       duracaoSeg: null,
+      quandoCallback: c.quando,
     })),
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
+  if (op.religacao && op.religacao.janelaMs > 0) aplicarReligacao(ligacoes, op.religacao);
 
   const longas = unicas
     .filter((e) => e.tipo === "longa")
@@ -325,7 +388,7 @@ export function resumir(
   };
   const somas = new Map<string, number>();
   for (const c of dados.ligacoes) {
-    if (!dentro(c.quando, c.observacao)) continue;
+    if (c.callbackRemovido || !dentro(c.quando, c.observacao)) continue;
     const l = linha(c.funcionario);
     l.comCallback++;
     if (c.resultado === "callback") l.callbacks++;

@@ -14,6 +14,8 @@ export interface OpcoesServidor {
   pagina: () => string;
   /** Grava a marcação. `false` = a ligação não existe nos registros. */
   marcar: (chave: string, marcar: boolean) => boolean;
+  /** Ligações recalculadas depois da marcação (a página troca as suas por estas). */
+  ligacoes?: () => unknown[];
   porta?: number;
 }
 
@@ -98,7 +100,7 @@ export function iniciarServidor(op: OpcoesServidor): Promise<ServidorRelatorio> 
           return json(res, 400, { ok: false, erro: "pedido inválido" });
         try {
           return op.marcar(d.chave, d.marcar)
-            ? json(res, 200, { ok: true })
+            ? json(res, 200, { ok: true, ...(op.ligacoes ? { ligacoes: op.ligacoes() } : {}) })
             : json(res, 404, { ok: false, erro: "ligação não encontrada nos registros" });
         } catch {
           return json(res, 500, { ok: false, erro: "não consegui gravar o arquivo de registro" });
