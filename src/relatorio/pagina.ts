@@ -1,3 +1,4 @@
+import { ESTILO, montarXlsx } from "./xlsx.js";
 import type { Ligacao, LigacaoLonga } from "./relatorio.js";
 
 export interface DadosDaPagina {
@@ -67,7 +68,9 @@ export function paginaHtml(d: DadosDaPagina): string {
     inicial: d.inicial,
     srv: d.servidor ? { token: d.servidor.token } : null,
   };
-  return PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados));
+  return PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados))
+    .replace("/*XLSX*/null", () => `(${montarXlsx.toString()})`)
+    .replace("/*ESTILOS*/null", () => JSON.stringify(ESTILO));
 }
 
 const PAGINA = `<!doctype html>
@@ -212,7 +215,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
       <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para o Stage 3 (o tempo antes da transferência, não o da conversa com o funcionário do Stage 3), nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
     </ul>
     <div class="acoes">
-      <button class="acao" id="csv">Baixar planilha (CSV)</button>
+      <button class="acao" id="planilha">Baixar planilha (Excel)</button>
       <button class="acao" onclick="window.print()">Imprimir</button>
     </div>
   </section>
@@ -550,16 +553,123 @@ $("de").addEventListener("input", () => { estado.de = $("de").value; if (!estado
 $("ate").addEventListener("input", () => { estado.ate = $("ate").value; sincronizar(); });
 $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desenhar(); });
 $("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar(); });
-$("csv").addEventListener("click", () => {
-  const linhas = window.__relatorio.linhas;
-  const T = agregar(D.ligacoes.filter((c) => conta(c) && dentro(c, intervalo())), D.longas.filter((c) => dentro(c, intervalo())));
-  const cab = ["Funcionário", "Equipe", "Transferências com callback", "Transferências sem callback", "Callbacks", "% de callback", "Duração média (min)", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas"];
-  const min = (a) => (media(a) === null ? "" : (Math.round((media(a) / 60) * 100) / 100).toString().replace(".", ","));
-  const lin = (nome, eq, a) => [nome, eq, a.tr, a.sem, a.cb, pctTxt(a.cb, a.tr), min(a), a.lg, a.lgTr, pctTxt(a.lgTr, a.lgAv), a.lgAv - a.lgTr];
-  const linhasCsv = [cab, ...linhas.map((x) => lin(rotulo(x.f), equipeTxt(x.f), x.a)), lin("TOTAL", "", T)];
-  const esc = (v) => { v = String(v); return /[;"\\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
-  const blob = new Blob(["\\uFEFF" + linhasCsv.map((r) => r.map(esc).join(";")).join("\\r\\n") + "\\r\\n"], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "relatorio-transferencias.csv"; a.click();
+/* ---- planilha Excel (.xlsx) com o que está na tela (mesmo período e filtros) ---- */
+const montarXlsx = /*XLSX*/null;
+const E = /*ESTILOS*/null;
+const serialExcel = (t) => (t - new Date(t).getTimezoneOffset() * 60000) / 86400000 + 25569;
+const diaFr = (seg) => (seg === null || seg === undefined || isNaN(seg) ? null : Math.round(seg) / 86400);
+const C = (v, e) => ({ v: v === undefined ? null : v, e });
+const cab = (...t) => t.map((x) => C(x, E.cabecalho));
+const apelido = (f) => D.ap[dig(f)] || "";
+const nomeArquivo = (iv) => {
+  const ymd = (d) => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  if (!iv.de) return "relatorio-transferencias_tudo.xlsx";
+  const ult = somar(iv.ate, -1);
+  return "relatorio-transferencias_" + (ult.getTime() === iv.de.getTime() ? ymd(iv.de) : ymd(iv.de) + "_a_" + ymd(ult)) + ".xlsx";
+};
+function abasDaPlanilha() {
+  const iv = intervalo();
+  const todasL = iv.invalido ? [] : D.ligacoes.filter((c) => dentro(c, iv));
+  const L = todasL.filter(conta);
+  const G = iv.invalido ? [] : D.longas.filter((c) => dentro(c, iv));
+  const T = agregar(L, G);
+  const linhas = ordenar("tabela", porFuncionario(L, G));
+  const geradoEm = new Date();
+  const filtros = "Equipe do paquistanês: " + (estado.pk ? "incluída" : "fora") + " · Prévias do modo observação: " + (estado.obs ? "incluídas" : "fora");
+  const abas = [];
+
+  // Resumo
+  const M = agregar(L.filter((c) => horaBR(c.t) < 12), G.filter((g) => horaBR(g.t) < 12));
+  const Tt = agregar(L.filter((c) => horaBR(c.t) >= 12), G.filter((g) => horaBR(g.t) >= 12));
+  const removidos = todasL.filter((c) => c.rm).length;
+  const marcados = L.filter((c) => c.m).length;
+  const dif = (a, b) => (a === null || b === null ? null : b - a);
+  const difDur = (a, b) => (a === null || b === null ? "—" : (b - a > 0 ? "+" : b - a < 0 ? "−" : "") + durTxt(Math.abs(b - a)));
+  const r = [
+    [C("Relatório de transferências", E.titulo)],
+    [C("Período: " + iv.rot, E.subtitulo)],
+    [C("Gerado em " + geradoEm.toLocaleString("pt-BR"), E.subtitulo)],
+    [C(filtros, E.subtitulo)],
+    [],
+    cab("Indicador", "Valor", "Detalhe"),
+    [C("Transferências", E.texto), C(T.tr, E.inteiro), C("com e sem callback", E.texto)],
+    [C("Sem callback (atendidas)", E.texto), C(T.sem, E.inteiro), C("atendidas e longas o bastante", E.texto)],
+    [C("Callbacks", E.texto), C(T.cb, E.inteiro), C("sem atendimento ou muito curtas" + (marcados ? "; " + marcados + " marcada(s) no relatório" : ""), E.texto)],
+    [C("Taxa de callback", E.texto), C(razao(T.cb, T.tr), E.porcentagem), C("callbacks ÷ transferências", E.texto)],
+    [C("Duração média até a transferência", E.texto), C(diaFr(media(T)), E.duracao), C(T.nd ? "de " + T.nd + " transferência(s) sem callback com a duração registrada" : "sem duração registrada", E.texto)],
+    [C("Ligações de 5 min", E.texto), C(T.lg, E.inteiro), C("ainda no Stage 1", E.texto)],
+    [C("Ligações de 5 min que viraram transferência", E.texto), C(razao(T.lgTr, T.lgAv), E.porcentagem), C(T.lgAv ? T.lgTr + " de " + T.lgAv + " ligações de 5 min" : "sem dados", E.texto)],
+    [C("Callbacks removidos (cliente transferido de novo e atendido)", E.texto), C(removidos, E.inteiro), C("não entram nas contas; aparecem riscados na aba Ligações", E.texto)],
+    [],
+    [C("Antes e depois do meio-dia (horário de Brasília)", E.secao), C(null, E.secao), C(null, E.secao), C(null, E.secao)],
+    cab("Indicador", "Antes do meio-dia", "Depois do meio-dia", "Diferença (depois − antes)"),
+    [C("Ligações de 5 min", E.texto), C(M.lg, E.inteiro), C(Tt.lg, E.inteiro), C(Tt.lg - M.lg, E.inteiro)],
+    [C("Transferências", E.texto), C(M.tr, E.inteiro), C(Tt.tr, E.inteiro), C(Tt.tr - M.tr, E.inteiro)],
+    [C("Callbacks", E.texto), C(M.cb, E.inteiro), C(Tt.cb, E.inteiro), C(Tt.cb - M.cb, E.inteiro)],
+    [C("Taxa de callback", E.texto), C(razao(M.cb, M.tr), E.porcentagem), C(razao(Tt.cb, Tt.tr), E.porcentagem), C(dif(razao(M.cb, M.tr), razao(Tt.cb, Tt.tr)), E.porcentagem)],
+    [C("5 min que viraram transferência", E.texto), C(razao(M.lgTr, M.lgAv), E.porcentagem), C(razao(Tt.lgTr, Tt.lgAv), E.porcentagem), C(dif(razao(M.lgTr, M.lgAv), razao(Tt.lgTr, Tt.lgAv)), E.porcentagem)],
+    [C("Duração média até a transferência", E.texto), C(diaFr(media(M)), E.duracao), C(diaFr(media(Tt)), E.duracao), C(difDur(media(M), media(Tt)), E.texto)],
+    [],
+    [C("Diferenças de porcentagem estão em pontos percentuais. Durações em horas:minutos:segundos.", E.subtitulo)],
+  ];
+  abas.push({ nome: "Resumo", larguras: [50, 18, 22, 60], linhas: r, mesclar: ["A1:D1", "A16:D16"], paisagem: true });
+
+  // Por funcionário
+  const pf = [cab("Funcionário", "Número", "Apelido", "Equipe", "Transferências", "Sem callback", "Callbacks", "% de callback", "Duração média até a transferência", "Transferências com duração", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas")];
+  const linhaFunc = (nome, num, ap, eq, a, total) => {
+    const [tx, ni, pc, du] = total ? [E.totalTexto, E.totalInteiro, E.totalPorcentagem, E.totalDuracao] : [E.texto, E.inteiro, E.porcentagem, E.duracao];
+    return [C(nome, tx), C(num, tx), C(ap, tx), C(eq, tx), C(a.tr, ni), C(a.sem, ni), C(a.cb, ni), C(razao(a.cb, a.tr), pc), C(diaFr(media(a)), du), C(a.nd, ni), C(a.lg, ni), C(a.lgTr, ni), C(razao(a.lgTr, a.lgAv), pc), C(a.lgAv - a.lgTr, ni)];
+  };
+  for (const x of linhas) pf.push(linhaFunc(rotulo(x.f), String(x.f), apelido(x.f), equipeTxt(x.f), x.a, false));
+  pf.push(linhaFunc("TOTAL", "", "", "", T, true));
+  abas.push({ nome: "Por funcionário", larguras: [30, 14, 18, 14, 15, 14, 12, 13, 18, 15, 13, 13, 14, 14], linhas: pf, congelar: 1, filtro: "A1:N" + (linhas.length + 1), paisagem: true });
+
+  // Ligações transferidas
+  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Resultado", "Duração até a transferência", "Duração no Stage 3", "Observações")];
+  for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
+    const res = c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida";
+    const obs = [];
+    if (c.rm) obs.push("cliente transferido de novo em " + new Date(c.rm.t).toLocaleString("pt-BR") + " por " + rotulo(c.rm.f) + " e atendido (não conta)");
+    if (c.sb) obs.push("substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente");
+    if (c.m) obs.push("marcado como callback no relatório");
+    if (c.o) obs.push("prévia do modo observação");
+    if (c.s) obs.push("sem a mensagem de transferência no registro");
+    const st = c.rm ? E.removido : E.texto;
+    lg.push([C(serialExcel(c.t), E.dataHora), C(rotulo(c.f), st), C(equipeTxt(c.f), st), C(c.c || "—", st), C(res, c.rm ? E.removido : c.r === "c" ? E.callback : E.atendida), C(c.r === "c" ? null : diaFr(c.u), E.duracao), C(c.r === "c" ? null : diaFr(c.d), E.duracao), C(obs.join("; "), E.texto)]);
+  }
+  abas.push({ nome: "Ligações", larguras: [20, 30, 13, 18, 18, 16, 14, 60], linhas: lg, congelar: 1, filtro: "A1:H" + lg.length, paisagem: true });
+
+  // Ligações de 5 min
+  const cinco = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Virou transferência", "Observações")];
+  for (const g of [...G].sort((a, b) => a.t - b.t))
+    cinco.push([C(serialExcel(g.t), E.dataHora), C(rotulo(g.f), E.texto), C(equipeTxt(g.f), E.texto), C(g.c || "—", E.texto), C(g.x === null || g.x === undefined ? "Sem código (registro antigo)" : g.x ? "Sim" : "Não", g.x ? E.atendida : E.texto), C(g.o ? "prévia do modo observação" : "", E.texto)]);
+  abas.push({ nome: "Ligações de 5 min", larguras: [20, 30, 13, 18, 26, 28], linhas: cinco, congelar: 1, filtro: "A1:F" + cinco.length });
+
+  // Antes e depois do meio-dia, por funcionário
+  const md = [cab("Funcionário", "Equipe", "5 min antes do meio-dia", "Transferências antes", "Callbacks antes", "% 5 min transferidas antes", "5 min depois do meio-dia", "Transferências depois", "Callbacks depois", "% 5 min transferidas depois")];
+  for (const x of ordenar("meio", linhas))
+    md.push([C(rotulo(x.f), E.texto), C(equipeTxt(x.f), E.texto), C(x.m.lg, E.inteiro), C(x.m.tr, E.inteiro), C(x.m.cb, E.inteiro), C(razao(x.m.lgTr, x.m.lgAv), E.porcentagem), C(x.t.lg, E.inteiro), C(x.t.tr, E.inteiro), C(x.t.cb, E.inteiro), C(razao(x.t.lgTr, x.t.lgAv), E.porcentagem)]);
+  md.push([C("TOTAL", E.totalTexto), C("", E.totalTexto), C(M.lg, E.totalInteiro), C(M.tr, E.totalInteiro), C(M.cb, E.totalInteiro), C(razao(M.lgTr, M.lgAv), E.totalPorcentagem), C(Tt.lg, E.totalInteiro), C(Tt.tr, E.totalInteiro), C(Tt.cb, E.totalInteiro), C(razao(Tt.lgTr, Tt.lgAv), E.totalPorcentagem)]);
+  abas.push({ nome: "Meio-dia por funcionário", larguras: [30, 13, 14, 14, 12, 15, 14, 14, 12, 15], linhas: md, congelar: 1, filtro: "A1:J" + (md.length - 1), paisagem: true });
+
+  // Por hora (Brasília)
+  const h5 = new Array(24).fill(0), hT = new Array(24).fill(0), hC = new Array(24).fill(0);
+  for (const g of G) h5[horaBR(g.t)]++;
+  for (const c of L) { hT[horaBR(c.t)]++; if (c.r === "c") hC[horaBR(c.t)]++; }
+  const ph = [cab("Hora (Brasília)", "Ligações de 5 min", "Transferências", "Callbacks", "Taxa de callback")];
+  const usadas = []; for (let h = 0; h < 24; h++) if (h5[h] || hT[h]) usadas.push(h);
+  if (usadas.length) for (let h = usadas[0]; h <= usadas[usadas.length - 1]; h++)
+    ph.push([C(String(h).padStart(2, "0") + "h às " + String(h).padStart(2, "0") + "h59", E.texto), C(h5[h], E.inteiro), C(hT[h], E.inteiro), C(hC[h], E.inteiro), C(razao(hC[h], hT[h]), E.porcentagem)]);
+  ph.push([C("TOTAL", E.totalTexto), C(T.lg, E.totalInteiro), C(T.tr, E.totalInteiro), C(T.cb, E.totalInteiro), C(razao(T.cb, T.tr), E.totalPorcentagem)]);
+  abas.push({ nome: "Por hora", larguras: [18, 16, 15, 12, 15], linhas: ph, congelar: 1 });
+
+  return { abas, arquivo: nomeArquivo(iv) };
+}
+window.__abasDaPlanilha = abasDaPlanilha;
+$("planilha").addEventListener("click", () => {
+  const { abas, arquivo } = abasDaPlanilha();
+  const blob = new Blob([montarXlsx(abas)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = arquivo; a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
 
