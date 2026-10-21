@@ -9,7 +9,7 @@ import { criarNotificadorFalso } from "../src/notificador/notificador.js";
 import { BuscaSimulada, LeitorSimulado } from "../src/simulacao/cenario.js";
 
 describe("cenário fictício completo (ponta a ponta sem navegador)", () => {
-  it("gera as tarefas esperadas e nenhuma para base, Stage 2 e primeira vez em Stage 3", async () => {
+  it("gera as tarefas da linha 1 → linha 2 e nenhuma para base, linha 3, linha errada e primeira vez na linha 2", async () => {
     const notif = criarNotificadorFalso();
     const log = { debug() {}, info() {}, warn() {}, error() {} };
     const sender = new EnviadorFalso();
@@ -35,10 +35,19 @@ describe("cenário fictício completo (ponta a ponta sem navegador)", () => {
       leiturasConfirmacao: 2,
       ausenciaMaxLeituras: 3,
       ttlOcorrenciasMs: 1e6,
+      destinoStage: 2,
+      destinoDigito: "2",
     });
     const monitor = new Monitor(
       { reader: new LeitorSimulado(), tracker, fila, log, notificador: notif },
-      { intervaloMs: 1, invalidasParaAlertar: 99, falhasParaAlertar: 99, limpezaMs: 1e9 },
+      {
+        intervaloMs: 1,
+        invalidasParaAlertar: 99,
+        falhasParaAlertar: 99,
+        limpezaMs: 1e9,
+        destinoStage: 2,
+        destinoDigito: "2",
+      },
     );
     for (let i = 0; i < 20; i++) {
       await monitor.passo();
@@ -50,7 +59,9 @@ describe("cenário fictício completo (ponta a ponta sem navegador)", () => {
     expect(sender.enviados).toHaveLength(0); // modo observação
     expect(previas).toHaveLength(3);
     const msgs = notif.alertas.map((a) => a.mensagem).join("\n");
-    expect(msgs).toMatch(/direto em Stage 3/);
+    expect(msgs).toMatch(/direto em Stage 2/);
+    expect(msgs).toMatch(/não é da linha 2/);
+    expect(msgs).not.toMatch(/inesperada/); // a linha 3 é ignorada em silêncio
     expect(msgs).toMatch(/cliente errado/);
     expect(msgs).toMatch(/nenhum cliente/);
   });

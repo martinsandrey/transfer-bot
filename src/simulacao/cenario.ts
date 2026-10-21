@@ -44,8 +44,9 @@ export function linhasDoCenario(n: number): CallRow[] {
   const l: CallRow[] = [];
   /**
    * COMPORTAMENTO REAL (evidência do usuário): Ringing → Agent no Stage 1; na transferência a linha do Stage 1 SOME e surge
-   * OUTRA linha em "Stage 3 Agent" com outro Callback Number (9083xx) e o MESMO Callee.
-   * `s1`: tick em que passa a Agent; `transf`: tick da transferência; `fim`: tick em que a linha do Stage 3 some.
+   * OUTRA linha com outro Callback Number e o MESMO Callee. Fluxo atual (2026-10-21): linha 1 → linha 2 ("Stage 2 Agent",
+   * funcionário 9082xx) → linha 3 ("Stage 3 Agent", 9083xx). A mensagem é a da passagem 1 → 2; a linha 3 é ignorada.
+   * `s1`: tick em que passa a Agent; `transf`: tick da transferência para a linha 2; `fim`: tick em que a ligação some.
    */
   const chamada = (
     n0: number,
@@ -53,31 +54,35 @@ export function linhasDoCenario(n: number): CallRow[] {
     transf: number,
     fim: number,
     cbStage1: string,
-    cbStage3: string,
+    cbLinha2: string,
     callee: string,
     inicio: string,
   ): void => {
     if (n < n0 || n >= fim) return;
     if (n < n0 + s1) l.push(linha(cbStage1, callee, "Stage 1 Ringing", inicio));
     else if (n < n0 + transf) l.push(linha(cbStage1, callee, "Stage 1 Agent", inicio));
-    else l.push(linha(cbStage3, callee, "Stage 3 Agent", inicio));
+    else if (n < n0 + transf + 4) l.push(linha(cbLinha2, callee, "Stage 2 Agent", inicio));
+    else l.push(linha(cbLinha2.replace(/^9082/, "9083"), callee, "Stage 3 Agent", inicio));
   };
-  // Base: já em Stage 3 ao iniciar (ignorada) e uma em Stage 1 que vai a Stage 2 (ignorada)
-  l.push(linha("908310", "011900000110", "Stage 3 Agent", "08:00:00"));
-  l.push(linha("908011", "011900000111", n < 4 ? "Stage 1 Agent" : "Stage 2 Agent", "08:01:00"));
+  // Base: já na linha 2 ao iniciar (ignorada) e uma que passa de Stage 1 para Stage 3 na MESMA linha (linha 3: ignorada)
+  l.push(linha("908210", "011900000110", "Stage 2 Agent", "08:00:00"));
+  l.push(linha("908011", "011900000111", n < 4 ? "Stage 1 Agent" : "Stage 3 Agent", "08:01:00"));
   // Funcionário 1: transferência normal; depois outra ligação (outra transferência)
-  chamada(0, 2, 5, 8, "908001", "908301", "011900000101", "09:00:00");
-  chamada(10, 2, 5, 40, "908001", "908302", "011900000102", "09:30:00");
+  chamada(0, 2, 5, 12, "908001", "908201", "011900000101", "09:00:00");
+  chamada(12, 2, 5, 40, "908001", "908202", "011900000102", "09:30:00");
   // Funcionário 2: cliente com vários resultados
-  chamada(2, 2, 5, 40, "908002", "908303", "011900000103", "09:05:00");
+  chamada(2, 2, 5, 40, "908002", "908203", "011900000103", "09:05:00");
   // Funcionário 3: telefone divergente
-  chamada(2, 2, 6, 40, "908003", "908304", "011900000104", "09:06:00");
+  chamada(2, 2, 6, 40, "908003", "908204", "011900000104", "09:06:00");
   // Funcionário 4: cliente sem cadastro
-  chamada(2, 2, 8, 40, "908004", "908305", "011900000105", "09:07:00");
-  // Chamada que aparece direto em Stage 3, sem origem em Stage 1 (só aviso)
-  if (n >= 5) l.push(linha("908306", "011900000106", "Stage 3 Agent", "09:08:00"));
+  chamada(2, 2, 8, 40, "908004", "908205", "011900000105", "09:07:00");
+  // Chamada que aparece direto na linha 2, sem origem em Stage 1 (só aviso)
+  if (n >= 5) l.push(linha("908206", "011900000106", "Stage 2 Agent", "09:08:00"));
   // Chamada manual: aparece e some (não é transferência)
   if (n >= 3 && n < 6) l.push(linha("908006", "011900000107", "Stage 1 Manual Call", "09:09:00"));
+  // Passou do Stage 1 para o Stage 2, mas quem pegou não é da linha 2 (908506: antepenúltimo dígito 5): só aviso
+  if (n >= 2 && n < 5) l.push(linha("908007", "011900000108", "Stage 1 Agent", "09:10:00"));
+  if (n >= 5 && n < 9) l.push(linha("908506", "011900000108", "Stage 2 Agent", "09:10:00"));
   return l;
 }
 

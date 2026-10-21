@@ -24,6 +24,9 @@ export interface OpcoesMonitor {
   filtroFuncionarios?: FiltroFuncionarios;
   /** Apelidos dos funcionários: nos avisos, o funcionário aparece como "Nome (número)". */
   apelidos?: ReadonlyMap<string, string>;
+  /** Stage de destino da transferência (padrão 3) e o dígito da linha exigido, só para os textos dos avisos. */
+  destinoStage?: number;
+  destinoDigito?: string;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -267,7 +270,7 @@ export class Monitor {
       });
       notificador.alerta(
         "aviso",
-        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? " (Stage 3 tocando)" : ""}: funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
+        `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? ` (Stage ${this.op.destinoStage ?? 3} tocando)` : ""}: funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
         { windows: "informativo" },
       );
       if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
@@ -306,7 +309,15 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: ev.callbackMascarado,
       });
-      notificador.alerta("aviso", descreverAviso(ev.codigo, ev.callbackMascarado));
+      notificador.alerta(
+        "aviso",
+        descreverAviso(
+          ev.codigo,
+          ev.callbackMascarado,
+          this.op.destinoStage,
+          this.op.destinoDigito,
+        ),
+      );
     } else {
       log.warn("Anomalia na tabela", {
         evento: "anomalia",
@@ -322,10 +333,17 @@ export class Monitor {
 }
 
 /** Texto em português simples para cada aviso do rastreador. */
-export function descreverAviso(codigo: CodigoAviso, funcionario: string): string {
+export function descreverAviso(
+  codigo: CodigoAviso,
+  funcionario: string,
+  destino = 3,
+  digito?: string,
+): string {
   switch (codigo) {
     case "visto_primeira_vez_stage3":
-      return `Uma chamada apareceu direto em Stage 3 (funcionário do Stage 3: ${funcionario}) sem eu ter visto a origem em Stage 1 Agent. Nenhuma mensagem foi gerada.`;
+      return `Uma chamada apareceu direto em Stage ${destino} (funcionário do Stage ${destino}: ${funcionario}) sem eu ter visto a origem em Stage 1 Agent. Nenhuma mensagem foi gerada.`;
+    case "destino_fora_da_linha":
+      return `Uma chamada passou do Stage 1 para o Stage ${destino}, mas o funcionário que pegou (${funcionario}) não é da linha ${digito ?? "esperada"} (o antepenúltimo dígito do número dele não é ${digito ?? "o esperado"}). Nenhuma mensagem foi gerada.`;
     case "sequencia_inesperada":
       return `Mudança de status inesperada numa chamada (funcionário ${funcionario}). Nenhuma mensagem foi gerada.`;
     case "status_desconhecido":

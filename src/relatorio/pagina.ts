@@ -210,9 +210,9 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     </table></div>
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
-      <li><b>Transferências sem callback</b>: as que foram atendidas no Stage 3.</li>
+      <li><b>Transferências sem callback</b>: as que foram atendidas por quem recebeu a transferência (linha 2; até 21/10/2026, o Stage 3).</li>
       <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo pouco depois (por qualquer funcionário) e dessa vez foi atendido, o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
-      <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para o Stage 3 (o tempo antes da transferência, não o da conversa com o funcionário do Stage 3), nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
+      <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para a linha 2 (até 21/10/2026, o Stage 3) — o tempo antes da transferência, não o da conversa depois dela, nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
     </ul>
     <div class="acoes">
       <button class="acao" id="planilha">Baixar planilha (Excel)</button>
@@ -625,7 +625,7 @@ function abasDaPlanilha() {
   abas.push({ nome: "Por funcionário", larguras: [30, 14, 18, 14, 15, 14, 12, 13, 18, 15, 13, 13, 14, 14], linhas: pf, congelar: 1, filtro: "A1:N" + (linhas.length + 1), paisagem: true });
 
   // Ligações transferidas
-  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Resultado", "Duração até a transferência", "Duração no Stage 3", "Observações")];
+  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
   for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
     const res = c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida";
     const obs = [];

@@ -145,6 +145,10 @@ async function principal(): Promise<void> {
     janelaTransferenciaMs: cfg.monitor.janelaTransferenciaMs,
     esperaCallbackMs: cfg.monitor.callbackEsperaMs,
     duracaoCallbackSeg: cfg.monitor.callbackDuracaoSeg,
+    destinoStage: cfg.monitor.destinoStage,
+    ...(cfg.monitor.destinoDigito !== undefined
+      ? { destinoDigito: cfg.monitor.destinoDigito }
+      : {}),
     aoEncerrarLigacao: (i) => ganchos.encerrada?.(i),
     // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
     ...(!simulado && cfg.telegram.destinoLonga
@@ -159,6 +163,10 @@ async function principal(): Promise<void> {
     intervaloMs: cfg.monitor.intervaloMs,
     ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
     apelidos: cfg.apelidos,
+    destinoStage: cfg.monitor.destinoStage,
+    ...(cfg.monitor.destinoDigito !== undefined
+      ? { destinoDigito: cfg.monitor.destinoDigito }
+      : {}),
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,
     limpezaMs: 60_000,

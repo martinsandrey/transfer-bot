@@ -1,7 +1,7 @@
 # Transfer Bot
 
 Programa para Windows que abre um navegador dedicado, monitora a tabela de chamadas (Voice Call Status) de um sistema web, detecta
-transferências (`Stage 1 Agent` ou `Stage 1 Manual Call` → `Stage 3 Agent`), consulta o cliente na Customer Data List (**somente leitura**), monta a mensagem
+transferências da linha 1 para a linha 2 (`Stage 1 Agent` ou `Stage 1 Manual Call` → `Stage 2`, funcionário com antepenúltimo dígito 2, ex.: `9082xx`; a linha 3 é ignorada), consulta o cliente na Customer Data List (**somente leitura**), monta a mensagem
 de `config\mensagem.txt` e a envia pelo Telegram (conta pessoal). Por padrão ele só **mostra** a mensagem no console (modo observação).
 
 Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAUDE.md`](CLAUDE.md).
@@ -35,19 +35,21 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
 
 Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está em `.env.example`); não precisa reinstalar nem recompilar:
 
-| Variável                                                          | Para quê                                                                                                                        |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `SITE_URL`                                                        | Endereço do sistema (obrigatório).                                                                                              |
-| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO`                  | Login automático (opcional).                                                                                                    |
-| `SEND_MODE`                                                       | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                  |
-| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                            | Credenciais do Telegram (my.telegram.org).                                                                                      |
-| `TELEGRAM_DESTINO`                                                | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                              |
-| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN`         | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos). |
-| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`                      | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                       |
-| `VALIDADE_MENSAGEM_MIN`                                           | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                     |
-| `JANELA_TRANSFERENCIA_SEG`                                        | Tempo máximo entre o Stage 1 sumir e o Stage 3 aparecer (padrão 60).                                                            |
-| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`, `NOTIFICAR_5MIN` | Notificações do Windows (padrão: ligadas; as de transferência/CALLBACK e as de 5 min, desligadas, cada uma no seu botão).       |
-| `NAVEGADOR`                                                       | `msedge` (padrão) ou `chromium`.                                                                                                |
+| Variável                                                          | Para quê                                                                                                                                                             |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `SITE_URL`                                                        | Endereço do sistema (obrigatório).                                                                                                                                   |
+| `SITE_USUARIO`, `SITE_SENHA`, `LOGIN_AUTOMATICO`                  | Login automático (opcional).                                                                                                                                         |
+| `SEND_MODE`                                                       | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                                                       |
+| `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                            | Credenciais do Telegram (my.telegram.org).                                                                                                                           |
+| `TELEGRAM_DESTINO`                                                | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                                                                   |
+| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN`         | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos).                                      |
+| `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`                      | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                                                            |
+| `VALIDADE_MENSAGEM_MIN`                                           | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                                                          |
+| `JANELA_TRANSFERENCIA_SEG`                                        | Tempo máximo entre o Stage 1 sumir e a linha de destino aparecer (padrão 60).                                                                                        |
+| `TRANSFERENCIA_DESTINO_STAGE`                                     | Stage para onde vai a transferência que gera a mensagem: `2` (padrão, linha 1 → linha 2) ou `3` (fluxo antigo, linha 1 → Stage 3).                                   |
+| `TRANSFERENCIA_DESTINO_DIGITO`                                    | Antepenúltimo dígito exigido no número de quem recebe (padrão `2` = `***2**`); `nenhum` = não confere. A mesma linha mudando de Stage 1 para o destino conta sempre. |
+| `NOTIFICAR_WINDOWS`, `NOTIFICAR_TRANSFERENCIAS`, `NOTIFICAR_5MIN` | Notificações do Windows (padrão: ligadas; as de transferência/CALLBACK e as de 5 min, desligadas, cada uma no seu botão).                                            |
+| `NAVEGADOR`                                                       | `msedge` (padrão) ou `chromium`.                                                                                                                                     |
 
 Ao trocar a URL, o navegador pode pedir novo login.
 
@@ -65,6 +67,7 @@ Para conferir se o seu Windows mostra: abra **`testar-notificacao.bat`** (aparec
 
 ## Transferência ao tocar e CALLBACK
 
+- **Fluxo atual (desde 21/10/2026): linha 1 → linha 2 → linha 3.** Tudo abaixo que fala em "Stage 3" vale agora para a **linha 2** (`Stage 2`, funcionário `***2**`). A linha 3 é ignorada: nada de mensagem nem aviso. Se a ligação passa da linha 2 para a linha 3, **nunca** é CALLBACK (nem se a linha 2 ficou menos de 20 s) e a duração registrada é só a da linha 2. Um `Stage 2` de funcionário que não é `***2**` não gera mensagem (só aviso).
 - A mensagem de transferência sai **assim que o Stage 3 aparece tocando** (`Stage 3 Ringing`), sem esperar alguém atender. Se o Stage 3 já aparecer atendido (`Stage 3 Agent`), sai do mesmo jeito.
 - Se alguém atende (aparece `Stage 3 Agent` para o mesmo cliente), **não sai mais nada**.
 - Se o Stage 3 tocou e a ligação sumiu **sem ninguém atender**, o programa espera `CALLBACK_ESPERA_SEG` segundos (padrão 3, para o toque poder passar a outro agente) e **responde "CALLBACK"** à mensagem de transferência no mesmo grupo. Também é CALLBACK a ligação que **foi atendida mas durou menos de `CALLBACK_DURACAO_SEG` segundos** (padrão 20; `0` desliga; vale o "Call Duration" da linha do Stage 3, e a decisão sai quando a linha some da tabela). Só acontece se a mensagem de transferência foi enviada; se a original foi apagada, envia "CALLBACK" com o telefone e o Line 1 number.

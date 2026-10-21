@@ -7,7 +7,7 @@ O prompt original está em `docs/prompt-inicial.md`. **Idioma: português do Bra
 ## O que é
 
 Programa para **Windows 10/11** (executado pelo usuário, localmente) que abre um navegador dedicado (Playwright),
-monitora a tabela de chamadas de um website, detecta transferências (`Stage 1 Agent` → `Stage 3 Agent`),
+monitora a tabela de chamadas de um website, detecta transferências (desde 2026-10-21: linha 1 → linha 2, `Stage 1 Agent`/`Manual Call` → `Stage 2` de funcionário `***2**`; a linha 3 é ignorada; configurável em `TRANSFERENCIA_DESTINO_STAGE`/`_DIGITO`, o fluxo antigo era → `Stage 3 Agent`),
 consulta o cliente na Customer Data List (somente leitura), monta uma mensagem a partir de `config/mensagem.txt`
 e a entrega a um `MessageSender` (Telegram, conta pessoal via GramJS; padrão = só console em modo observação).
 Desenvolvimento na nuvem (Linux), sem acesso ao site real: tudo é testado com simulações.
@@ -57,6 +57,7 @@ Node: engines `>=22.13` (alvo no Windows: Node 24 LTS). TypeScript fixado em **6
 8. **Identidade da chamada** = Callback Number + Start Time/Callee (distingue ligações sucessivas). Dedup por _ocorrência_, nunca só por
    Callback Number. Posição da linha nunca é identidade. **Exceção confirmada pelo site:** na transferência a linha do Stage 1 some e surge outra
    em Stage 3 com outro Callback Number e o MESMO Callee — a transferência é detectada ligando as duas pelo Callee (ver `docs/EVIDENCIAS.md`).
+   Desde 2026-10-21 (informação do usuário) o destino é a linha 2 (`Stage 2`, funcionário com antepenúltimo dígito 2); a mesma linha mudando de Stage 1 para Stage 2 também conta.
 9. **Funciona no Windows** (caminhos, encoding UTF-8, `.bat` em CRLF) e é testável no Linux.
 10. Esperas por condição, nunca `sleep` fixo como mecanismo principal. Seletores estáveis (id, name, data-*, ARIA, texto).
 

@@ -27,6 +27,10 @@ export interface AppConfig {
     callbackEsperaMs: number;
     /** Ligação atendida no Stage 3 com menos que isto (segundos) também conta como CALLBACK. 0 = desligado. */
     callbackDuracaoSeg: number;
+    /** Stage para onde vai a transferência que gera a mensagem (2 = linha 1 → linha 2; 3 = fluxo antigo 1 → 3). */
+    destinoStage: number;
+    /** Antepenúltimo dígito exigido no número do funcionário que recebe a transferência; `undefined` = não confere. */
+    destinoDigito: string | undefined;
   };
   timeouts: { navegacaoMs: number; consultaMs: number };
   recargaOciosaMin: number;
@@ -139,6 +143,17 @@ const esquema = z.object({
   // Só o relatório usa (relatorio/cli.ts lê direto do .env); validado aqui para o erro aparecer em português ao iniciar.
   CALLBACK_RELIGACAO_MIN: inteiro("CALLBACK_RELIGACAO_MIN", 60, 0, 1440),
   JANELA_TRANSFERENCIA_SEG: inteiro("JANELA_TRANSFERENCIA_SEG", 60, 5, 600),
+  TRANSFERENCIA_DESTINO_STAGE: inteiro("TRANSFERENCIA_DESTINO_STAGE", 2, 2, 3),
+  TRANSFERENCIA_DESTINO_DIGITO: z.preprocess(
+    (v) =>
+      String(vazioParaUndefined(v) ?? "2")
+        .trim()
+        .toLowerCase(),
+    z.string().regex(/^(\d|nenhum)$/, {
+      error:
+        'TRANSFERENCIA_DESTINO_DIGITO: use um dígito de 0 a 9 (ex.: "2") ou "nenhum" para não conferir. Deixe em branco para o padrão "2".',
+    }),
+  ),
   TIMEOUT_NAVEGACAO_MS: inteiro("TIMEOUT_NAVEGACAO_MS", 30000, 1000, 600000),
   TIMEOUT_CONSULTA_MS: inteiro("TIMEOUT_CONSULTA_MS", 60000, 1000, 600000),
   RECARGA_OCIOSA_MINUTOS: inteiro("RECARGA_OCIOSA_MINUTOS", 0, 0, 100000),
@@ -258,6 +273,9 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       janelaTransferenciaMs: c.JANELA_TRANSFERENCIA_SEG * 1000,
       callbackEsperaMs: c.CALLBACK_ESPERA_SEG * 1000,
       callbackDuracaoSeg: c.CALLBACK_DURACAO_SEG,
+      destinoStage: c.TRANSFERENCIA_DESTINO_STAGE,
+      destinoDigito:
+        c.TRANSFERENCIA_DESTINO_DIGITO === "nenhum" ? undefined : c.TRANSFERENCIA_DESTINO_DIGITO,
     },
     timeouts: { navegacaoMs: c.TIMEOUT_NAVEGACAO_MS, consultaMs: c.TIMEOUT_CONSULTA_MS },
     recargaOciosaMin: c.RECARGA_OCIOSA_MINUTOS,

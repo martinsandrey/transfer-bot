@@ -43,7 +43,7 @@ export type ResultadoParse =
       rows: CallRow[];
       ignoradas: number;
       callbacksIncompletos: string[];
-      stage3Parciais: Array<{ calleeNumber: string; agent: boolean }>;
+      stage3Parciais: Array<{ calleeNumber: string; agent: boolean; stage: number }>;
     }
   | { ok: false; motivo: string };
 
@@ -76,7 +76,7 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
   const necessarias = Math.max(iCb, iCe, iSt, iIn, iDu) + 1;
   const rows: CallRow[] = [];
   const incompletos = new Set<string>();
-  const stage3Parciais: Array<{ calleeNumber: string; agent: boolean }> = [];
+  const stage3Parciais: Array<{ calleeNumber: string; agent: boolean; stage: number }> = [];
   let ignoradas = 0;
   for (const l of t.linhas) {
     // mais células que cabeçalhos: colunas podem estar deslocadas, nunca adivinhar
@@ -92,9 +92,15 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
     if (!callback || !callee || !status || !inicio) {
       ignoradas++;
       if (callback) incompletos.add(callback);
-      // Stage 3 com dado faltando mas Callee e Status legíveis: ainda prova que o Stage 3 está na tabela.
-      if (callee && /^stage\s*3\b/i.test(status))
-        stage3Parciais.push({ calleeNumber: callee, agent: /\bagent\b/i.test(status) });
+      // Stage 2/3/4 com dado faltando mas Callee e Status legíveis: ainda prova que a ligação está naquele Stage
+      // (o rastreador usa o Stage de destino da transferência, que é configurável).
+      const m = /^stage\s*([234])\b/i.exec(status);
+      if (callee && m)
+        stage3Parciais.push({
+          calleeNumber: callee,
+          agent: /\bagent\b/i.test(status),
+          stage: Number(m[1]),
+        });
       continue;
     }
     rows.push({

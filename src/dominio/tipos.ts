@@ -31,7 +31,11 @@ export interface TableSnapshot {
    * Linhas de Stage 3 com algum dado faltando (mas com Callee e Status legíveis): não viram linha normal, porém contam como
    * "o Stage 3 ainda está lá" para o acompanhamento do atendimento (evita um CALLBACK falso).
    */
-  stage3Parciais?: Array<{ calleeNumber: string; agent: boolean }>;
+  stage3Parciais?: Array<{
+    calleeNumber: string;
+    agent: boolean;
+    /** Ausente = 3. */ stage?: number;
+  }>;
 }
 
 export interface TableReader {

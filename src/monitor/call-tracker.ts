@@ -51,8 +51,15 @@ export function ehOrigemDeTransferencia(s: Pick<StatusInterpretado, "numero" | "
   return s.numero === 1 && (s.sub === "agent" || s.sub === "manual call");
 }
 
+/** Antepenúltimo dígito do número do funcionário (ex.: 908213 → "2"): diz em que linha ele trabalha. `""` se tiver menos de 3 dígitos. */
+export function digitoDaLinha(callback: string): string {
+  const d = callback.replace(/\D+/g, "");
+  return d.length >= 3 ? d.charAt(d.length - 3) : "";
+}
+
 export type CodigoAviso =
   | "visto_primeira_vez_stage3"
+  | "destino_fora_da_linha"
   | "sequencia_inesperada"
   | "status_desconhecido"
   | "transferencia_duplicada";
@@ -137,6 +144,17 @@ export interface OpcoesTracker {
    * Esta é a janela máxima entre a última vez que a linha do Stage 1 Agent foi vista e o surgimento da linha do Stage 3 (padrão 60 s).
    */
   janelaTransferenciaMs?: number;
+  /**
+   * Stage para onde a transferência vai (padrão 3 = fluxo antigo, Stage 1 → Stage 3). Pedido do usuário (2026-10-21): o fluxo
+   * passou a ser linha 1 → linha 2 → linha 3 e a transferência que interessa é a 1 → 2 (a linha 3 é ignorada); `main.ts` passa 2.
+   * Nos comentários deste arquivo, "Stage 3" = este Stage de destino.
+   */
+  destinoStage?: number;
+  /**
+   * Antepenúltimo dígito exigido no número do funcionário da linha NOVA de destino (ex.: "2" = funcionários ***2**).
+   * Ausente = não confere. A mesma linha mudando de Stage 1 para o destino conta sem conferir (pedido do usuário).
+   */
+  destinoDigito?: string;
 }
 
 /** Última linha "Stage 1 Agent" vista para um Callee Number: é de onde sai o "Line 1 number" da transferência. */
@@ -200,6 +218,8 @@ export class CallTracker {
       maiorDuracaoSeg: number | null;
       /** "Call Duration" (s) que a ligação já tinha no Stage 1 quando foi transferida (última leitura da linha de origem). */
       duracaoAteTransferenciaSeg: number | null;
+      /** Fluxo novo: a ligação já apareceu na linha 3 (seguiu adiante depois da linha 2). */
+      foiAdiante?: boolean;
     }
   >();
   private anomaliasAtivas = new Set<string>();
@@ -207,9 +227,17 @@ export class CallTracker {
   private janelaCega = false;
   private sequencia = 0;
   private readonly discriminador: (r: CallRow) => string;
+  /** Stage de destino da transferência (ver `OpcoesTracker.destinoStage`). */
+  private readonly destino: number;
 
   constructor(private readonly op: OpcoesTracker) {
     this.discriminador = op.discriminador ?? discriminadorPadrao;
+    this.destino = op.destinoStage ?? 3;
+  }
+
+  /** No fluxo novo (destino 2), o Stage seguinte (3) é a linha 3: ignorada por completo (pedido do usuário). */
+  private ehLinhaSeguinte(numero: number | null): boolean {
+    return this.destino === 2 && numero === 3;
   }
 
   /** Esquece as ocorrências ativas e exige nova linha de base (ex.: após sessão expirada). */
@@ -371,14 +399,14 @@ export class CallTracker {
   ): void {
     if (ehOrigemDeTransferencia(status)) this.registrarOrigem(oc, agora);
     if (baseline) {
-      if (status.numero === 3) this.stage3Conhecidos.set(oc.callee, agora);
+      if (status.numero === this.destino) this.stage3Conhecidos.set(oc.callee, agora);
       return;
     }
     if (status.numero === null) {
       eventos.push(this.aviso("status_desconhecido", oc));
       return;
     }
-    if (status.numero !== 3) return;
+    if (status.numero !== this.destino) return;
     // Linha nova em Stage 3: é a transferência de uma chamada que estava em "Stage 1 Agent" com o mesmo Callee?
     if (this.stage3Conhecidos.has(oc.callee)) {
       this.stage3Conhecidos.set(oc.callee, agora); // já tratada: não repete aviso
@@ -391,6 +419,13 @@ export class CallTracker {
       agora - origem.ultimaVez <= janela &&
       !this.emitidas.has(`${origem.callback}|${origem.discriminador}`)
     ) {
+      const exigido = this.op.destinoDigito;
+      if (exigido !== undefined && digitoDaLinha(oc.callback) !== exigido) {
+        // veio do Stage 1, mas o funcionário que pegou não é da linha esperada: não é a transferência que interessa
+        this.stage3Conhecidos.set(oc.callee, agora);
+        eventos.push(this.aviso("destino_fora_da_linha", oc));
+        return;
+      }
       oc.origemPendente = origem;
       return; // sai em aposLeitura, depois de N leituras em "Stage 3 Agent"
     }
@@ -432,10 +467,11 @@ export class CallTracker {
       }
     }
     if (ehOrigemDeTransferencia(st)) this.registrarOrigem(oc, agora);
-    if (st.numero === 3 && !oc.origemPendente) this.stage3Conhecidos.set(oc.callee, agora);
+    if (st.numero === this.destino && !oc.origemPendente)
+      this.stage3Conhecidos.set(oc.callee, agora);
     if (
       oc.origemPendente &&
-      st.numero === 3 &&
+      st.numero === this.destino &&
       oc.leiturasNoStatus >= this.op.leiturasConfirmacao
     ) {
       // O Stage 3 já está tocando (Ringing) ou atendido (Agent): a mensagem de transferência sai agora.
@@ -475,13 +511,14 @@ export class CallTracker {
     }
     if (de.numero === null) {
       // vindo de um status desconhecido (já avisado): só alerta se for direto para Stage 3
-      if (para.numero === 3) eventos.push(this.aviso("sequencia_inesperada", oc));
+      if (para.numero === this.destino) eventos.push(this.aviso("sequencia_inesperada", oc));
       return;
     }
     if (de.numero === para.numero) return; // Ringing → Agent etc.: normal
     if (de.numero === 4 || para.numero === 4) return; // Stage 4: o usuário pediu para não fazer nada (sem tarefa, sem aviso)
-    if (de.numero === 1 && para.numero === 2) return; // não é do interesse
-    if (de.numero === 1 && para.numero === 3) {
+    if (this.ehLinhaSeguinte(de.numero) || this.ehLinhaSeguinte(para.numero)) return; // linha 3 (fluxo novo): ignorada
+    if (this.destino === 3 && de.numero === 1 && para.numero === 2) return; // fluxo antigo: não é do interesse
+    if (de.numero === 1 && para.numero === this.destino) {
       if (!(ehOrigemDeTransferencia(de) || oc.viuStage1Agent)) {
         eventos.push(this.aviso("sequencia_inesperada", oc)); // nunca foi "Stage 1 Agent"
         return;
@@ -548,23 +585,41 @@ export class CallTracker {
     if (this.seguimentos.size === 0) return;
     const comStage3 = new Set<string>();
     const comAgent = new Set<string>();
-    /** Callees que continuam na tabela em QUALQUER status (ex.: Stage 3 → Stage 4 não é fim de ligação). */
+    /**
+     * Callees que continuam na tabela em QUALQUER status (ex.: Stage 3 → Stage 4 não é fim de ligação). No fluxo novo, a linha 3
+     * não conta: passar para ela encerra a parte da linha 2.
+     */
     const naTabela = new Set<string>();
+    /** Fluxo novo: callees que já estão na linha 3 (a ligação seguiu adiante depois da linha 2). */
+    const adiante = new Set<string>();
     const duracoes = new Map<string, number>();
+    const contaDuracao = (n: number | null): boolean =>
+      n === this.destino || (this.destino === 3 && n === 4);
     for (const r of s.rows) {
-      naTabela.add(r.calleeNumber);
       const st = interpretarStatusDetalhado(r.callStatus);
-      if ((st.numero === 3 || st.numero === 4) && r.callDurationSec !== null)
+      if (this.ehLinhaSeguinte(st.numero)) {
+        adiante.add(r.calleeNumber);
+        continue;
+      }
+      naTabela.add(r.calleeNumber);
+      if (contaDuracao(st.numero) && r.callDurationSec !== null)
         duracoes.set(
           r.calleeNumber,
           Math.max(duracoes.get(r.calleeNumber) ?? 0, r.callDurationSec),
         );
-      if (st.numero !== 3) continue;
+      if (st.numero !== this.destino) continue;
       comStage3.add(r.calleeNumber);
       if (st.sub === "agent") comAgent.add(r.calleeNumber);
     }
     // Linhas de Stage 3 incompletas (dado faltando) também provam que o Stage 3 continua na tabela.
     for (const p of s.stage3Parciais ?? []) {
+      const n = p.stage ?? 3;
+      if (this.ehLinhaSeguinte(n)) {
+        adiante.add(p.calleeNumber);
+        continue;
+      }
+      naTabela.add(p.calleeNumber);
+      if (n !== this.destino) continue;
       comStage3.add(p.calleeNumber);
       if (p.agent) comAgent.add(p.calleeNumber);
     }
@@ -576,6 +631,7 @@ export class CallTracker {
         sg.inicioAtendimento ??= s.readAt;
       }
       if (comStage3.has(callee) || cega) sg.ultimoStage3 = s.readAt;
+      if (adiante.has(callee)) sg.foiAdiante = true;
       const d = duracoes.get(callee);
       if (d !== undefined && d > (sg.maiorDuracaoSeg ?? 0)) sg.maiorDuracaoSeg = d;
       if (sg.atendida) {
@@ -588,7 +644,8 @@ export class CallTracker {
               ? null
               : Math.round((sg.ultimoStage3 - sg.inicioAtendimento) / 1000));
           this.seguimentos.delete(callee);
-          if (minimoSeg > 0 && duracao !== null && duracao < minimoSeg)
+          // Passou para a linha 3: a ligação seguiu em frente, nunca é CALLBACK por ser curta (pedido do usuário).
+          if (!sg.foiAdiante && minimoSeg > 0 && duracao !== null && duracao < minimoSeg)
             this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
           else if (duracao !== null)
             this.op.aoEncerrarLigacao?.({
@@ -607,6 +664,8 @@ export class CallTracker {
       }
       if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 >= espera) {
         this.seguimentos.delete(callee);
+        // Não vimos o atendimento na linha 2, mas a ligação chegou à linha 3 (só chega lá passando pela 2): não é CALLBACK.
+        if (sg.foiAdiante) continue;
         this.emitirCallback(sg, callee, "sem_atendimento", undefined, s.readAt, eventos);
       }
     }

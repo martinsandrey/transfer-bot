@@ -5,7 +5,7 @@ Marcações no código `TODO(confirmar)` apontam para itens daqui. Respostas gan
 ## Já respondidas (do prompt inicial, 2026-10-15)
 
 - Regra de cinco minutos: **descartada**; não há critério de tempo.
-- Stage 2 existe; Stage 1 → Stage 2 não gera tarefa. Só **Stage 1 Agent → Stage 3 Agent** interessa. Nunca Stage 2 → Stage 3.
+- **Atualizado (usuário, 2026-10-21):** o fluxo passou a ser linha 1 → linha 2 → linha 3. A linha 2 aparece como `Stage 2` com Callback Number de funcionário de antepenúltimo dígito 2 (`9082xx`), o MESMO Callee, e a linha do Stage 1 some. A transferência que interessa é **Stage 1 → Stage 2** (status E dígito; a mesma linha mudando de Stage 1 para Stage 2 também conta). A linha 3 é ignorada. CALLBACK/duração passam a valer na linha 2; ir para a linha 3 nunca é CALLBACK. (Antes: só Stage 1 Agent → Stage 3 Agent interessava; ainda disponível com `TRANSFERENCIA_DESTINO_STAGE=3`.) Pendente [WIN]: ver no log a primeira transferência real 1 → 2.
 - Identidade: Callback Number (nunca em 2 linhas ao mesmo tempo; repete ao longo do dia). Dedup por ocorrência.
 - Chamada vista pela primeira vez em Stage 3: sem tarefa, só aviso.
 - Campos da mensagem: copiados literalmente do cadastro; telefone do cadastro = Callee Number.
