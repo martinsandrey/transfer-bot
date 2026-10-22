@@ -185,6 +185,7 @@ async function principal(): Promise<void> {
     intervaloMs: cfg.monitor.intervaloMs,
     ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
     apelidos: cfg.apelidos,
+    toastSoDaEnviada: cfg.modo === "live" && !simulado,
     destinoStage: cfg.monitor.destinoStage,
     ...(cfg.monitor.destinoDigito !== undefined
       ? { destinoDigito: cfg.monitor.destinoDigito }

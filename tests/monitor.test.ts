@@ -40,6 +40,7 @@ function montar(
   roteiro: Array<TableSnapshot | Error>,
   lookup?: CustomerLookup,
   extra: { aoPerderSessao?: () => Promise<void> } = {},
+  opExtra: { toastSoDaEnviada?: boolean } = {},
 ) {
   const reader = new LeitorRoteirizado(roteiro);
   const tracker = new CallTracker({
@@ -75,7 +76,13 @@ function montar(
   );
   const monitor = new Monitor(
     { reader, tracker, fila, log, notificador: notif, ...extra },
-    { intervaloMs: 1000, invalidasParaAlertar: 3, falhasParaAlertar: 2, limpezaMs: 1_000_000 },
+    {
+      intervaloMs: 1000,
+      invalidasParaAlertar: 3,
+      falhasParaAlertar: 2,
+      limpezaMs: 1_000_000,
+      ...opExtra,
+    },
   );
   return { reader, tracker, notif, sender, fila, monitor };
 }
@@ -308,5 +315,25 @@ describe("Monitor", () => {
     await monitor.passo();
     await monitor.passo();
     expect(m.notif.alertas.some((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem))).toBe(true);
+  });
+
+  it("envio real: o toast de detecção é desligado (o som fica) e só o da mensagem enviada aparece", async () => {
+    const roteiro = [ok([R("A", "Stage 1 Agent")], 1), ok([R("A", "Stage 3 Agent")], 2)];
+    const m = montar(roteiro, undefined, {}, { toastSoDaEnviada: true });
+    await m.monitor.passo();
+    await m.monitor.passo();
+    await m.fila.drenar();
+    const det = m.notif.alertas.find((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem));
+    expect(det?.opcoes?.windows).toBe(false);
+    expect(det?.opcoes?.semSom).toBeUndefined();
+  });
+
+  it("sem envio real: o toast de detecção continua como antes", async () => {
+    const m = montar([ok([R("A", "Stage 1 Agent")], 1), ok([R("A", "Stage 3 Agent")], 2)]);
+    await m.monitor.passo();
+    await m.monitor.passo();
+    await m.fila.drenar();
+    const det = m.notif.alertas.find((a) => /TRANSFERÊNCIA detectada/.test(a.mensagem));
+    expect(det?.opcoes?.windows).toBe("informativo");
   });
 });

@@ -27,6 +27,11 @@ export interface OpcoesMonitor {
   /** Stage de destino da transferência (padrão 3) e o dígito da linha exigido, só para os textos dos avisos. */
   destinoStage?: number;
   destinoDigito?: string;
+  /**
+   * Envio real ligado: a notificação do Windows de detecção não aparece (o som continua), porque a da mensagem enviada, que abre o
+   * Telegram ao clicar, já avisa. Só vale para o que será de fato enviado (funcionário permitido pelo filtro).
+   */
+  toastSoDaEnviada?: boolean;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -278,12 +283,13 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: mascararTelefone(ev.callback),
       });
+      const permitido = fila !== null && this.funcionarioPermitido(ev, "transferencia");
       notificador.alerta(
         "aviso",
         `TRANSFERÊNCIA detectada${ev.fase === "ringing" ? ` (Stage ${this.op.destinoStage ?? 3} tocando)` : ""}: funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
-        { windows: "informativo" },
+        { windows: this.op.toastSoDaEnviada === true && permitido ? false : "informativo" },
       );
-      if (!fila || !this.funcionarioPermitido(ev, "transferencia")) return;
+      if (!permitido) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "callback") {
       log.info("CALLBACK detectado", {
@@ -292,12 +298,13 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: mascararTelefone(ev.callback),
       });
+      const permitido = fila !== null && this.funcionarioPermitido(ev, "callback");
       notificador.alerta(
         "aviso",
         `${ev.motivo === "ligacao_curta" ? `LIGAÇÃO CURTA (CALLBACK, ${ev.duracaoSeg ?? "?"} s)` : "NINGUÉM ATENDEU (CALLBACK)"}: cliente ${numeroVisivel(ev.callee)}, funcionário ${this.funcionarioVisivel(ev.callback)}.`,
-        { windows: "informativo" },
+        { windows: this.op.toastSoDaEnviada === true && permitido ? false : "informativo" },
       );
-      if (!fila || !this.funcionarioPermitido(ev, "callback")) return;
+      if (!permitido) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "ligacao_longa") {
       log.info("Ligação longa detectada", {
@@ -305,12 +312,13 @@ export class Monitor {
         idCurto: ev.ocorrencia,
         callbackMascarado: mascararTelefone(ev.callback),
       });
+      const permitido = fila !== null && this.funcionarioPermitido(ev, "longa");
       notificador.alerta(
         "aviso",
         `LIGAÇÃO LONGA (ainda no Stage 1): funcionário ${this.funcionarioVisivel(ev.callback)}, cliente ${numeroVisivel(ev.callee)}.`,
-        { windows: "informativo_5min" },
+        { windows: this.op.toastSoDaEnviada === true && permitido ? false : "informativo_5min" },
       );
-      if (!fila || !this.funcionarioPermitido(ev, "longa")) return;
+      if (!permitido) return;
       if (fila.enqueue(ev)) this.iniciarFila(fila);
     } else if (ev.tipo === "aviso") {
       log.warn("Aviso do rastreador", {
