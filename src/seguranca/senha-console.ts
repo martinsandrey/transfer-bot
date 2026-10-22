@@ -1,4 +1,5 @@
-import type { Interface } from "node:readline";
+import { createInterface, type Interface } from "node:readline";
+import { senhaDoEnvioEstaCorreta } from "./senha.js";
 
 type ComSaida = Interface & {
   _writeToOutput?: (texto: string) => void;
@@ -23,4 +24,22 @@ export function lerSenhaOculta(rl: Interface, pergunta: string): Promise<string>
     });
     escrevendoPergunta = false;
   });
+}
+
+/**
+ * Pergunta a senha de liberação (até 3 tentativas) e devolve a senha correta, ou `null`. Serve para abrir/proteger a sessão do
+ * Telegram nos comandos fora do programa principal. A senha fica só na memória.
+ */
+export async function pedirSenhaDeLiberacao(texto: string): Promise<string | null> {
+  const rl = createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+  try {
+    for (let tentativa = 1; tentativa <= 3; tentativa++) {
+      const digitada = await lerSenhaOculta(rl, texto);
+      if (senhaDoEnvioEstaCorreta(digitada)) return digitada;
+      if (tentativa < 3) console.log("Senha incorreta. Tente de novo.");
+    }
+    return null;
+  } finally {
+    rl.close();
+  }
 }

@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { interpretarApelidos } from "../config/apelidos.js";
 import { interpretarDigitos } from "../monitor/filtro-funcionario.js";
+import { FUSO_PADRAO, fusoValido } from "../util/fuso.js";
 
 /** Lê só o que o relatório precisa do `.env` (sem exigir o resto da configuração). Valores inválidos são ignorados. */
 export function lerEnv(caminho = ".env"): {
@@ -10,6 +11,7 @@ export function lerEnv(caminho = ".env"): {
   apelidos: Map<string, string>;
   equipePaquistanesDigitos: string[];
   religacao: { janelaMs: number; duracaoMinSeg: number };
+  fuso: string;
 } {
   let pasta = "registros";
   let apelidos = new Map<string, string>();
@@ -17,6 +19,7 @@ export function lerEnv(caminho = ".env"): {
   // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60, CALLBACK_DURACAO_SEG 20.
   let janelaMin = 60;
   let duracaoMinSeg = 20;
+  let fuso = FUSO_PADRAO;
   const inteiro = (v: string | undefined, min: number, max: number): number | null => {
     const t = (v ?? "").trim();
     if (!/^\d+$/.test(t)) return null;
@@ -33,6 +36,8 @@ export function lerEnv(caminho = ".env"): {
       if (d) digitos = [...d];
       janelaMin = inteiro(env["CALLBACK_RELIGACAO_MIN"], 0, 1440) ?? janelaMin;
       duracaoMinSeg = inteiro(env["CALLBACK_DURACAO_SEG"], 0, 3600) ?? duracaoMinSeg;
+      const f = (env["FUSO_HORARIO"] ?? "").trim();
+      if (f && fusoValido(f)) fuso = f;
     }
   } catch {
     /* usa o padrão */
@@ -42,5 +47,6 @@ export function lerEnv(caminho = ".env"): {
     apelidos,
     equipePaquistanesDigitos: digitos,
     religacao: { janelaMs: janelaMin * 60_000, duracaoMinSeg },
+    fuso,
   };
 }

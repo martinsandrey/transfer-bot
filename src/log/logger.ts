@@ -1,6 +1,7 @@
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { pino, type Logger as Pino } from "pino";
+import { dataLocal, isoLocal } from "../util/fuso.js";
 import { mascararTelefone, mascararTexto } from "../util/mascara.js";
 
 /**
@@ -72,10 +73,18 @@ export function criarLogger(op: OpcoesLogger): Logger {
   let destino: pino.DestinationStream | undefined = op.destino;
   if (!destino) {
     mkdirSync(op.pastaLogs, { recursive: true });
-    const dia = new Date().toISOString().slice(0, 10);
+    const dia = dataLocal();
     destino = pino.destination({ dest: join(op.pastaLogs, `transfer-bot-${dia}.log`), sync: true });
   }
-  const base: Pino = pino({ level: op.nivel, base: null }, destino);
+  const base: Pino = pino(
+    {
+      level: op.nivel,
+      base: null,
+      // Horário legível com o fuso (ex.: 2026-10-22T12:45:14.123-03:00), o mesmo do console e dos registros.
+      timestamp: () => `,"time":"${isoLocal(Date.now())}"`,
+    },
+    destino,
+  );
   const escreverConsole = op.console ?? ((l: string) => console.log(l));
 
   const emitir = (nivel: NivelLog, msg: string, campos?: CamposLog): void => {

@@ -2,7 +2,8 @@ import { execFile } from "node:child_process";
 import { chromium } from "playwright";
 import type { AppConfig } from "../config/config.js";
 import { descreverFalhaDeEnvio } from "../fila/task-queue.js";
-import { ClienteGramJS } from "../telegram/cliente-gramjs.js";
+import { pedirSenhaDeLiberacao } from "../seguranca/senha-console.js";
+import { ClienteGramJS, sessaoProtegida } from "../telegram/cliente-gramjs.js";
 import { processoVivo } from "../util/instancia-unica.js";
 import { executarDiagnostico, formatar } from "./verificacoes.js";
 
@@ -26,8 +27,19 @@ async function abrirSite(cfg: AppConfig): Promise<number | null> {
 
 async function testarTelegram(cfg: AppConfig): Promise<{ destino: string; erro: string | null }[]> {
   const t = cfg.telegram;
+  let senhaDaSessao: string | undefined;
+  if (sessaoProtegida(t.arquivoSessao)) {
+    const senha = await pedirSenhaDeLiberacao("Senha de liberação (abre a sessão do Telegram): ");
+    if (senha === null) throw new Error("senha de liberação não informada");
+    senhaDaSessao = senha;
+  }
   const cliente = await ClienteGramJS.conectar(
-    { apiId: t.apiId as number, apiHash: t.apiHash as string, arquivoSessao: t.arquivoSessao },
+    {
+      apiId: t.apiId as number,
+      apiHash: t.apiHash as string,
+      arquivoSessao: t.arquivoSessao,
+      ...(senhaDaSessao !== undefined ? { senhaDaSessao } : {}),
+    },
     { loginInterativo: false },
   );
   try {

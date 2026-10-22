@@ -21,7 +21,7 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
 
 ## Uso diário
 
-- **`iniciar.bat`** — abre uma janela do Edge **exclusiva do bot** (não mexe no seu Edge pessoal).
+- **`iniciar.bat`** — abre uma janela do Edge **exclusiva do bot** (não mexe no seu Edge pessoal). Roda por um **supervisor**: se o programa fechar sozinho (queda, página travada que a recarga não resolveu, navegador fechado), ele é reaberto em 5 s com um aviso do Windows; com envio real ligado, digite a senha de liberação de novo na janela. Para parar de vez: digite `sair`, aperte Ctrl+C ou feche a janela. Se reabrir 6 vezes em 10 minutos, desiste e avisa. Erros de configuração/senha/Telegram sem login não são reabertos.
   - Aparece a verificação do botão quadrado: **clique você mesmo** (o programa nunca faz isso).
   - Login: manual, ou automático se `LOGIN_AUTOMATICO=true` (preenche `SITE_USUARIO`/`SITE_SENHA` **uma única vez**, depois da verificação).
   - Quando detecta uma transferência, o programa consulta o cliente, volta para a Voice Call Status e mostra/envia a mensagem.
@@ -119,7 +119,7 @@ Campos que não existirem no cadastro ficam vazios. `Line 1 number` é o Callbac
 ## Telegram (conta pessoal)
 
 1. Em https://my.telegram.org → "API development tools", crie o app e copie `api_id` e `api_hash` para o `.env`. Trate o `api_hash` como senha.
-2. `telegram.bat` → **1 (login)**: telefone, código e (se tiver) senha 2FA, digitados no console. Só a sessão é salva (`%LOCALAPPDATA%\TransferBot\telegram\sessao.txt`); ela dá acesso à conta, **não a compartilhe**.
+2. `telegram.bat` → **1 (login)**: telefone, código e (se tiver) senha 2FA, digitados no console. Só a sessão é salva (`%LOCALAPPDATA%\TransferBot\telegram\sessao.txt`), **cifrada com a senha de liberação** (AES-256-GCM, chave derivada por scrypt; o comando pede a senha). Sem a senha, o arquivo não abre. Uma sessão antiga em texto simples é cifrada sozinha na primeira vez que o envio real inicia. Se esquecer/trocar a senha, refaça o login com `telegram.bat`.
 3. `telegram.bat` → **2 (chats)** mostra os IDs; ponha o nome exato do canal ou o ID em `TELEGRAM_DESTINO`.
 4. `telegram.bat` → **3 (teste)** envia uma mensagem de teste (sem dados de cliente).
 5. Roteiro recomendado: modo observação → `SEND_MODE=live` com `TELEGRAM_DESTINO=me` → canal definitivo. Com `live`, o programa pede a **senha de liberação** a cada inicialização (digitada sem aparecer na tela, 3 tentativas). A senha é fixa e não é configurável; o código guarda só um resumo irreversível dela (scrypt), não a senha.

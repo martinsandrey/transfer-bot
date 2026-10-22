@@ -21,6 +21,8 @@ import { EnviadorConsole } from "./mensagem/enviadores.js";
 import { CallTracker } from "./monitor/call-tracker.js";
 import { Monitor } from "./monitor/monitor.js";
 import { adquirirTrava } from "./util/instancia-unica.js";
+import { aplicarFuso } from "./util/fuso.js";
+import { SAIDA_REINICIAR } from "./util/saida.js";
 import { senhaDoEnvioEstaCorreta } from "./seguranca/senha.js";
 import { lerSenhaOculta } from "./seguranca/senha-console.js";
 import { RegistroEmArquivo } from "./registro/registro-arquivo.js";
@@ -80,6 +82,7 @@ async function principal(): Promise<void> {
     throw e;
   }
 
+  aplicarFuso(cfg.fuso);
   let construtor;
   try {
     construtor = criarConstrutor(readFileSync(cfg.arquivoMensagem, "utf8"));
@@ -133,7 +136,7 @@ async function principal(): Promise<void> {
       "erro",
       `Erro inesperado (o programa continua rodando): ${e instanceof Error ? e.message : String(e)}`,
     );
-    if (excecoes >= 10) encerrar(); // erro repetido: melhor parar do que ficar num estado estranho
+    if (excecoes >= 10) pedirReinicio(); // erro repetido: melhor fechar (e o supervisor reabrir) do que ficar num estado estranho
   });
   for (const nome of ["SIGTERM", "SIGHUP", "SIGBREAK"] as const)
     process.on(nome, () => {
@@ -148,6 +151,11 @@ async function principal(): Promise<void> {
       console.log("\nEncerrando...");
       sinal.abort();
     }
+  };
+  /** Fecha o programa pedindo ao supervisor (iniciar.bat) que o abra de novo. */
+  const pedirReinicio = (): void => {
+    process.exitCode = SAIDA_REINICIAR;
+    encerrar();
   };
   process.on("SIGINT", encerrar);
   rl.on("SIGINT", encerrar);
@@ -193,6 +201,15 @@ async function principal(): Promise<void> {
     invalidasParaAlertar: 10,
     falhasParaAlertar: 5,
     limpezaMs: 60_000,
+    // Vigia da página: só no modo real (a simulação não tem página para recarregar).
+    ...(!simulado
+      ? {
+          recargaOciosaMs: cfg.recargaOciosaMin * 60_000,
+          tabelaParadaMs: cfg.tabelaParadaMin * 60_000,
+          // ~1 minuto de leituras falhando/ilegíveis seguidas
+          leiturasRuinsParaRecarregar: Math.max(10, Math.ceil(60_000 / cfg.monitor.intervaloMs)),
+        }
+      : {}),
   };
 
   console.log(
@@ -283,9 +300,11 @@ async function principal(): Promise<void> {
       `\nENVIO REAL ativado. As transferências serão enviadas para "${destino}"${cfg.telegram.destinoLonga ? ` e as ligações de ${cfg.duracaoLongaMin} min (ainda em Stage 1) para "${cfg.telegram.destinoLonga}"` : ""}.`,
     );
     let liberado = false;
+    let senhaLiberada = "";
     for (let tentativa = 1; tentativa <= TENTATIVAS_DE_SENHA && !liberado; tentativa++) {
       const digitada = await lerSenhaOculta(rl, "Digite a senha para liberar o envio real: ");
       liberado = senhaDoEnvioEstaCorreta(digitada);
+      if (liberado) senhaLiberada = digitada;
       if (!liberado && tentativa < TENTATIVAS_DE_SENHA)
         console.log("Senha incorreta. Tente de novo.");
     }
@@ -298,7 +317,12 @@ async function principal(): Promise<void> {
     }
     try {
       clienteTg = await ClienteGramJS.conectar(
-        { apiId: apiId as number, apiHash: apiHash as string, arquivoSessao },
+        {
+          apiId: apiId as number,
+          apiHash: apiHash as string,
+          arquivoSessao,
+          senhaDaSessao: senhaLiberada, // a mesma senha abre e protege o arquivo da sessão
+        },
         { loginInterativo: false },
       );
       await clienteTg.validarDestino(destino);
@@ -330,7 +354,13 @@ async function principal(): Promise<void> {
     console.log("Telegram conectado.");
   }
   const host = await iniciarNavegador(cfg);
-  host.contexto.on("close", encerrar);
+  // Navegador fechado sem o programa pedir: pode ter sido uma queda do Edge. Quem quer parar de vez usa "sair"/Ctrl+C.
+  host.contexto.on("close", () => {
+    if (!sinal.signal.aborted) {
+      log.warn("Navegador fechou", { evento: "navegador_fechou" });
+      pedirReinicio();
+    }
+  });
   const leitor = new LeitorTabelaHtml(host.paginaPrincipal(), {
     tolerarSemTabela: Math.max(3, Math.ceil(5000 / cfg.monitor.intervaloMs)),
   });
@@ -433,6 +463,19 @@ ${t}
         log,
         notificador,
         aoPerderSessao: garantir,
+        ...(!simulado
+          ? {
+              recarregar: async () => {
+                // Recarrega a página; se não recarregar, ainda assim confere o login/tabela.
+                await host
+                  .paginaPrincipal()
+                  .reload({ waitUntil: "domcontentloaded", timeout: cfg.timeouts.navegacaoMs })
+                  .catch(() => undefined);
+                await garantir();
+              },
+              aoPrecisarReiniciar: () => pedirReinicio(),
+            }
+          : {}),
         ...(registro
           ? {
               aoFiltrar: (i) =>
@@ -467,6 +510,7 @@ ${t}
         "erro",
         `O programa parou por um erro: ${e instanceof Error ? e.message : String(e)}`,
       );
+      process.exitCode = SAIDA_REINICIAR; // erro inesperado: o supervisor abre de novo
     }
   } finally {
     rl.close();
@@ -481,5 +525,5 @@ principal().catch((e: unknown) => {
     "erro",
     `O programa parou por um erro inesperado: ${e instanceof Error ? e.message : String(e)}`,
   );
-  process.exitCode = 1;
+  process.exitCode = SAIDA_REINICIAR;
 });

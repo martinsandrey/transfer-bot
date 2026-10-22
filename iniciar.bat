@@ -13,7 +13,7 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-call npm start
+call npm run supervisor
 echo.
 echo O programa foi encerrado.
 pause

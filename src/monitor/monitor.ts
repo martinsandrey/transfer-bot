@@ -1,5 +1,5 @@
 import { mascararTelefone } from "../util/mascara.js";
-import { SessaoExpiradaError, type TableReader } from "../dominio/tipos.js";
+import { SessaoExpiradaError, type TableReader, type TableSnapshot } from "../dominio/tipos.js";
 import type { TaskQueue } from "../fila/task-queue.js";
 import type { Logger } from "../log/logger.js";
 import type { Notificador } from "../notificador/notificador.js";
@@ -32,6 +32,16 @@ export interface OpcoesMonitor {
    * Telegram ao clicar, já avisa. Só vale para o que será de fato enviado (funcionário permitido pelo filtro).
    */
   toastSoDaEnviada?: boolean;
+  /**
+   * Vigia da página (precisa de `deps.recarregar`). Recarrega a página do site quando: não há ligação nenhuma há tantos ms
+   * (`recargaOciosaMs`); a tabela tem ligações em andamento mas nada muda há tantos ms, ou seja, a tela congelou (`tabelaParadaMs`);
+   * ou a leitura falha/vem ilegível tantas vezes seguidas (`leiturasRuinsParaRecarregar`). 0 = desligado (padrão).
+   * Se recarregar por problema não resolver `recargasAntesDeReiniciar` vezes em 10 min, pede para reiniciar o programa inteiro.
+   */
+  recargaOciosaMs?: number;
+  tabelaParadaMs?: number;
+  leiturasRuinsParaRecarregar?: number;
+  recargasAntesDeReiniciar?: number;
   agora?: () => number;
   dormir?: (ms: number, sinal: AbortSignal) => Promise<void>;
 }
@@ -45,6 +55,10 @@ export interface DepsMonitor {
   notificador: Notificador;
   /** Chamado quando a sessão expira; deve devolver quando o login for refeito. */
   aoPerderSessao?: () => Promise<void>;
+  /** Recarrega a página do site e devolve quando a tabela estiver de volta (refazendo o menu/login se preciso). */
+  recarregar?: () => Promise<void>;
+  /** O vigia não conseguiu consertar recarregando: o programa deve fechar para ser reaberto (pelo supervisor). */
+  aoPrecisarReiniciar?: (motivo: string) => void;
   /** Evento que NÃO gerou mensagem por causa do filtro de funcionários (para o relatório ainda contá-lo). Tem telefones: não vai para o log. */
   aoFiltrar?: (info: {
     tipo: "transferencia" | "callback" | "longa";
@@ -75,8 +89,18 @@ export function dormirComSinal(ms: number, sinal: AbortSignal): Promise<void> {
 /** Telefone como aparece ao usuário (tela e notificações): sempre por inteiro. Só os arquivos de log mascaram. */
 const numeroVisivel = (valor: string): string => valor.trim();
 
+/** Recargas por problema só contam como "seguidas" se a anterior foi há menos que isto. */
+const JANELA_RECUPERACAO_MS = 10 * 60_000;
+
 export class Monitor {
   private invalidasSeguidas = 0;
+  private leiturasRuins = 0;
+  private ultimaAtividade: number | null = null;
+  private assinatura: string | null = null;
+  private assinaturaDesde = 0;
+  private recargasDeProblema = 0;
+  private ultimoProblemaEm = 0;
+  private reiniciarPedido = false;
   private emPausa = false;
   private todasIgnoradasSeguidas = 0;
   private falhasSeguidas = 0;
@@ -141,6 +165,7 @@ export class Monitor {
         return;
       }
       this.falhasSeguidas++;
+      this.leiturasRuins++;
       log.warn("Falha ao ler a tabela", {
         evento: "leitura_falhou",
         contagem: this.falhasSeguidas,
@@ -151,11 +176,13 @@ export class Monitor {
           `A leitura da tabela falhou ${this.falhasSeguidas} vezes seguidas.`,
         );
       }
+      await this.vigiarLeiturasRuins(agora);
       return;
     }
 
     if (!snapshot.valid) {
       this.invalidasSeguidas++;
+      this.leiturasRuins++;
       log.debug("Leitura inválida descartada", {
         evento: "leitura_invalida",
         motivo: snapshot.invalidReason ?? "desconhecido",
@@ -168,9 +195,11 @@ export class Monitor {
           { windows: true },
         );
       }
+      await this.vigiarLeiturasRuins(agora);
       return;
     }
     this.invalidasSeguidas = 0;
+    this.leiturasRuins = 0;
     // Linha com dado faltando é normal e é só ignorada; mas se TODAS as linhas vêm ignoradas por muito tempo, avise.
     // Tabela vazia (só a linha-aviso) e linhas Stage 2/3/4 com um dado faltando são normais e não contam: só as inexplicadas.
     if (
@@ -194,6 +223,100 @@ export class Monitor {
       this.todasIgnoradasSeguidas = 0;
     }
     for (const ev of tracker.ingest(snapshot)) this.tratar(ev);
+    await this.vigiarPagina(snapshot, agora);
+  }
+
+  /** Leituras falhando/ilegíveis por muito tempo: recarregar a página costuma resolver. */
+  private async vigiarLeiturasRuins(agora: () => number): Promise<void> {
+    const limite = this.op.leiturasRuinsParaRecarregar ?? 0;
+    if (limite > 0 && this.leiturasRuins >= limite)
+      await this.recarregar("leitura_falhando", true, agora);
+  }
+
+  /** Página ociosa (sem nenhuma ligação por muito tempo) ou congelada (ligações que não mudam): recarrega. */
+  private async vigiarPagina(snapshot: TableSnapshot, agora: () => number): Promise<void> {
+    const { tracker, fila } = this.deps;
+    const t = agora();
+    const ativo =
+      snapshot.rows.length > 0 || tracker.ocorrenciasAtivas > 0 || fila?.ocupada === true;
+    if (ativo || this.ultimaAtividade === null) this.ultimaAtividade = t;
+    // Congelada: há duração correndo, e mesmo assim a tabela inteira está idêntica leitura após leitura.
+    const correndo = snapshot.rows.some((r) => (r.callDurationSec ?? 0) > 0);
+    const assinatura = correndo
+      ? snapshot.rows
+          .map((r) => `${r.callbackNumber}|${r.calleeNumber}|${r.callStatus}|${r.callDurationSec}`)
+          .join(";")
+      : null;
+    if (assinatura === null || assinatura !== this.assinatura) {
+      this.assinatura = assinatura;
+      this.assinaturaDesde = t;
+    } else if (
+      (this.op.tabelaParadaMs ?? 0) > 0 &&
+      t - this.assinaturaDesde >= (this.op.tabelaParadaMs ?? 0)
+    ) {
+      await this.recarregar("tabela_parada", true, agora);
+      return;
+    }
+    const ociosaMs = this.op.recargaOciosaMs ?? 0;
+    if (ociosaMs > 0 && !ativo && t - this.ultimaAtividade >= ociosaMs)
+      await this.recarregar("ociosa", false, agora);
+  }
+
+  private async recarregar(motivo: string, problema: boolean, agora: () => number): Promise<void> {
+    const { log, notificador, tracker } = this.deps;
+    if (!this.deps.recarregar) return;
+    if (problema) {
+      if (agora() - this.ultimoProblemaEm > JANELA_RECUPERACAO_MS) this.recargasDeProblema = 0;
+      this.ultimoProblemaEm = agora();
+      this.recargasDeProblema++;
+      if (this.recargasDeProblema > (this.op.recargasAntesDeReiniciar ?? 3)) {
+        if (this.reiniciarPedido) return;
+        this.reiniciarPedido = true;
+        log.error("Recarregar a página não resolveu; pedindo para reiniciar o programa", {
+          evento: "reinicio_necessario",
+          motivo,
+          contagem: this.recargasDeProblema,
+        });
+        notificador.alerta(
+          "erro",
+          "Recarregar a página do site não resolveu. O programa vai fechar para ser aberto de novo.",
+          { windows: true },
+        );
+        this.deps.aoPrecisarReiniciar?.(motivo);
+        return;
+      }
+      notificador.alerta(
+        "aviso",
+        motivo === "tabela_parada"
+          ? "A tabela do site parou de atualizar (as durações não mudam). Vou recarregar a página."
+          : "A leitura da tabela está falhando há muito tempo. Vou recarregar a página.",
+        { windows: true },
+      );
+    }
+    log.warn("Recarregando a página do site", {
+      evento: "pagina_recarregada",
+      motivo,
+      contagem: this.recargasDeProblema,
+    });
+    const inicio = agora();
+    try {
+      await this.deps.recarregar();
+    } catch (e) {
+      log.error("Falha ao recarregar a página", {
+        evento: "recarga_falhou",
+        motivo: e instanceof Error ? e.message.slice(0, 120) : "desconhecido",
+      });
+    }
+    tracker.marcarJanelaSemLeitura(); // houve um intervalo sem leitura: preserva as chamadas conhecidas
+    this.leiturasRuins = 0;
+    this.invalidasSeguidas = 0;
+    this.falhasSeguidas = 0;
+    this.assinatura = null;
+    this.ultimaAtividade = agora();
+    log.info("Página recarregada", {
+      evento: "pagina_recarregada_ok",
+      duracaoMs: agora() - inicio,
+    });
   }
 
   private async tratarSessaoExpirada(agora: () => number): Promise<void> {
@@ -205,6 +328,7 @@ export class Monitor {
     tracker.reiniciarBaseline();
     this.invalidasSeguidas = 0;
     this.falhasSeguidas = 0;
+    this.leiturasRuins = 0;
     log.warn("Monitoramento retomado com nova linha de base; houve janela sem monitoramento", {
       evento: "janela_sem_monitoramento",
       duracaoMs: agora() - inicio,

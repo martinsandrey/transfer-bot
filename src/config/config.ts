@@ -1,3 +1,4 @@
+import { FUSO_PADRAO, fusoValido } from "../util/fuso.js";
 import { readFileSync, existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
@@ -34,6 +35,7 @@ export interface AppConfig {
   };
   timeouts: { navegacaoMs: number; consultaMs: number };
   recargaOciosaMin: number;
+  tabelaParadaMin: number;
   navegador: NavegadorEscolhido;
   pastas: { dados: string; perfilNavegador: string; logs: string };
   arquivoMensagem: string;
@@ -68,6 +70,8 @@ export interface AppConfig {
   /** Minutos; 0 = a mensagem nunca expira. */
   validadeMensagemMin: number;
   nivelLog: "debug" | "info" | "warn" | "error";
+  /** Fuso horário de tudo que o programa mostra e grava (padrão: Brasília). */
+  fuso: string;
 }
 
 export class ErroDeConfiguracao extends Error {
@@ -156,7 +160,8 @@ const esquema = z.object({
   ),
   TIMEOUT_NAVEGACAO_MS: inteiro("TIMEOUT_NAVEGACAO_MS", 30000, 1000, 600000),
   TIMEOUT_CONSULTA_MS: inteiro("TIMEOUT_CONSULTA_MS", 60000, 1000, 600000),
-  RECARGA_OCIOSA_MINUTOS: inteiro("RECARGA_OCIOSA_MINUTOS", 0, 0, 100000),
+  RECARGA_OCIOSA_MINUTOS: inteiro("RECARGA_OCIOSA_MINUTOS", 30, 0, 100000),
+  TABELA_PARADA_MINUTOS: inteiro("TABELA_PARADA_MINUTOS", 5, 0, 1440),
   NAVEGADOR: z.preprocess(
     (v) => vazioParaUndefined(v) ?? "msedge",
     z.enum(["chromium", "msedge"], { error: 'NAVEGADOR: use "msedge" ou "chromium".' }),
@@ -190,6 +195,13 @@ const esquema = z.object({
   EQUIPE_PAQUISTANES_DIGITOS: textoOpcional,
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
   VALIDADE_MENSAGEM_MIN: inteiro("VALIDADE_MENSAGEM_MIN", 15, 0, 100000),
+  FUSO_HORARIO: z.preprocess(
+    (v) => vazioParaUndefined(v) ?? FUSO_PADRAO,
+    z.string().refine(fusoValido, {
+      error:
+        'FUSO_HORARIO: fuso desconhecido. Use um nome como "America/Sao_Paulo" (horário de Brasília).',
+    }),
+  ),
   NIVEL_LOG: z.preprocess(
     (v) => vazioParaUndefined(v) ?? "info",
     z.enum(["debug", "info", "warn", "error"], {
@@ -279,6 +291,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
     },
     timeouts: { navegacaoMs: c.TIMEOUT_NAVEGACAO_MS, consultaMs: c.TIMEOUT_CONSULTA_MS },
     recargaOciosaMin: c.RECARGA_OCIOSA_MINUTOS,
+    tabelaParadaMin: c.TABELA_PARADA_MINUTOS,
     navegador: c.NAVEGADOR,
     pastas: { dados, perfilNavegador: join(dados, "perfil-navegador"), logs: join(dados, "logs") },
     arquivoMensagem: c.ARQUIVO_MENSAGEM,
@@ -308,6 +321,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
     repeticao5minMin: c.REPETICAO_5MIN_MIN,
     validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,
     nivelLog: c.NIVEL_LOG,
+    fuso: c.FUSO_HORARIO,
   };
 }
 

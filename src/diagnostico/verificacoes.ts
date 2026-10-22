@@ -119,7 +119,7 @@ export function verificarRelogio(fusoLocal: string, t: number): Resultado {
   return {
     item: "Relógio",
     situacao: "aviso",
-    detalhe: `o computador está em outro fuso (${fusoLocal}, ${horaEm(fusoLocal, t)}; ${sinal}${Math.abs(dif)} h em relação a Brasília, onde são ${brasilia}).`,
+    detalhe: `o computador está em outro fuso (${fusoLocal}, ${horaEm(fusoLocal, t)}; ${sinal}${Math.abs(dif)} h em relação a Brasília, onde são ${brasilia}). Sem problema: o programa mostra e grava tudo no fuso de FUSO_HORARIO do .env.`,
   };
 }
 

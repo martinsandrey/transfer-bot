@@ -1,6 +1,7 @@
 import { carregarConfig, ErroDeConfiguracao } from "../config/config.js";
 import { descreverFalhaDeEnvio } from "../fila/task-queue.js";
 import { normalizarTitulo } from "./cliente.js";
+import { pedirSenhaDeLiberacao } from "../seguranca/senha-console.js";
 import { ClienteGramJS, sessaoExiste } from "./cliente-gramjs.js";
 import { EnviadorTelegram } from "./enviador-telegram.js";
 
@@ -26,14 +27,28 @@ async function principal(): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  // A sessão do Telegram dá acesso total à conta: fica cifrada no disco com a senha de liberação.
+  const senha = await pedirSenhaDeLiberacao(
+    "Senha de liberação (abre e protege a sessão do Telegram): ",
+  );
+  if (senha === null) {
+    console.error("\nSenha incorreta. Nada foi feito.\n");
+    process.exitCode = 1;
+    return;
+  }
   const cliente = await ClienteGramJS.conectar(
-    { apiId: t.apiId, apiHash: t.apiHash, arquivoSessao: t.arquivoSessao },
+    {
+      apiId: t.apiId,
+      apiHash: t.apiHash,
+      arquivoSessao: t.arquivoSessao,
+      senhaDaSessao: senha,
+    },
     { loginInterativo: comando === "login" || !sessaoExiste(t.arquivoSessao) },
   );
   try {
     if (comando === "login") {
       console.log(
-        `\nLogin feito. Sessão salva em: ${t.arquivoSessao}\nProteja esse arquivo: ele dá acesso à sua conta.\n`,
+        `\nLogin feito. Sessão salva (cifrada com a senha de liberação) em: ${t.arquivoSessao}\n`,
       );
     } else if (comando === "chats") {
       console.log("\nID (use em TELEGRAM_DESTINO) | tipo | título");

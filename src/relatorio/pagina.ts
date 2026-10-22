@@ -3,6 +3,8 @@ import type { Ligacao, LigacaoLonga } from "./relatorio.js";
 
 export interface DadosDaPagina {
   geradoEm: Date;
+  /** Fuso em que a página mostra horários (padrão: Brasília), não o do navegador. */
+  fuso?: string;
   ligacoes: readonly Ligacao[];
   longas: readonly LigacaoLonga[];
   /** Filtro que a página mostra ao abrir: um dos nomes de período, ou `personalizado` com `de`/`ate` (AAAA-MM-DD). */
@@ -61,6 +63,7 @@ export function dadosDasLongas(longas: DadosDaPagina["longas"]): unknown[] {
 export function paginaHtml(d: DadosDaPagina): string {
   const dados = {
     gerado: d.geradoEm.getTime(),
+    fuso: d.fuso ?? "America/Sao_Paulo",
     ligacoes: dadosDasLigacoes(d.ligacoes),
     longas: dadosDasLongas(d.longas),
     ap: Object.fromEntries(d.apelidos ?? []),
@@ -299,6 +302,13 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
 <script>
 "use strict";
 const D = /*DADOS*/null;
+// Horários sempre no fuso do programa (D.fuso), não no do navegador.
+const dataHora = (t) => new Date(t).toLocaleString("pt-BR", { timeZone: D.fuso });
+function deslocFuso(t) { // minutos entre o fuso do programa e o UTC no instante t
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: D.fuso, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" }).formatToParts(new Date(t));
+  const v = (k) => Number(p.find((x) => x.type === k).value);
+  return Math.round((Date.UTC(v("year"), v("month") - 1, v("day"), v("hour"), v("minute"), v("second")) - Math.floor(t / 1000) * 1000) / 60000);
+}
 const $ = (id) => document.getElementById(id);
 const estado = { p: "hoje", de: "", ate: "", obs: false, pk: true };
 
@@ -513,7 +523,7 @@ function desenhar() {
   for (const c of lista) {
     const sel = c.rm ? el("span", "Callback removido", "selo neutro") : el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
-    if (c.rm) r.append(" ", el("span", "(o cliente foi transferido de novo em " + new Date(c.rm.t).toLocaleString("pt-BR") + " por " + rotulo(c.rm.f) + " e atendido; conta como uma só transferência, na nova)", "explica"));
+    if (c.rm) r.append(" ", el("span", "(o cliente foi transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + " e atendido; conta como uma só transferência, na nova)", "explica"));
     if (c.sb) r.append(" ", el("span", "(substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente)", "explica"));
     if (c.m) r.append(" ", el("span", "(marcado no relatório)", "explica"));
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
@@ -525,7 +535,7 @@ function desenhar() {
       b.addEventListener("click", () => abrirConfirmacao(c));
       acao.append(b);
     }
-    db.append(linhaTr(el("td", new Date(c.t).toLocaleString("pt-BR"), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.u)), acao));
+    db.append(linhaTr(el("td", dataHora(c.t), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.u)), acao));
     if (c.rm) db.lastChild.classList.add("removida");
   }
   window.__relatorio = {
@@ -556,7 +566,7 @@ $("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar
 /* ---- planilha Excel (.xlsx) com o que está na tela (mesmo período e filtros) ---- */
 const montarXlsx = /*XLSX*/null;
 const E = /*ESTILOS*/null;
-const serialExcel = (t) => (t - new Date(t).getTimezoneOffset() * 60000) / 86400000 + 25569;
+const serialExcel = (t) => (t + deslocFuso(t) * 60000) / 86400000 + 25569;
 const diaFr = (seg) => (seg === null || seg === undefined || isNaN(seg) ? null : Math.round(seg) / 86400);
 const C = (v, e) => ({ v: v === undefined ? null : v, e });
 const cab = (...t) => t.map((x) => C(x, E.cabecalho));
@@ -588,7 +598,7 @@ function abasDaPlanilha() {
   const r = [
     [C("Relatório de transferências", E.titulo)],
     [C("Período: " + iv.rot, E.subtitulo)],
-    [C("Gerado em " + geradoEm.toLocaleString("pt-BR"), E.subtitulo)],
+    [C("Gerado em " + dataHora(geradoEm), E.subtitulo)],
     [C(filtros, E.subtitulo)],
     [],
     cab("Indicador", "Valor", "Detalhe"),
@@ -629,7 +639,7 @@ function abasDaPlanilha() {
   for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
     const res = c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida";
     const obs = [];
-    if (c.rm) obs.push("cliente transferido de novo em " + new Date(c.rm.t).toLocaleString("pt-BR") + " por " + rotulo(c.rm.f) + " e atendido (não conta)");
+    if (c.rm) obs.push("cliente transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + " e atendido (não conta)");
     if (c.sb) obs.push("substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente");
     if (c.m) obs.push("marcado como callback no relatório");
     if (c.o) obs.push("prévia do modo observação");
@@ -683,7 +693,7 @@ function abrirConfirmacao(c) {
     ? "O relatório passa a contar esta transferência como callback. Nada é enviado ao Telegram. Dá para desfazer depois."
     : "A ligação volta a contar como atendida, como o programa registrou.";
   $("conf-sim").textContent = marcar ? "Marcar como callback" : "Desfazer";
-  $("conf-quando").textContent = new Date(c.t).toLocaleString("pt-BR");
+  $("conf-quando").textContent = dataHora(c.t);
   $("conf-func").textContent = rotulo(c.f);
   $("conf-cliente").textContent = c.c || "—";
   $("conf-erro").textContent = "";
@@ -717,7 +727,7 @@ $("nota-acao").textContent = D.srv
 /* ---- atualização automática (só quando aberta pelo relatorio.bat): relê os registros a cada 10 s ---- */
 const INTERVALO_VIVO_MS = 10000;
 const vivo = { pausado: false, ocupado: false, versao: 0, falhas: 0 };
-const hhmmss = (d) => d.toLocaleTimeString("pt-BR", { hour12: false });
+const hhmmss = (d) => d.toLocaleTimeString("pt-BR", { hour12: false, timeZone: D.fuso });
 function textoVivo(t) { $("vivo-txt").textContent = t; }
 async function atualizar() {
   if (!D.srv || vivo.pausado || vivo.ocupado || document.hidden || $("confirma").open) return;
@@ -753,7 +763,7 @@ if (D.srv) {
   setInterval(() => void atualizar(), INTERVALO_VIVO_MS);
 }
 
-$("gerado").textContent = "Gerado em " + new Date(D.gerado).toLocaleString("pt-BR");
+$("gerado").textContent = "Gerado em " + dataHora(D.gerado);
 estado.p = D.inicial.periodo || "hoje"; estado.de = D.inicial.de || ""; estado.ate = D.inicial.ate || "";
 sincronizar();
 </script>

@@ -1,9 +1,10 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createInterface } from "node:readline";
 import { Api, TelegramClient } from "telegram";
 import { FloodWaitError } from "telegram/errors/index.js";
 import { StringSession } from "telegram/sessions/index.js";
+import { cifrar, decifrar, estaCifrada } from "../seguranca/cofre.js";
 import {
   FalhaTelegram,
   FloodWaitTelegram,
@@ -21,6 +22,11 @@ export interface CredenciaisTelegram {
   apiHash: string;
   /** Arquivo da sessão (dá acesso TOTAL à conta: fica fora do repositório, na pasta de dados do usuário). */
   arquivoSessao: string;
+  /**
+   * Senha de liberação digitada agora: abre e protege (cifra) o arquivo da sessão. Sem ela, a sessão é lida e gravada em texto
+   * simples (só para quem ainda não migrou) e uma sessão já protegida não abre.
+   */
+  senhaDaSessao?: string;
 }
 
 /** Pergunta no console. Com `oculto`, não ecoa o que é digitado (senha 2FA). Nada digitado aqui é gravado. */
@@ -43,6 +49,11 @@ function perguntar(texto: string, oculto = false): Promise<string> {
 
 export function sessaoExiste(arquivo: string): boolean {
   return existsSync(arquivo) && readFileSync(arquivo, "utf8").trim() !== "";
+}
+
+/** O arquivo da sessão existe e está protegido pela senha (então é preciso a senha para abri-lo). */
+export function sessaoProtegida(arquivo: string): boolean {
+  return existsSync(arquivo) && estaCifrada(readFileSync(arquivo, "utf8").trim());
 }
 
 function traduzir(e: unknown): Error {
@@ -92,9 +103,21 @@ export class ClienteGramJS implements ClienteTelegram {
     cred: CredenciaisTelegram,
     opcoes: { loginInterativo: boolean },
   ): Promise<ClienteGramJS> {
-    const existente = sessaoExiste(cred.arquivoSessao)
+    let existente = sessaoExiste(cred.arquivoSessao)
       ? readFileSync(cred.arquivoSessao, "utf8").trim()
       : "";
+    if (estaCifrada(existente)) {
+      if (cred.senhaDaSessao === undefined)
+        throw new FalhaTelegram(
+          "A sessão do Telegram é protegida pela senha de liberação, e ela não foi informada.",
+        );
+      const aberta = decifrar(existente, cred.senhaDaSessao);
+      if (aberta === null)
+        throw new FalhaTelegram(
+          "Não consegui abrir a sessão do Telegram: senha incorreta ou arquivo danificado (se danificou, refaça o login com telegram.bat login).",
+        );
+      existente = aberta;
+    }
     if (existente === "" && !opcoes.loginInterativo) {
       throw new FalhaTelegram(
         "Telegram sem login. Rode o comando de login do Telegram (telegram.bat login).",
@@ -124,10 +147,15 @@ export class ClienteGramJS implements ClienteTelegram {
 
   private salvarSessao(): void {
     mkdirSync(dirname(this.cred.arquivoSessao), { recursive: true });
-    writeFileSync(this.cred.arquivoSessao, String(this.c.session.save()), {
-      encoding: "utf8",
-      mode: 0o600,
-    });
+    const texto = String(this.c.session.save());
+    // Grava num arquivo temporário e troca de nome: se der erro no meio, a sessão antiga continua inteira.
+    const temporario = `${this.cred.arquivoSessao}.novo`;
+    writeFileSync(
+      temporario,
+      this.cred.senhaDaSessao !== undefined ? cifrar(texto, this.cred.senhaDaSessao) : texto,
+      { encoding: "utf8", mode: 0o600 },
+    );
+    renameSync(temporario, this.cred.arquivoSessao);
     try {
       chmodSync(this.cred.arquivoSessao, 0o600);
     } catch {

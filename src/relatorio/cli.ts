@@ -8,6 +8,7 @@ import {
   linhaDeMarcacao,
 } from "./callbacks-manuais.js";
 import { dadosDasLigacoes, dadosDasLongas, paginaHtml } from "./pagina.js";
+import { aplicarFuso } from "../util/fuso.js";
 import { lerEnv } from "./env.js";
 import { iniciarServidor } from "./servidor.js";
 import {
@@ -84,7 +85,8 @@ async function principal(): Promise<void> {
     inicial = { periodo: resto[0] };
   }
 
-  const { pasta, apelidos, equipePaquistanesDigitos, religacao } = lerEnv();
+  const { pasta, apelidos, equipePaquistanesDigitos, religacao, fuso } = lerEnv();
+  aplicarFuso(fuso);
   const ler = (arquivo: string): string | null => {
     const caminho = join(pasta, arquivo);
     return existsSync(caminho) ? readFileSync(caminho, "utf8") : null;
@@ -112,6 +114,7 @@ async function principal(): Promise<void> {
     return m
       ? paginaHtml({
           geradoEm: new Date(),
+          fuso,
           ...m,
           inicial,
           apelidos,

@@ -21,7 +21,8 @@
     "diagnostico": "npm run build && node dist/diagnostico/cli.js",
     "telegram": "npm run build && node dist/telegram/cli.js",
     "testar-notificacao": "npm run build && node dist/main.js --teste-notificacao",
-    "start": "npm run build && node dist/main.js"
+    "start": "npm run build && node dist/main.js",
+    "supervisor": "npm run build && node dist/supervisor.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
