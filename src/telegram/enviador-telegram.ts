@@ -51,7 +51,10 @@ function comPrazo<T>(p: Promise<T>, ms: number): Promise<T> {
 export class EnviadorTelegram implements MessageSender {
   private readonly pendentes = new Map<string, { texto: string; desde: number }>();
   /** Textos já enviados com sucesso (normalizados): trava anti-duplicata de curta duração. */
-  private readonly enviadosHa = new Map<string, { em: number; confirmacao: string }>();
+  private readonly enviadosHa = new Map<
+    string,
+    { em: number; confirmacao: string; link?: string }
+  >();
   private readonly dormir: (ms: number) => Promise<void>;
   private readonly agora: () => number;
 
@@ -70,7 +73,12 @@ export class EnviadorTelegram implements MessageSender {
     for (const [k, v] of this.enviadosHa)
       if (agoraS - v.em > JANELA_ANTI_DUPLICATA_S) this.enviadosHa.delete(k);
     const jaEnviado = this.enviadosHa.get(`${respostaA ?? ""}|${normalizarTextoDeMensagem(texto)}`);
-    if (jaEnviado) return { tipo: "enviada", confirmacao: jaEnviado.confirmacao }; // mesma mensagem há instantes: não duplica
+    if (jaEnviado)
+      return {
+        tipo: "enviada",
+        confirmacao: jaEnviado.confirmacao,
+        ...(jaEnviado.link !== undefined ? { link: jaEnviado.link } : {}),
+      }; // mesma mensagem há instantes: não duplica
     this.pendentes.set(chave, { texto: corpo, desde: this.agora() - 5 });
     let esperouFlood = false;
     for (;;) {
@@ -88,8 +96,9 @@ export class EnviadorTelegram implements MessageSender {
         this.enviadosHa.set(`${respostaA ?? ""}|${normalizarTextoDeMensagem(corpo)}`, {
           em: this.agora(),
           confirmacao,
+          ...(r.link !== undefined ? { link: r.link } : {}),
         });
-        return { tipo: "enviada", confirmacao };
+        return { tipo: "enviada", confirmacao, ...(r.link !== undefined ? { link: r.link } : {}) };
       } catch (e) {
         if (e instanceof FloodWaitTelegram) {
           if (!esperouFlood && e.segundos * 1000 <= this.op.esperaMaximaFloodMs) {

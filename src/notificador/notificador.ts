@@ -13,6 +13,10 @@ export type NivelAlerta = "info" | "aviso" | "erro";
  */
 export interface OpcoesAlerta {
   windows?: boolean | "informativo" | "informativo_5min";
+  /** Clicar na notificação do Windows abre este endereço `tg://` (o Telegram, direto na mensagem). */
+  link?: string;
+  /** Sem o som de aviso (a notificação é só um complemento). */
+  semSom?: boolean;
 }
 
 export interface Notificador {
@@ -65,10 +69,15 @@ export function criarNotificador(op: OpcoesNotificador = {}): Notificador {
                 ? op.toastLigacoesLongas === true
                 : nivel === "erro" || w === true;
         if (notificar && op.toast)
-          op.toast(nivel === "erro" ? "Transfer Bot — ERRO" : "Transfer Bot — atenção", mensagem);
+          op.toast(
+            nivel === "erro" ? "Transfer Bot — ERRO" : "Transfer Bot — atenção",
+            mensagem,
+            opcoes?.link,
+          );
       } catch {
         /* a notificação nunca atrapalha o resto */
       }
+      if (opcoes?.semSom === true) return;
       try {
         if (plataforma === "win32") {
           const filho = spawnFn(

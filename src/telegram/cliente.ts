@@ -22,7 +22,7 @@ export interface ClienteTelegram {
     destino: string,
     texto: string,
     responderAId?: number,
-  ): Promise<{ id: number; data: number }>;
+  ): Promise<{ id: number; data: number; link?: string }>;
   /** Últimas mensagens do destino (para verificar se um envio incerto chegou). */
   mensagensRecentes(destino: string, limite: number): Promise<MensagemRecente[]>;
   /** Texto atual (já editado, se foi) de uma mensagem do destino; `null` se a mensagem não existe mais (apagada). */
@@ -30,6 +30,23 @@ export interface ClienteTelegram {
   /** Lista conversas (comando `chats`). */
   dialogos(limite: number): Promise<Dialogo[]>;
   encerrar(): Promise<void>;
+}
+
+/**
+ * Endereço que abre o aplicativo do Telegram direto numa mensagem (`tg://`, registrado pelo Telegram Desktop no Windows).
+ * Só existe para supergrupos e canais: público (com @usuário) usa `resolve`, privado usa `privatepost` com o ID sem o prefixo -100.
+ * Grupo comum, conversa privada e Mensagens Salvas não têm link de mensagem: devolve `undefined`.
+ */
+export function linkDaMensagem(
+  chat: { canalId: string; usuario?: string | undefined } | null,
+  mensagemId: number,
+): string | undefined {
+  if (!chat || !Number.isInteger(mensagemId) || mensagemId <= 0) return undefined;
+  if (chat.usuario !== undefined && /^[A-Za-z][A-Za-z0-9_]{3,63}$/.test(chat.usuario))
+    return `tg://resolve?domain=${chat.usuario}&post=${mensagemId}`;
+  if (/^\d+$/.test(chat.canalId))
+    return `tg://privatepost?channel=${chat.canalId}&post=${mensagemId}`;
+  return undefined;
 }
 
 /** O Telegram pediu para esperar (FLOOD_WAIT). Nada foi enviado. */

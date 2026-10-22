@@ -410,6 +410,26 @@ export class TaskQueue {
     return v > 0 && this.agora() - inicio > v;
   }
 
+  /**
+   * Notificação do Windows de que a mensagem chegou ao grupo; clicar nela abre o Telegram direto na mensagem (só quando o destino
+   * tem link de mensagem, ou seja, é um supergrupo/canal). Segue as mesmas opções de notificação da transferência/CALLBACK (ou das
+   * ligações de 5 min) e não repete o som: o aviso de detecção já tocou.
+   */
+  private avisarEnviada(t: TarefaTransferencia, link: string | undefined): void {
+    if (link === undefined) return;
+    const o =
+      t.tipo === "longa"
+        ? "Ligação de 5 min"
+        : t.tipo === "callback"
+          ? "CALLBACK"
+          : "Transferência";
+    this.deps.notificador.alerta(
+      "aviso",
+      `${o} enviada ao grupo: cliente ${t.callee}, funcionário ${t.callback}. Clique para abrir no Telegram.`,
+      { windows: t.tipo === "longa" ? "informativo_5min" : "informativo", link, semSom: true },
+    );
+  }
+
   private avisarExpirada(t: TarefaTransferencia): void {
     this.deps.notificador.alerta(
       "erro",
@@ -570,6 +590,7 @@ export class TaskQueue {
       if (resultado.tipo === "enviada") {
         t.confirmacao = resultado.confirmacao;
         this.mover(t, "enviada");
+        this.avisarEnviada(t, resultado.link);
         return;
       }
       if (resultado.tipo === "falhou") {

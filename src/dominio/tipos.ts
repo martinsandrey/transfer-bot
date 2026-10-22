@@ -68,7 +68,8 @@ export interface CustomerLookup {
 }
 
 export type ResultadoEnvio =
-  | { tipo: "enviada"; confirmacao: string }
+  /** `link`: endereço `tg://...` que abre o Telegram direto nesta mensagem (só se o destino for um supergrupo/canal). */
+  | { tipo: "enviada"; confirmacao: string; link?: string }
   | { tipo: "incerta"; motivo: string }
   | { tipo: "falhou"; motivo: string; reenviavel: boolean };
 

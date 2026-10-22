@@ -9,6 +9,7 @@ import {
   FloodWaitTelegram,
   destinoEhTitulo,
   escolherPorTitulo,
+  linkDaMensagem,
   normalizarTitulo,
   type ClienteTelegram,
   type Dialogo,
@@ -143,7 +144,7 @@ export class ClienteGramJS implements ClienteTelegram {
     destino: string,
     texto: string,
     responderAId?: number,
-  ): Promise<{ id: number; data: number }> {
+  ): Promise<{ id: number; data: number; link?: string }> {
     try {
       await this.garantirConexao();
       const m = await this.c.sendMessage(await this.entidade(destino), {
@@ -151,7 +152,15 @@ export class ClienteGramJS implements ClienteTelegram {
         parseMode: undefined,
         ...(responderAId !== undefined ? { replyTo: responderAId } : {}),
       });
-      return { id: m.id, data: m.date };
+      // A resposta do envio costuma trazer o grupo; se não trouxer, busca (falhar aqui só tira o link, nunca o envio).
+      const c = m.chat ?? (await m.getChat().catch(() => undefined));
+      const link = linkDaMensagem(
+        c instanceof Api.Channel
+          ? { canalId: String(c.id), usuario: c.username ?? undefined }
+          : null,
+        m.id,
+      );
+      return { id: m.id, data: m.date, ...(link !== undefined ? { link } : {}) };
     } catch (e) {
       throw traduzir(e);
     }

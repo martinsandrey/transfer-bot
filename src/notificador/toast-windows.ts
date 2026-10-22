@@ -21,7 +21,18 @@ export interface OpcoesToast {
   limitePorMinuto?: number;
 }
 
-export type Toast = (titulo: string, texto: string) => void;
+/** `link`: endereço `tg://` que o clique na notificação abre (ver `linkSeguro`). */
+export type Toast = (titulo: string, texto: string, link?: string) => void;
+
+/** Só endereços que abrem o Telegram direto numa mensagem; qualquer outro texto é descartado (o clique nunca abre algo estranho). */
+export function linkSeguro(link: string | undefined): string | undefined {
+  return link !== undefined &&
+    /^tg:\/\/(resolve\?domain=[A-Za-z][A-Za-z0-9_]{3,63}|privatepost\?channel=\d{1,20})&post=\d{1,12}$/.test(
+      link,
+    )
+    ? link
+    : undefined;
+}
 
 /** AppUserModelId do próprio Windows PowerShell: já é registrado no Windows, então o toast aparece sem instalar nada. */
 const APP_ID = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\\powershell.exe";
@@ -29,15 +40,24 @@ const APP_ID = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\\WindowsPowerShell\\v1.0\
 const b64 = (s: string): string => Buffer.from(s, "utf8").toString("base64");
 
 /** Script do PowerShell (exportado para teste). Título e texto entram só como base64. */
-export function scriptDoToast(titulo: string, texto: string): string {
+export function scriptDoToast(titulo: string, texto: string, link?: string): string {
+  const url = linkSeguro(link);
   return `$ErrorActionPreference = 'Stop'
 $t = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(titulo)}'))
 $m = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(texto)}'))
+${url ? `$u = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${b64(url)}'))` : "$u = $null"}
 try {
   [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] | Out-Null
   [Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom.XmlDocument, ContentType = WindowsRuntime] | Out-Null
   $xml = New-Object Windows.Data.Xml.Dom.XmlDocument
-  $xml.LoadXml('<toast scenario="reminder"><visual><binding template="ToastGeneric"><text>' + [Security.SecurityElement]::Escape($t) + '</text><text>' + [Security.SecurityElement]::Escape($m) + '</text></binding></visual></toast>')
+  $texto = '<visual><binding template="ToastGeneric"><text>' + [Security.SecurityElement]::Escape($t) + '</text><text>' + [Security.SecurityElement]::Escape($m) + '</text></binding></visual>'
+  if ($u) {
+    # Clicar na notificação (ou no botão) abre o Telegram direto na mensagem: o Windows entrega o endereço tg:// ao aplicativo.
+    $eu = [Security.SecurityElement]::Escape($u)
+    $xml.LoadXml('<toast scenario="reminder" activationType="protocol" launch="' + $eu + '">' + $texto + '<actions><action content="Abrir no Telegram" arguments="' + $eu + '" activationType="protocol"/></actions></toast>')
+  } else {
+    $xml.LoadXml('<toast scenario="reminder">' + $texto + '</toast>')
+  }
   $toast = [Windows.UI.Notifications.ToastNotification]::new($xml)
   [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier('${APP_ID}').Show($toast)
 } catch {
@@ -70,9 +90,9 @@ export function criarToastWindows(op: OpcoesToast = {}): Toast {
   let suprimidas = 0;
   let flushAgendado = false;
 
-  const disparar = (titulo: string, texto: string): void => {
+  const disparar = (titulo: string, texto: string, link?: string): void => {
     try {
-      const comando = Buffer.from(scriptDoToast(titulo, texto), "utf16le").toString("base64");
+      const comando = Buffer.from(scriptDoToast(titulo, texto, link), "utf16le").toString("base64");
       const filho = spawnFn(
         "powershell.exe",
         ["-NoProfile", "-NonInteractive", "-EncodedCommand", comando],
@@ -88,7 +108,7 @@ export function criarToastWindows(op: OpcoesToast = {}): Toast {
     }
   };
 
-  const tentar = (titulo: string, texto: string, contaNaJanela = true): void => {
+  const tentar = (titulo: string, texto: string, contaNaJanela = true, link?: string): void => {
     const t = agora();
     enviadas = enviadas.filter((x) => t - x < 60_000);
     if (contaNaJanela && enviadas.length >= limite) {
@@ -110,10 +130,10 @@ export function criarToastWindows(op: OpcoesToast = {}): Toast {
       return;
     }
     enviadas.push(t);
-    disparar(titulo, texto);
+    disparar(titulo, texto, link);
   };
 
-  return (titulo, texto) => {
+  return (titulo, texto, link) => {
     if (plataforma !== "win32") return;
     const limpo = mascararTexto(texto, { telefones: false })
       .replace(/\s+/g, " ")
@@ -124,6 +144,6 @@ export function criarToastWindows(op: OpcoesToast = {}): Toast {
     for (const [k, quando] of recentes) if (t - quando > janelaRepeticao) recentes.delete(k);
     if (recentes.has(limpo)) return; // mesma mensagem há pouco: não repete
     recentes.set(limpo, t);
-    tentar(titulo, limpo);
+    tentar(titulo, limpo, true, link);
   };
 }
