@@ -93,6 +93,23 @@ describe("transferência manual e a métrica de ligações de 5 min", () => {
     expect(r.longas.map((l) => l.transferida)).toEqual([true, false]);
   });
 
+  it("zero à esquerda do DDD (011963507426) e sem ele (11963507426) são o mesmo telefone", () => {
+    const antes = longa("2026-10-22 10:00:00", "11963507426", "x1");
+    expect(
+      montarCom(antes, manual("2026-10-22T10:20", "011963507426")).longas[0]?.transferida,
+    ).toBe(true);
+    const depois = longa("2026-10-22 10:00:00", "011963507426", "x1");
+    expect(
+      montarCom(depois, manual("2026-10-22T10:20", "11963507426")).longas[0]?.transferida,
+    ).toBe(true);
+    expect(
+      montarCom(depois, manual("2026-10-22T10:20", "5511963507426")).longas[0]?.transferida,
+    ).toBe(true);
+    expect(
+      montarCom(depois, manual("2026-10-22T10:20", "11963507427")).longas[0]?.transferida,
+    ).toBe(false);
+  });
+
   it("registro antigo da ligação de 5 min (sem código) também conta", () => {
     const r = montarCom(longa("2026-10-22 10:00:00", "5521900000101"), manual("2026-10-22T10:20"));
     expect(r.longas.map((l) => l.transferida)).toEqual([true]);

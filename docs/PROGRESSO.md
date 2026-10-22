@@ -293,3 +293,5 @@ Pedido do usuário. Botão "Adicionar transferência manual" (só no relatório 
 ## 2026-10-22 — Transferência manual conta nas "5 min que viraram transferência"
 
 Problema relatado: a transferência adicionada à mão não entrava nessa métrica, que liga a ligação de 5 min à transferência pelo código da ligação (a manual tem código `manual-…`, sem relação com nenhuma ligação de 5 min). Agora `montarLigacoes` casa cada transferência manual com a ligação de 5 min mais recente do MESMO telefone (compara o final, com ou sem DDI/DDD; mínimo 8 números) que começou até 2 h antes dela (e no máximo 5 min depois, por folga de digitação), ainda não transferida; cada ligação de 5 min é usada uma vez. Vale também para registros antigos sem código. Texto explicativo da página atualizado. Testes + mutações em `transferencia-manual.test.ts`.
+
+- (2026-10-22) A comparação de telefones do relatório (`soDigitos`) ignora zeros à esquerda: 011963507426 e 11963507426 são o mesmo número, tanto no casamento da transferência manual com a ligação de 5 min quanto na regra da religação.

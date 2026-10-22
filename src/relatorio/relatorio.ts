@@ -152,7 +152,8 @@ export interface OpcoesMontagem {
   ateTransferencia?: ReadonlyMap<string, number>;
 }
 
-const soDigitos = (s: string | null): string => (s ?? "").replace(/\D+/g, "");
+/** Só os números do telefone, sem zeros à esquerda (o 0 do DDD digitado à mão: 011963507426 e 11963507426 são o mesmo número). */
+const soDigitos = (s: string | null): string => (s ?? "").replace(/\D+/g, "").replace(/^0+/, "");
 
 /** Aplica a regra da religação (ver `OpcoesMontagem.religacao`) na lista já montada. */
 function aplicarReligacao(
