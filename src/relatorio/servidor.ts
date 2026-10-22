@@ -2,6 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { chaveValida } from "./callbacks-manuais.js";
+import { validarTransferenciaManual, type TransferenciaManual } from "./transferencias-manuais.js";
 
 /**
  * Servidor local do relatório (`relatorio.bat`): serve a página e recebe o "Marcar como callback". Só escuta em 127.0.0.1 (o
@@ -18,6 +19,8 @@ export interface OpcoesServidor {
   ligacoes?: () => unknown[];
   /** Dados atuais (registros lidos de novo) para a atualização automática da página. */
   dados?: () => { ligacoes: unknown[]; longas: unknown[] };
+  /** Grava uma transferência digitada à mão (já validada). Sem esta opção a rota `/adicionar` não existe. */
+  adicionar?: (dados: TransferenciaManual) => void;
   porta?: number;
 }
 
@@ -113,6 +116,27 @@ export function iniciarServidor(op: OpcoesServidor): Promise<ServidorRelatorio> 
           return op.marcar(d.chave, d.marcar)
             ? json(res, 200, { ok: true, ...(op.ligacoes ? { ligacoes: op.ligacoes() } : {}) })
             : json(res, 404, { ok: false, erro: "ligação não encontrada nos registros" });
+        } catch {
+          return json(res, 500, { ok: false, erro: "não consegui gravar o arquivo de registro" });
+        }
+      }
+      if (req.method === "POST" && url.pathname === "/adicionar" && op.adicionar) {
+        if (!igual(String(req.headers["x-token"] ?? ""), op.token))
+          return json(res, 403, { ok: false, erro: "link vencido; abra o relatorio.bat de novo" });
+        if (!String(req.headers["content-type"] ?? "").startsWith("application/json"))
+          return json(res, 415, { ok: false, erro: "formato inválido" });
+        const corpo = await lerCorpo(req);
+        let dados: unknown;
+        try {
+          dados = corpo === null ? null : JSON.parse(corpo);
+        } catch {
+          dados = null;
+        }
+        const v = validarTransferenciaManual(dados);
+        if (!v.ok) return json(res, 400, { ok: false, erro: v.erro });
+        try {
+          op.adicionar(v.dados);
+          return json(res, 200, { ok: true, ...(op.dados ? op.dados() : {}) });
         } catch {
           return json(res, 500, { ok: false, erro: "não consegui gravar o arquivo de registro" });
         }

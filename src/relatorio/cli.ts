@@ -12,6 +12,10 @@ import { aplicarFuso } from "../util/fuso.js";
 import { lerEnv } from "./env.js";
 import { iniciarServidor } from "./servidor.js";
 import {
+  ARQUIVO_TRANSFERENCIAS_MANUAIS,
+  blocoDeTransferenciaManual,
+} from "./transferencias-manuais.js";
+import {
   ARQUIVOS_DO_RELATORIO,
   ARQUIVO_DURACOES,
   lerDuracoes,
@@ -150,6 +154,19 @@ async function principal(): Promise<void> {
         ligacoes: dadosDasLigacoes(m?.ligacoes ?? []),
         longas: dadosDasLongas(m?.longas ?? []),
       };
+    },
+    adicionar: (dados) => {
+      mkdirSync(pasta, { recursive: true });
+      appendFileSync(
+        join(pasta, ARQUIVO_TRANSFERENCIAS_MANUAIS),
+        blocoDeTransferenciaManual(dados),
+        {
+          encoding: "utf8",
+        },
+      );
+      console.log(
+        `Transferência adicionada à mão (${new Date().toLocaleTimeString("pt-BR", { hour12: false })}).`,
+      );
     },
     marcar: (chave, marcar) => {
       if (!(montar()?.ligacoes ?? []).some((l) => l.chave === chave)) return false;

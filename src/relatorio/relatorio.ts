@@ -4,6 +4,7 @@ import {
   NOME_ARQUIVO,
 } from "../registro/registro-arquivo.js";
 import { chaveDaTransferencia } from "./callbacks-manuais.js";
+import { ARQUIVO_TRANSFERENCIAS_MANUAIS } from "./transferencias-manuais.js";
 
 /**
  * Relatório por funcionário, calculado a partir dos .txt de registro (nenhum histórico estruturado é criado).
@@ -470,6 +471,7 @@ export const ARQUIVOS_DO_RELATORIO: ReadonlyArray<{
   { arquivo: NOME_ARQUIVO.transferencia, padrao: "transferencia" },
   { arquivo: NOME_ARQUIVO.longa, padrao: "longa" },
   { arquivo: ARQUIVO_SEM_MENSAGEM, padrao: "transferencia" },
+  { arquivo: ARQUIVO_TRANSFERENCIAS_MANUAIS, padrao: "transferencia" },
 ];
 
 export { ARQUIVO_DURACOES };

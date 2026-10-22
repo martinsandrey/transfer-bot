@@ -162,6 +162,8 @@ dialog::backdrop{background:rgba(15,20,25,.45)}
 dialog h2{margin:0 0 10px}
 dialog dl{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;margin:12px 0}
 dialog dt{color:var(--suave)} dialog dd{margin:0;font-weight:600}
+dialog label{display:grid;gap:4px;margin:8px 0;color:var(--suave)}
+dialog input{font:inherit;padding:7px 9px;border:1px solid var(--linha);border-radius:8px;background:var(--fundo);color:var(--texto)}
 dialog .botoes{display:flex;gap:8px;justify-content:flex-end;margin-top:16px}
 dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff;font-weight:600}
 @media (prefers-color-scheme: dark){dialog .confirmar{color:#1b1400}}
@@ -220,6 +222,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <div class="acoes">
       <button class="acao" id="planilha">Baixar planilha (Excel)</button>
       <button class="acao" onclick="window.print()">Imprimir</button>
+      <button class="acao sem-print" id="adicionar-btn" hidden>Adicionar transferência manual</button>
     </div>
   </section>
 
@@ -295,6 +298,23 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
       <button type="button" class="acao" id="conf-nao">Cancelar</button>
       <button type="button" class="acao confirmar" id="conf-sim"></button>
     </div>
+  </dialog>
+
+  <dialog id="adicionar" aria-labelledby="add-titulo">
+    <h2 id="add-titulo">Adicionar transferência manual</h2>
+    <p class="explica">Só para o relatório: nada é enviado ao Telegram. Location, Age e Occupation ficam vazios.</p>
+    <form id="add-form" method="dialog" autocomplete="off">
+      <label>Nome <input id="add-nome" maxlength="100" required></label>
+      <label>CPF <input id="add-cpf" inputmode="numeric" maxlength="14" required></label>
+      <label>Telefone <input id="add-tel" inputmode="tel" maxlength="20" required></label>
+      <label>Line 1 number <input id="add-linha" inputmode="numeric" maxlength="20" required></label>
+      <label>Data e hora <small>(já vem agora; só mude se foi em outro momento)</small> <input id="add-quando" type="datetime-local" required></label>
+      <p class="erro" id="add-erro" role="alert"></p>
+      <div class="botoes">
+        <button type="button" class="acao" id="add-cancela">Cancelar</button>
+        <button type="submit" class="acao confirmar" id="add-salva">Adicionar</button>
+      </div>
+    </form>
   </dialog>
 
   <footer>Gerado a partir dos registros em texto do programa. Os horários da lista são os do computador onde o programa roda; a divisão do meio-dia usa o horário de Brasília.</footer>
@@ -719,6 +739,33 @@ $("conf-sim").addEventListener("click", async () => {
     $("conf-sim").disabled = false;
   }
 });
+/* ---- adicionar transferência à mão (precisa do relatorio.bat aberto) ---- */
+if (D.srv) $("adicionar-btn").hidden = false;
+$("adicionar-btn").addEventListener("click", () => {
+  for (const id of ["add-nome", "add-cpf", "add-tel", "add-linha"]) $(id).value = "";
+  $("add-quando").value = new Date().toLocaleString("sv-SE", { timeZone: D.fuso }).slice(0, 16).replace(" ", "T");
+  $("add-erro").textContent = ""; $("add-salva").disabled = false;
+  $("adicionar").showModal();
+});
+$("add-cancela").addEventListener("click", () => $("adicionar").close());
+$("add-form").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  $("add-salva").disabled = true; $("add-erro").textContent = "";
+  try {
+    const corpo = { nome: $("add-nome").value, cpf: $("add-cpf").value, telefone: $("add-tel").value, linha1: $("add-linha").value, quando: $("add-quando").value };
+    const resp = await fetch("/adicionar", { method: "POST", headers: { "Content-Type": "application/json", "X-Token": D.srv.token }, body: JSON.stringify(corpo) });
+    const r = await resp.json().catch(() => ({}));
+    if (!resp.ok || !r.ok) { $("add-erro").textContent = r.erro || "Falha " + resp.status; $("add-salva").disabled = false; return; }
+    vivo.versao++;
+    if (Array.isArray(r.ligacoes)) D.ligacoes = r.ligacoes;
+    if (Array.isArray(r.longas)) D.longas = r.longas;
+    $("adicionar").close();
+    desenhar();
+  } catch (e) {
+    $("add-erro").textContent = "Não consegui salvar. A janela do relatorio.bat foi fechada? Abra o relatorio.bat de novo.";
+    $("add-salva").disabled = false;
+  }
+});
 $("detalhe").classList.toggle("sem-acao", !D.srv);
 $("nota-acao").textContent = D.srv
   ? "Se uma ligação registrada como atendida na verdade foi callback, use “Marcar como callback”. A correção vale só para o relatório (nada é enviado ao Telegram) e fica gravada em callbacks-manuais.txt, na pasta de registros."
@@ -730,14 +777,14 @@ const vivo = { pausado: false, ocupado: false, versao: 0, falhas: 0 };
 const hhmmss = (d) => d.toLocaleTimeString("pt-BR", { hour12: false, timeZone: D.fuso });
 function textoVivo(t) { $("vivo-txt").textContent = t; }
 async function atualizar() {
-  if (!D.srv || vivo.pausado || vivo.ocupado || document.hidden || $("confirma").open) return;
+  if (!D.srv || vivo.pausado || vivo.ocupado || document.hidden || $("confirma").open || $("adicionar").open) return;
   vivo.ocupado = true;
   const v = vivo.versao; // se uma marcação terminar enquanto isto roda, esta resposta já está velha
   try {
     const resp = await fetch("/dados", { headers: { "X-Token": D.srv.token }, cache: "no-store" });
     if (!resp.ok) throw new Error("falha " + resp.status);
     const r = await resp.json();
-    if (v !== vivo.versao || $("confirma").open || !Array.isArray(r.ligacoes) || !Array.isArray(r.longas)) return;
+    if (v !== vivo.versao || $("confirma").open || $("adicionar").open || !Array.isArray(r.ligacoes) || !Array.isArray(r.longas)) return;
     if (JSON.stringify([r.ligacoes, r.longas]) !== JSON.stringify([D.ligacoes, D.longas])) {
       D.ligacoes = r.ligacoes; D.longas = r.longas; desenhar();
     }
