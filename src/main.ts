@@ -121,6 +121,28 @@ async function principal(): Promise<void> {
   });
   const sinal = new AbortController();
   const rl = createInterface({ input: stdin, output: stdout });
+  // Registra POR QUE o programa fechou (o diagnóstico e o log mostram a causa, em vez de só "se encerrou sozinho").
+  let excecoes = 0;
+  process.on("uncaughtException", (e) => {
+    excecoes++;
+    log.error("Exceção sem tratamento", {
+      evento: "excecao_sem_tratamento",
+      motivo: e instanceof Error ? `${e.name}: ${e.message}`.slice(0, 200) : "desconhecido",
+    });
+    notificador.alerta(
+      "erro",
+      `Erro inesperado (o programa continua rodando): ${e instanceof Error ? e.message : String(e)}`,
+    );
+    if (excecoes >= 10) encerrar(); // erro repetido: melhor parar do que ficar num estado estranho
+  });
+  for (const nome of ["SIGTERM", "SIGHUP", "SIGBREAK"] as const)
+    process.on(nome, () => {
+      log.warn("Programa recebeu pedido para fechar", { evento: "sinal_recebido", codigo: nome });
+      encerrar();
+    });
+  process.on("exit", (codigo) =>
+    log.info("Programa encerrado", { evento: "programa_encerrado", codigo: String(codigo) }),
+  );
   const encerrar = (): void => {
     if (!sinal.signal.aborted) {
       console.log("\nEncerrando...");
