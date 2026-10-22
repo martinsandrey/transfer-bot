@@ -44,6 +44,13 @@ export type ResultadoParse =
       ignoradas: number;
       callbacksIncompletos: string[];
       stage3Parciais: Array<{ calleeNumber: string; agent: boolean; stage: number }>;
+      /**
+       * Linhas ignoradas que NÃO se explicam por algo normal (linha-aviso de tabela vazia, ou Stage 2/3/4 com Callee e Status
+       * legíveis mas sem outro dado): são as que podem indicar mudança de layout.
+       */
+      ignoradasInexplicadas: number;
+      /** Contagem por motivo, sem dados de cliente (ex.: `sem_start_time: 2`), só para a mensagem de aviso e o log. */
+      motivosIgnoradas: Record<string, number>;
     }
   | { ok: false; motivo: string };
 
@@ -78,10 +85,25 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
   const incompletos = new Set<string>();
   const stage3Parciais: Array<{ calleeNumber: string; agent: boolean; stage: number }> = [];
   let ignoradas = 0;
+  let inexplicadas = 0;
+  const motivos: Record<string, number> = {};
+  const contar = (motivo: string, explicada: boolean): void => {
+    ignoradas++;
+    if (!explicada) inexplicadas++;
+    motivos[motivo] = (motivos[motivo] ?? 0) + 1;
+  };
   for (const l of t.linhas) {
     // mais células que cabeçalhos: colunas podem estar deslocadas, nunca adivinhar
     if (l.celulas.length > cab.length || l.celulas.length < necessarias) {
-      ignoradas++;
+      // Uma linha de UMA célula é a mensagem de tabela vazia ("nenhum registro"): normal quando não há ligações.
+      contar(
+        l.celulas.length > cab.length
+          ? "colunas_a_mais"
+          : l.celulas.length <= 1
+            ? "tabela_vazia"
+            : "colunas_a_menos",
+        l.celulas.length <= 1,
+      );
       continue;
     }
     const c = (i: number): string => l.celulas[i]?.texto ?? "";
@@ -90,11 +112,21 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
     const status = c(iSt).trim();
     const inicio = c(iIn).trim();
     if (!callback || !callee || !status || !inicio) {
-      ignoradas++;
+      const m = /^stage\s*([234])\b/i.exec(status);
+      const falta = [
+        [!callback, "sem_callback"],
+        [!callee, "sem_callee"],
+        [!status, "sem_status"],
+        [!inicio, "sem_start_time"],
+      ]
+        .filter(([f]) => f)
+        .map(([, n]) => n)
+        .join("+");
+      // Stage 2/3/4 com Callee e Status legíveis: o layout está certo, só falta um dado (normal; ver `stage3Parciais`).
+      contar(`${m ? `stage${m[1]}_` : ""}${falta}`, !!callee && !!m);
       if (callback) incompletos.add(callback);
       // Stage 2/3/4 com dado faltando mas Callee e Status legíveis: ainda prova que a ligação está naquele Stage
       // (o rastreador usa o Stage de destino da transferência, que é configurável).
-      const m = /^stage\s*([234])\b/i.exec(status);
       if (callee && m)
         stage3Parciais.push({
           calleeNumber: callee,
@@ -111,7 +143,15 @@ export function tabelaParaLinhas(t: TabelaBruta): ResultadoParse {
       callDurationSec: iDu === -1 ? null : parseDuracao(c(iDu)),
     });
   }
-  return { ok: true, rows, ignoradas, callbacksIncompletos: [...incompletos], stage3Parciais };
+  return {
+    ok: true,
+    rows,
+    ignoradas,
+    callbacksIncompletos: [...incompletos],
+    stage3Parciais,
+    ignoradasInexplicadas: inexplicadas,
+    motivosIgnoradas: motivos,
+  };
 }
 
 export interface OpcoesLeitor {
@@ -194,7 +234,15 @@ export class LeitorTabelaHtml implements TableReader {
       readAt,
       rows: r.rows,
       valid: true,
-      ...(r.ignoradas > 0 ? { rowsIgnored: r.ignoradas } : {}),
+      ...(r.ignoradas > 0
+        ? {
+            rowsIgnored: r.ignoradas,
+            rowsIgnoredUnexplained: r.ignoradasInexplicadas,
+            rowsIgnoredReasons: Object.entries(r.motivosIgnoradas)
+              .map(([m, n]) => `${m} x${n}`)
+              .join(", "),
+          }
+        : {}),
       ...(r.callbacksIncompletos.length ? { incompleteCallbacks: r.callbacksIncompletos } : {}),
       ...(r.stage3Parciais.length ? { stage3Parciais: r.stage3Parciais } : {}),
     };

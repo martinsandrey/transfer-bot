@@ -118,6 +118,46 @@ describe("tabelaParaLinhas", () => {
     ).toMatchObject({ ok: true, rows: [], ignoradas: 1 });
   });
 
+  it("classifica as ignoradas: tabela vazia e Stage 2/3/4 sem um dado são normais; o resto é inexplicado (com o motivo)", () => {
+    const vazia = tabelaParaLinhas(tabela(CAB, [["Nenhum registro"]]));
+    expect(vazia).toMatchObject({
+      ignoradas: 1,
+      ignoradasInexplicadas: 0,
+      motivosIgnoradas: { tabela_vazia: 1 },
+    });
+    const parciais = tabelaParaLinhas(
+      tabela(CAB, [
+        ["908301", "21 90000-0101", "Stage 3 Agent", "", ""],
+        ["908201", "21 90000-0102", "Stage 2 Ringing", "", ""],
+      ]),
+    );
+    expect(parciais).toMatchObject({
+      ignoradas: 2,
+      ignoradasInexplicadas: 0,
+      motivosIgnoradas: { stage3_sem_start_time: 1, stage2_sem_start_time: 1 },
+    });
+    const estranhas = tabelaParaLinhas(
+      tabela(CAB, [
+        ["1", "2", "Stage 1 Agent", "", ""], // Stage 1 sem Start Time
+        ["", "3", "Stage 1 Agent", "10:00", ""], // sem Callback
+        ["1", "2", "Stage 1 Agent", "t", "0", "extra"], // coluna a mais
+        ["a", "b"], // coluna a menos (mais de uma célula)
+        ["4", "", "Stage 3 Agent", "10:00", ""], // Stage 3 sem Callee: não prova nada
+      ]),
+    );
+    expect(estranhas).toMatchObject({
+      ignoradas: 5,
+      ignoradasInexplicadas: 5,
+      motivosIgnoradas: {
+        sem_start_time: 1,
+        sem_callback: 1,
+        colunas_a_mais: 1,
+        colunas_a_menos: 1,
+        stage3_sem_callee: 1,
+      },
+    });
+  });
+
   it("ESTRUTURA CONFIRMADA PELO RECON: 8 cabeçalhos (o último é um resumo) e linhas de 7 células; Callee vem antes de Callback", () => {
     const cabReal = [
       "ID",

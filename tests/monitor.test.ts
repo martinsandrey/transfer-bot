@@ -239,6 +239,36 @@ describe("Monitor", () => {
     expect(m2.notif.alertas.filter((a) => /ignoradas/.test(a.mensagem))).toHaveLength(1);
   });
 
+  it("tabela vazia (só a linha-aviso) e Stage 3 sem um dado NÃO disparam o aviso de 'todas ignoradas'", async () => {
+    const vazia: TableSnapshot = {
+      readAt: 1,
+      rows: [],
+      valid: true,
+      rowsIgnored: 1,
+      rowsIgnoredUnexplained: 0,
+      rowsIgnoredReasons: "tabela_vazia x1",
+    };
+    const m = montar(Array.from({ length: 12 }, () => vazia));
+    for (let i = 0; i < 12; i++) await m.monitor.passo();
+    expect(m.notif.alertas.filter((a) => /ignoradas/.test(a.mensagem))).toHaveLength(0);
+  });
+
+  it("linhas realmente estranhas: o aviso diz os motivos (e vai para o log)", async () => {
+    const estranha: TableSnapshot = {
+      readAt: 1,
+      rows: [],
+      valid: true,
+      rowsIgnored: 3,
+      rowsIgnoredUnexplained: 2,
+      rowsIgnoredReasons: "sem_start_time x2, tabela_vazia x1",
+    };
+    const m = montar(Array.from({ length: 5 }, () => estranha));
+    for (let i = 0; i < 5; i++) await m.monitor.passo();
+    const a = m.notif.alertas.filter((x) => /ignoradas/.test(x.mensagem));
+    expect(a).toHaveLength(1);
+    expect(a[0]?.mensagem).toContain("Motivos: sem_start_time x2, tabela_vazia x1.");
+  });
+
   it("executar respeita o sinal de parada", async () => {
     const m = montar([ok([], 1)]);
     const c = new AbortController();

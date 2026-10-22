@@ -22,6 +22,10 @@ export interface TableSnapshot {
   invalidReason?: string;
   /** Linhas descartadas individualmente (dado faltando/estrutura inesperada). Normal em pequena quantidade. */
   rowsIgnored?: number;
+  /** Das linhas ignoradas, quantas NÃO são explicadas por algo normal (tabela vazia, Stage 2/3/4 sem um dado). Ausente = tratar todas como inexplicadas. */
+  rowsIgnoredUnexplained?: number;
+  /** Motivos das linhas ignoradas, em texto (só contagens, sem dados de cliente). */
+  rowsIgnoredReasons?: string;
   /**
    * Callback Numbers de linhas que existem mas estavam com algum dado faltando nesta leitura: o rastreador
    * "congela" essas chamadas (não conta ausência nem muda estado) em vez de tratá-las como sumidas.

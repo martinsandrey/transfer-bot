@@ -167,12 +167,22 @@ export class Monitor {
     }
     this.invalidasSeguidas = 0;
     // Linha com dado faltando é normal e é só ignorada; mas se TODAS as linhas vêm ignoradas por muito tempo, avise.
-    if (snapshot.rows.length === 0 && (snapshot.rowsIgnored ?? 0) > 0) {
+    // Tabela vazia (só a linha-aviso) e linhas Stage 2/3/4 com um dado faltando são normais e não contam: só as inexplicadas.
+    if (
+      snapshot.rows.length === 0 &&
+      (snapshot.rowsIgnoredUnexplained ?? snapshot.rowsIgnored ?? 0) > 0
+    ) {
       this.todasIgnoradasSeguidas++;
       if (this.todasIgnoradasSeguidas === this.op.invalidasParaAlertar) {
+        const motivos = snapshot.rowsIgnoredReasons ?? "";
+        log.warn("Todas as linhas lidas estão sendo ignoradas", {
+          evento: "linhas_ignoradas",
+          contagem: this.todasIgnoradasSeguidas,
+          ...(motivos ? { motivo: motivos } : {}),
+        });
         notificador.alerta(
           "aviso",
-          `Todas as linhas lidas estão sendo ignoradas há ${this.todasIgnoradasSeguidas} leituras (dados faltando ou layout diferente).`,
+          `Todas as linhas lidas estão sendo ignoradas há ${this.todasIgnoradasSeguidas} leituras (dados faltando ou layout diferente)${motivos ? `. Motivos: ${motivos}` : ""}.`,
         );
       }
     } else {
