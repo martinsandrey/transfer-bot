@@ -468,7 +468,7 @@ function desenharLongas(linhas, T) {
   const naoT = T.lgAv - T.lgTr;
   tf.append(linhaTr(el("td", "TOTAL", "esq"), el("td", "", "esq"), el("td", String(T.lg)), el("td", String(T.lgTr)), el("td", pctTxt(T.lgTr, T.lgAv)), el("td", String(naoT)), el("td", pctTxt(naoT, T.lgAv))));
   const semCod = T.lg - T.lgAv;
-  $("nota-longas").textContent = "Uma ligação de 5 min conta como transferida se a mesma ligação foi transferida depois (a transferência pode ter vindo de qualquer equipe)." + (semCod > 0 ? " " + semCod + " ligação(ões) antiga(s), sem o código da ligação no registro, não entram nas porcentagens." : "") + " Quem ainda está na ligação aparece como não transferida até ser transferida.";
+  $("nota-longas").textContent = "Uma ligação de 5 min conta como transferida se a mesma ligação foi transferida depois (a transferência pode ter vindo de qualquer equipe). Uma transferência adicionada à mão conta para a ligação de 5 min do mesmo telefone que começou até 2 horas antes dela." + (semCod > 0 ? " " + semCod + " ligação(ões) antiga(s), sem o código da ligação no registro, não entram nas porcentagens." : "") + " Quem ainda está na ligação aparece como não transferida até ser transferida.";
 }
 
 function sinal(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }

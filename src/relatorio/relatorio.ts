@@ -31,6 +31,18 @@ export interface Entrada {
 
 export const SEM_FUNCIONARIO = "(não identificado)";
 export const JANELA_PAREAMENTO_MS = 30 * 60_000;
+/**
+ * Transferência adicionada à mão não tem o código da ligação: conta para a ligação de 5 min do MESMO cliente (telefone) que
+ * começou até tanto tempo antes dela (a ligação de 5 min tem de ter sido antes da transferência).
+ */
+export const JANELA_MANUAL_5MIN_MS = 2 * 3_600_000;
+
+/** Mesmo telefone, com ou sem DDI/DDD na frente (compara o final; pelo menos 8 números). */
+function mesmoTelefone(a: string | null, b: string | null): boolean {
+  const x = soDigitos(a);
+  const y = soDigitos(b);
+  return Math.min(x.length, y.length) >= 8 && (x.endsWith(y) || y.endsWith(x));
+}
 
 const CABECALHO = /^===== (\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) \| ([^\n]*?) =====$/;
 const CAMPO = (nome: string): RegExp => new RegExp(`\\|\\s*${nome}:\\s*(\\S+)`);
@@ -286,15 +298,35 @@ export function montarLigacoes(
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
   if (op.religacao && op.religacao.janelaMs > 0) aplicarReligacao(ligacoes, op.religacao);
 
-  const longas = unicas
-    .filter((e) => e.tipo === "longa")
-    .map((e): LigacaoLonga => ({
-      quando: e.quando,
-      funcionario: e.funcionario,
-      cliente: e.cliente,
-      observacao: !e.enviada,
-      transferida: e.ligacao ? codigosTransferidos.has(e.ligacao) : null,
-    }));
+  const entradasLongas = unicas.filter((e) => e.tipo === "longa");
+  // Transferências adicionadas à mão: cada uma "transfere" a ligação de 5 min mais recente do mesmo cliente (antes dela).
+  const transferidasAMao = new Set<Entrada>();
+  for (const t of transf) {
+    if (!t.ligacao?.startsWith("manual-")) continue;
+    const alvo = [...entradasLongas]
+      .reverse()
+      .find(
+        (l) =>
+          !transferidasAMao.has(l) &&
+          !(l.ligacao && codigosTransferidos.has(l.ligacao)) &&
+          l.enviada === t.enviada &&
+          mesmoTelefone(l.cliente, t.cliente) &&
+          l.quando.getTime() <= t.quando.getTime() + 5 * 60_000 &&
+          t.quando.getTime() - l.quando.getTime() <= JANELA_MANUAL_5MIN_MS,
+      );
+    if (alvo) transferidasAMao.add(alvo);
+  }
+  const longas = entradasLongas.map((e): LigacaoLonga => ({
+    quando: e.quando,
+    funcionario: e.funcionario,
+    cliente: e.cliente,
+    observacao: !e.enviada,
+    transferida: transferidasAMao.has(e)
+      ? true
+      : e.ligacao
+        ? codigosTransferidos.has(e.ligacao)
+        : null,
+  }));
   return { ligacoes, longas };
 }
 

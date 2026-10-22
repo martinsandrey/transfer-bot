@@ -70,6 +70,53 @@ describe("transferência manual: validação e bloco", () => {
   });
 });
 
+describe("transferência manual e a métrica de ligações de 5 min", () => {
+  const longa = (ts: string, cli: string, lig = "") =>
+    `===== ${ts} | ENVIADA | Funcionário: 908111 | Cliente: ${cli}${lig ? ` | Ligação: ${lig}` : ""} =====\nNAME: X\n\n`;
+  const manual = (quando: string, telefone = "(55) 21 90000-0101") => {
+    const v = validarTransferenciaManual({ ...OK, telefone, quando });
+    if (!v.ok) throw new Error(v.erro);
+    return blocoDeTransferenciaManual(v.dados, new Date(), "ab12cd34");
+  };
+  const montarCom = (longas: string, manuais: string) =>
+    montarLigacoes(
+      [...lerRegistro(longas, "longa"), ...lerRegistro(manuais, "transferencia")],
+      new Map(),
+    );
+
+  it("a transferência manual conta como transferida a ligação de 5 min do mesmo telefone, mesmo sem DDI", () => {
+    const r = montarCom(
+      longa("2026-10-22 10:00:00", "5521900000101", "x1") +
+        longa("2026-10-22 10:05:00", "5521911111111", "x2"),
+      manual("2026-10-22T10:20", "21 90000-0101"),
+    );
+    expect(r.longas.map((l) => l.transferida)).toEqual([true, false]);
+  });
+
+  it("registro antigo da ligação de 5 min (sem código) também conta", () => {
+    const r = montarCom(longa("2026-10-22 10:00:00", "5521900000101"), manual("2026-10-22T10:20"));
+    expect(r.longas.map((l) => l.transferida)).toEqual([true]);
+  });
+
+  it("não conta se for de outro telefone, se a ligação de 5 min veio depois ou há mais de 2 horas", () => {
+    const base = longa("2026-10-22 10:00:00", "5521900000101", "x1");
+    expect(
+      montarCom(base, manual("2026-10-22T10:20", "21 98888-7777")).longas[0]?.transferida,
+    ).toBe(false);
+    expect(montarCom(base, manual("2026-10-22T09:30")).longas[0]?.transferida).toBe(false);
+    expect(montarCom(base, manual("2026-10-22T12:30")).longas[0]?.transferida).toBe(false);
+  });
+
+  it("cada transferência manual usa uma ligação de 5 min só: a mais recente antes dela", () => {
+    const r = montarCom(
+      longa("2026-10-22 09:00:00", "5521900000101", "x1") +
+        longa("2026-10-22 10:00:00", "5521900000101", "x2"),
+      manual("2026-10-22T10:20"),
+    );
+    expect(r.longas.map((l) => l.transferida)).toEqual([false, true]);
+  });
+});
+
 const TOKEN = "c3".repeat(24);
 let gravado = "";
 const montar = () => montarLigacoes(lerRegistro(gravado, "transferencia"), new Map());
