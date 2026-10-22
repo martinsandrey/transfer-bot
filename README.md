@@ -26,6 +26,7 @@ Andamento: [`docs/PROGRESSO.md`](docs/PROGRESSO.md) · regras do projeto: [`CLAU
   - Login: manual, ou automático se `LOGIN_AUTOMATICO=true` (preenche `SITE_USUARIO`/`SITE_SENHA` **uma única vez**, depois da verificação).
   - Quando detecta uma transferência, o programa consulta o cliente, volta para a Voice Call Status e mostra/envia a mensagem.
   - Para parar: `Ctrl+C` ou digite `sair`. Ele termina a tarefa em andamento e avisa o que ficou pendente.
+- **`atualizar.bat`** também confere o seu `.env`: acrescenta no fim as variáveis novas do `.env.example` (com comentário e valor padrão) e guarda a cópia anterior em `.env.bak`. Nunca altera nem apaga o que você já tem.
 - **`diagnostico.bat`** — confere tudo e diz em português o que está errado: versão do Node, `.env` válido e variáveis novas que faltam nele, modelo da mensagem, pastas com permissão de gravação, se o bot já está aberto, Edge abrindo o site (sem login, sem janela), sessão do Telegram e os grupos encontrados, notificações do Windows ligadas, fuso do relógio e um resumo do log mais recente (quantas vezes o programa foi aberto, avisos e erros). Não altera nada e não envia nada. Rode antes de iniciar quando algo não funcionar.
 - **`atualizar.bat`** — baixa a versão nova (precisa do Git; sem Git, baixe o ZIP novo e copie por cima mantendo o `.env`).
 - **`simular.bat`** — cenário **fictício** (não acessa o site), para ver o programa funcionando.

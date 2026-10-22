@@ -22,6 +22,7 @@
     "telegram": "npm run build && node dist/telegram/cli.js",
     "testar-notificacao": "npm run build && node dist/main.js --teste-notificacao",
     "start": "npm run build && node dist/main.js",
+    "atualizar-env": "npm run build && node dist/config/atualizar-env-cli.js",
     "supervisor": "npm run build && node dist/supervisor.js"
   },
   "devDependencies": {

@@ -20,5 +20,7 @@ if errorlevel 1 (
   exit /b 1
 )
 call npm install --no-audit --no-fund --loglevel=error
+echo Conferindo se ha variaveis novas para o seu .env...
+call npm run atualizar-env --silent
 echo Pronto.
 pause
