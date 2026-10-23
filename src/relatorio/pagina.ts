@@ -216,7 +216,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas por quem recebeu a transferência (linha 2; até 21/10/2026, o Stage 3).</li>
-      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo pouco depois (por qualquer funcionário) e dessa vez foi atendido, o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
+      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo no mesmo dia (por qualquer funcionário) e dessa vez foi atendido (ou a transferência foi adicionada à mão), o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
       <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para a linha 2 (até 21/10/2026, o Stage 3) — o tempo antes da transferência, não o da conversa depois dela, nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
     </ul>
     <div class="acoes">

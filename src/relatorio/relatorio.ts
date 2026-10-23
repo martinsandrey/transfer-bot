@@ -133,17 +133,20 @@ export interface Ligacao {
   quandoCallback?: Date;
   /**
    * CALLBACK do bot desfeito porque o MESMO cliente foi transferido de novo (por qualquer funcionário) e dessa vez foi atendido
-   * por tempo suficiente, dentro da janela (ver `OpcoesMontagem.religacao`). A ligação deixa de contar: ela e a nova viram UMA
+   * por tempo suficiente, no mesmo dia (ver `OpcoesMontagem.religacao`). A ligação deixa de contar: ela e a nova viram UMA
    * transferência normal, contada na nova.
    */
   callbackRemovido?: { quando: Date; funcionario: string };
+  /** Transferência digitada à mão no relatório (sem duração; vale como "atendida" na regra da religação). */
+  adicionadaAMao?: boolean;
   /** Nova transferência atendida que absorveu tantos CALLBACKs anteriores do mesmo cliente. */
   substituiu?: number;
 }
 
 export interface OpcoesMontagem {
   /**
-   * Religação: CALLBACK do bot é desfeito se o mesmo cliente for transferido de novo até `janelaMs` depois do CALLBACK e essa nova
+   * Religação: CALLBACK do bot é desfeito se o mesmo cliente for transferido de novo, no mesmo dia do CALLBACK (`janelaMs` > 0 liga
+   * a regra; o valor em si não é mais usado), e essa nova
    * transferência tiver sido atendida e durado pelo menos `duracaoMinSeg` (duração registrada em duracoes.txt). Ausente ou
    * `janelaMs` 0 = desligado.
    */
@@ -165,8 +168,8 @@ function aplicarReligacao(
     (l) =>
       !l.semTransferencia &&
       l.resultado === "atendida" &&
-      l.duracaoSeg !== null &&
-      l.duracaoSeg >= op.duracaoMinSeg &&
+      // a transferência digitada à mão não tem duração: vale como atendida (foi o usuário que confirmou que deu certo)
+      (l.adicionadaAMao === true || (l.duracaoSeg !== null && l.duracaoSeg >= op.duracaoMinSeg)) &&
       soDigitos(l.cliente) !== "",
   );
   for (const l of ligacoes) {
@@ -174,15 +177,18 @@ function aplicarReligacao(
     if (l.resultado !== "callback" || l.manual || !l.quandoCallback) continue;
     const cliente = soDigitos(l.cliente);
     if (cliente === "") continue;
-    const ate = l.quandoCallback.getTime() + op.janelaMs;
+    const dia = l.quandoCallback;
     const nova = atendidas
       .filter(
         (o) =>
           o !== l &&
           o.observacao === l.observacao &&
-          soDigitos(o.cliente) === cliente &&
+          mesmoTelefone(o.cliente, l.cliente) &&
           o.quando.getTime() > l.quando.getTime() &&
-          o.quando.getTime() <= ate,
+          // vale no mesmo dia do CALLBACK (decisão do usuário, 2026-10-23)
+          o.quando.getFullYear() === dia.getFullYear() &&
+          o.quando.getMonth() === dia.getMonth() &&
+          o.quando.getDate() === dia.getDate(),
       )
       .sort((a, b) => a.quando.getTime() - b.quando.getTime())[0];
     if (!nova) continue;
@@ -282,6 +288,7 @@ export function montarLigacoes(
           comCallback.has(t) || !t.ligacao ? null : (op.ateTransferencia?.get(t.ligacao) ?? null),
         chave,
         manual,
+        ...(t.ligacao?.startsWith("manual-") ? { adicionadaAMao: true } : {}),
         ...(doBot ? { quandoCallback: doBot.quando } : {}),
       };
     }),

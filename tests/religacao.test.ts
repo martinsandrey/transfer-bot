@@ -133,18 +133,14 @@ describe("religação: quando NÃO remove (para não errar)", () => {
     expect(total(d)).toMatchObject({ comCallback: 2, callbacks: 2 });
   });
 
-  it("janela de 60 min contada a partir do CALLBACK: 10h01 ainda remove, 10h01min01s não", () => {
+  it("vale no mesmo dia do CALLBACK (decisão do usuário), mesmo horas depois; no dia seguinte já não remove", () => {
     const com = (q: Date) =>
       removido([BASE[0] as T, BASE[1] as T, { q, f: B, c: X, lig: "b1" }], dur("b1", 45));
-    expect(com(em(10, 1, 0))).toBe(true);
-    expect(com(em(10, 1, 1))).toBe(false);
-    // CALLBACK registrado tarde (9h30): a janela vai até 10h30, mesmo a transferência original sendo das 9h00
-    const tarde: T[] = [
-      BASE[0] as T,
-      { q: em(9, 30), f: A, c: X, lig: "a1", cb: true },
-      { q: em(10, 25), f: B, c: X, lig: "b1" },
-    ];
-    expect(removido(tarde, dur("b1", 45))).toBe(true);
+    expect(com(em(9, 30))).toBe(true);
+    expect(com(em(15, 0))).toBe(true);
+    expect(com(em(23, 59))).toBe(true);
+    const amanha = new Date(em(0, 5).getTime() + 24 * 3_600_000);
+    expect(com(amanha)).toBe(false);
   });
 
   it("outro cliente não remove; cliente desconhecido (registro antigo sem telefone) não remove", () => {
@@ -223,20 +219,43 @@ describe("religação: casos com mais de um callback", () => {
     expect(total(d)).toMatchObject({ comCallback: 1, semCallback: 1, callbacks: 0 });
   });
 
-  it("cada callback usa a SUA janela: o de 9h01 fica (nova às 10h20 passou de 60 min), o de 9h41 é removido", () => {
+  it("dois callbacks do mesmo cliente no dia e uma transferência atendida horas depois: os dois são removidos (a nova substitui 2)", () => {
     const d = montar(
       [
         { q: em(9, 0), f: A, c: X, lig: "a1" },
         { q: em(9, 1), f: A, c: X, lig: "a1", cb: true },
         { q: em(9, 40), f: A, c: X, lig: "a2" },
         { q: em(9, 41), f: A, c: X, lig: "a2", cb: true },
-        { q: em(10, 20), f: B, c: X, lig: "b1" },
+        { q: em(14, 20), f: B, c: X, lig: "b1" },
       ],
       dur("b1", 90),
     );
-    expect(porLig(d, "a1").callbackRemovido).toBeUndefined();
+    expect(porLig(d, "a1").callbackRemovido).toBeDefined();
     expect(porLig(d, "a2").callbackRemovido).toBeDefined();
-    expect(total(d)).toMatchObject({ comCallback: 2, callbacks: 1 });
+    expect(porLig(d, "b1").substituiu).toBe(2);
+    expect(total(d)).toMatchObject({ comCallback: 1, callbacks: 0 });
+  });
+
+  it("transferência adicionada à mão (sem duração) remove o callback anterior do mesmo cliente, mesmo digitando o telefone com 0 na frente", () => {
+    const manual = (cli: string): T => ({ q: em(9, 54), f: A, c: cli, lig: "manual-ab12cd34" });
+    const base = [BASE[0] as T, BASE[1] as T];
+    const d = montar([...base, manual("011988887777")], "");
+    expect(porLig(d, "a1").callbackRemovido).toBeDefined();
+    expect(total(d)).toMatchObject({ comCallback: 1, callbacks: 0 });
+    // outro telefone, ou transferência normal sem duração, não remove
+    expect(
+      montar([...base, manual("5511900000000")], "").ligacoes.some((l) => l.callbackRemovido),
+    ).toBe(false);
+    expect(
+      montar([...base, { q: em(9, 54), f: A, c: X, lig: "b9" }], "").ligacoes.some(
+        (l) => l.callbackRemovido,
+      ),
+    ).toBe(false);
+  });
+
+  it("sem religação (CALLBACK sem nova transferência) o callback continua valendo", () => {
+    const d = montar([BASE[0] as T, BASE[1] as T], "");
+    expect(total(d)).toMatchObject({ comCallback: 1, callbacks: 1 });
   });
 
   it("o callback vai para a PRIMEIRA nova transferência atendida (a seguinte conta normalmente)", () => {
