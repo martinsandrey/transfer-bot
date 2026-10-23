@@ -163,6 +163,8 @@ interface OrigemStage1 {
   discriminador: string;
   ocId: string;
   ultimaVez: number;
+  /** Quando esta ligação de origem (callback + Start Time) foi vista pela primeira vez. */
+  primeiraVez: number;
   /** Último "Call Duration" (s) lido nesta linha de origem: quanto a ligação já tinha de duração quando foi transferida. */
   duracaoSeg: number | null;
 }
@@ -408,11 +410,19 @@ export class CallTracker {
     }
     if (status.numero !== this.destino) return;
     // Linha nova em Stage 3: é a transferência de uma chamada que estava em "Stage 1 Agent" com o mesmo Callee?
-    if (this.stage3Conhecidos.has(oc.callee)) {
+    const origem = this.origens.get(oc.callee);
+    const conhecidoEm = this.stage3Conhecidos.get(oc.callee);
+    // Mesmo cliente de novo: se existe uma ligação de Stage 1 (ex.: nova "Manual Call" depois de um CALLBACK) que surgiu DEPOIS de
+    // a última linha de destino desse cliente ser vista e que ainda não gerou transferência, esta linha é a transferência dela.
+    const novaLigacao =
+      conhecidoEm !== undefined &&
+      origem !== undefined &&
+      origem.primeiraVez > conhecidoEm &&
+      !this.emitidas.has(`${origem.callback}|${origem.discriminador}`);
+    if (conhecidoEm !== undefined && !novaLigacao) {
       this.stage3Conhecidos.set(oc.callee, agora); // já tratada: não repete aviso
       return;
     }
-    const origem = this.origens.get(oc.callee);
     const janela = this.op.janelaTransferenciaMs ?? 60_000;
     if (
       origem &&
@@ -434,11 +444,14 @@ export class CallTracker {
   }
 
   private registrarOrigem(oc: Ocorrencia, agora: number): void {
+    const anterior = this.origens.get(oc.callee);
+    const mesma = anterior?.callback === oc.callback && anterior.discriminador === oc.discriminador;
     this.origens.set(oc.callee, {
       callback: oc.callback,
       discriminador: oc.discriminador,
       ocId: oc.id,
       ultimaVez: agora,
+      primeiraVez: mesma ? anterior.primeiraVez : agora,
       duracaoSeg: oc.duracaoOrigemSeg,
     });
   }
