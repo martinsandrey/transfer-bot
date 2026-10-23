@@ -89,7 +89,7 @@ async function principal(): Promise<void> {
     inicial = { periodo: resto[0] };
   }
 
-  const { pasta, apelidos, equipePaquistanesDigitos, religacao, fuso } = lerEnv();
+  const { pasta, apelidos, equipePaquistanesDigitos, religacao, fuso, duracaoLongaMin } = lerEnv();
   aplicarFuso(fuso);
   const ler = (arquivo: string): string | null => {
     const caminho = join(pasta, arquivo);
@@ -119,6 +119,7 @@ async function principal(): Promise<void> {
       ? paginaHtml({
           geradoEm: new Date(),
           fuso,
+          duracaoLongaMin,
           ...m,
           inicial,
           apelidos,

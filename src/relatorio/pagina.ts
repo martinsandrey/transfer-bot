@@ -5,6 +5,8 @@ export interface DadosDaPagina {
   geradoEm: Date;
   /** Fuso em que a página mostra horários (padrão: Brasília), não o do navegador. */
   fuso?: string;
+  /** Minutos que definem a ligação longa (padrão 5): troca o "5 min" dos textos da página e da planilha. */
+  duracaoLongaMin?: number;
   ligacoes: readonly Ligacao[];
   longas: readonly LigacaoLonga[];
   /** Filtro que a página mostra ao abrir: um dos nomes de período, ou `personalizado` com `de`/`ate` (AAAA-MM-DD). */
@@ -71,9 +73,12 @@ export function paginaHtml(d: DadosDaPagina): string {
     inicial: d.inicial,
     srv: d.servidor ? { token: d.servidor.token } : null,
   };
-  return PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados))
+  const html = PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados))
     .replace("/*XLSX*/null", () => `(${montarXlsx.toString()})`)
     .replace("/*ESTILOS*/null", () => JSON.stringify(ESTILO));
+  const n = d.duracaoLongaMin ?? 5;
+  // Todo "5 min"/"5 minutos" da página é sobre a ligação longa: usa o tempo configurado (DURACAO_LONGA_MIN).
+  return n === 5 ? html : html.replace(/\b5 (min(utos)?)\b/g, `${n} $1`);
 }
 
 const PAGINA = `<!doctype html>

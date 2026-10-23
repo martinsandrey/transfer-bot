@@ -388,7 +388,7 @@ export class Monitor {
     if (decisao === "indeterminado" && grupo !== "callback") {
       this.deps.notificador.alerta(
         "aviso",
-        `O Callback Number ${this.funcionarioVisivel(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de 5 minutos" : "de transferências"} não foi gerada.`,
+        `O Callback Number ${this.funcionarioVisivel(ev.callback)} não tem dígitos suficientes para saber de quem é o funcionário; a mensagem do grupo ${grupo === "longa" ? "de ligações longas" : "de transferências"} não foi gerada.`,
       );
     }
     return false;

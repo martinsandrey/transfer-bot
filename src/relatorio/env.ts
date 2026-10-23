@@ -12,6 +12,8 @@ export function lerEnv(caminho = ".env"): {
   equipePaquistanesDigitos: string[];
   religacao: { janelaMs: number; duracaoMinSeg: number };
   fuso: string;
+  /** Minutos que definem a ligação longa (DURACAO_LONGA_MIN); só muda os textos do relatório. */
+  duracaoLongaMin: number;
 } {
   let pasta = "registros";
   let apelidos = new Map<string, string>();
@@ -20,6 +22,7 @@ export function lerEnv(caminho = ".env"): {
   let janelaMin = 60;
   let duracaoMinSeg = 20;
   let fuso = FUSO_PADRAO;
+  let duracaoLongaMin = 5;
   const inteiro = (v: string | undefined, min: number, max: number): number | null => {
     const t = (v ?? "").trim();
     if (!/^\d+$/.test(t)) return null;
@@ -36,6 +39,7 @@ export function lerEnv(caminho = ".env"): {
       if (d) digitos = [...d];
       janelaMin = inteiro(env["CALLBACK_RELIGACAO_MIN"], 0, 1440) ?? janelaMin;
       duracaoMinSeg = inteiro(env["CALLBACK_DURACAO_SEG"], 0, 3600) ?? duracaoMinSeg;
+      duracaoLongaMin = inteiro(env["DURACAO_LONGA_MIN"], 1, 600) ?? duracaoLongaMin;
       const f = (env["FUSO_HORARIO"] ?? "").trim();
       if (f && fusoValido(f)) fuso = f;
     }
@@ -48,5 +52,6 @@ export function lerEnv(caminho = ".env"): {
     equipePaquistanesDigitos: digitos,
     religacao: { janelaMs: janelaMin * 60_000, duracaoMinSeg },
     fuso,
+    duracaoLongaMin,
   };
 }

@@ -107,6 +107,8 @@ export interface OpcoesFila {
    * como "ocorrência nova" (Start Time diferente, reinício do programa, ligação que passa de um funcionário a outro). 0/ausente = desligado.
    */
   repeticaoLongaMs?: number;
+  /** Minutos que definem a ligação longa (só para o texto das notificações). Padrão 5. */
+  duracaoLongaMin?: number;
   /** Clientes que já receberam a mensagem de 5 min há pouco (lidos do registro em arquivo ao iniciar). */
   longasRecentes?: ReadonlyArray<{ cliente: string; em: number }>;
   /** Mensagem mais velha que isso (desde a detecção) não é mais enviada (o Telegram pode ter ficado fora do ar). 0/ausente = não expira. */
@@ -419,7 +421,7 @@ export class TaskQueue {
     if (link === undefined) return;
     const o =
       t.tipo === "longa"
-        ? "Ligação de 5 min"
+        ? `Ligação de ${this.op.duracaoLongaMin ?? 5} min`
         : t.tipo === "callback"
           ? "CALLBACK"
           : "Transferência";

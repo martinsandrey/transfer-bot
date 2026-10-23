@@ -220,7 +220,7 @@ async function principal(): Promise<void> {
     const desc = (d: ReadonlySet<string> | null): string =>
       d === null ? "todos os funcionários" : `penúltimo dígito ${[...d].join(" ou ")}`;
     console.log(
-      `Funcionários: transferências = ${desc(cfg.filtroFuncionarios.transferencia)}; 5 minutos = ${desc(cfg.filtroFuncionarios.longa)}.`,
+      `Funcionários: transferências = ${desc(cfg.filtroFuncionarios.transferencia)}; ligações de ${cfg.duracaoLongaMin} minutos = ${desc(cfg.filtroFuncionarios.longa)}.`,
     );
   }
 
@@ -423,6 +423,7 @@ async function principal(): Promise<void> {
       {
         modo: cfg.modo,
         repeticaoLongaMs: cfg.repeticao5minMin * 60_000,
+        duracaoLongaMin: cfg.duracaoLongaMin,
         ...(cfg.pastaRegistros
           ? {
               longasRecentes: longasRecentes(
