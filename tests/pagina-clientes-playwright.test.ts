@@ -114,8 +114,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("PaginaClientesPlaywright (site fictício)",
     const r = await comPagina((_h, c) => c.find("011900000999"));
     expect(r).toEqual({
       tipo: "nenhum",
-      tentativas:
-        'Phone "011900000999"; Phone "11900000999"; Mobile Phone "011900000999"; Mobile Phone "11900000999"',
+      tentativas: 'Phone "011900000999"; Mobile Phone "011900000999"',
     });
     expect(acessos.at(-1)).toBe("GET /modules/cc_monitor/curcall_in.php");
   });

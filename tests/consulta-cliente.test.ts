@@ -105,33 +105,16 @@ describe("ConsultaDeCliente", () => {
     expect(r).toMatchObject({ tipo: "ok", registro: { phone: "" } });
   });
 
-  it("0 resultados: tenta Phone (com e sem o 0 na frente) e Mobile Phone (idem), não abre edição e diz o que pesquisou", async () => {
+  it("0 resultados: tenta Phone e depois Mobile Phone, sempre com o número como veio (com o 0), não abre edição e diz o que pesquisou", async () => {
     const p = new PaginaFalsa(0, {});
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
       tipo: "nenhum",
-      tentativas:
-        'Phone "011900000101"; Phone "11900000101"; Mobile Phone "011900000101"; Mobile Phone "11900000101"',
+      tentativas: 'Phone "011900000101"; Mobile Phone "011900000101"',
     });
     expect(p.chamadas).toEqual([
       "abrir",
       "pesquisar:011900000101",
-      "pesquisar:11900000101",
       "pesquisarMobile:011900000101",
-      "pesquisarMobile:11900000101",
-      "voltarParaVoiceCallStatus",
-    ]);
-  });
-
-  it("número com 0 na frente que só existe no cadastro sem o 0: acha na segunda busca e segue normalmente", async () => {
-    const p = new PaginaFalsa((t) => (t === "11900000101" ? 1 : 0), COMPLETO);
-    const r = await new ConsultaDeCliente(p).find("011900000101");
-    expect(r).toMatchObject({ tipo: "ok", registro: { nome: "Maria Exemplo" } });
-    expect(p.chamadas).toEqual([
-      "abrir",
-      "pesquisar:011900000101",
-      "pesquisar:11900000101",
-      "abrirEdicao",
-      "lerCampos",
       "voltarParaVoiceCallStatus",
     ]);
   });
@@ -147,7 +130,6 @@ describe("ConsultaDeCliente", () => {
     expect(p.chamadas).toEqual([
       "abrir",
       "pesquisar:011900000101",
-      "pesquisar:11900000101",
       "pesquisarMobile:011900000101",
       "abrirEdicao",
       "lerCampos",
@@ -166,16 +148,10 @@ describe("ConsultaDeCliente", () => {
     });
   });
 
-  it("achou de primeira: uma busca só; número sem 0 na frente e sem resultado: uma busca por campo", async () => {
+  it("achou de primeira no Phone: uma busca só, sem tentar Mobile Phone", async () => {
     const a = new PaginaFalsa(1, COMPLETO);
     await new ConsultaDeCliente(a).find("011900000101");
     expect(a.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual(["pesquisar:011900000101"]);
-    const b = new PaginaFalsa(0, {});
-    expect(await new ConsultaDeCliente(b).find("5511900000101")).toMatchObject({ tipo: "nenhum" });
-    expect(b.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual([
-      "pesquisar:5511900000101",
-      "pesquisarMobile:5511900000101",
-    ]);
   });
 
   it("vários resultados: usa o primeiro e sinaliza", async () => {

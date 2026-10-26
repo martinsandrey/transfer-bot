@@ -79,22 +79,17 @@ export class ConsultaDeCliente implements CustomerLookup {
   async find(calleeNumber: string): Promise<ResultadoBusca> {
     try {
       await this.pagina.abrir();
-      // Primeiro o campo Phone; se não achar, o Mobile Phone. Em cada um, o número como veio e, se tiver zero(s) à esquerda (o 0 de
-      // discagem, 011...), também sem eles, porque o cadastro pode guardar sem. Tudo pesquisa de leitura.
-      const semZeros = somenteDigitos(calleeNumber).replace(/^0+/, "");
-      const variantes = [calleeNumber.trim()];
-      if (semZeros !== "" && semZeros !== calleeNumber.trim()) variantes.push(semZeros);
+      // Primeiro o campo Phone; se não achar, o Mobile Phone. Sempre com o número exatamente como veio (sem tirar o zero à esquerda).
+      const numero = calleeNumber.trim();
       const tentativas: string[] = [];
-      let resultados = 0;
       let achouEm: CampoDeBusca | null = null;
-      busca: for (const campo of ["phone", "mobile"] as const) {
-        for (const numero of variantes) {
-          tentativas.push(`${NOME_DO_CAMPO[campo]} "${numero}"`);
-          resultados = (await this.pagina.pesquisarPorTelefone(numero, campo)).resultados;
-          if (resultados > 0) {
-            achouEm = campo;
-            break busca;
-          }
+      let resultados = 0;
+      for (const campo of ["phone", "mobile"] as const) {
+        tentativas.push(`${NOME_DO_CAMPO[campo]} "${numero}"`);
+        resultados = (await this.pagina.pesquisarPorTelefone(numero, campo)).resultados;
+        if (resultados > 0) {
+          achouEm = campo;
+          break;
         }
       }
       if (achouEm === null) return { tipo: "nenhum", tentativas: tentativas.join("; ") };
