@@ -64,8 +64,10 @@ export interface CustomerRecord {
 
 export type ResultadoBusca =
   | { tipo: "ok"; registro: CustomerRecord; multiplos: boolean }
-  | { tipo: "nenhum" }
-  | { tipo: "telefone_divergente" };
+  /** `tentativas`: o que foi pesquisado (campo e número), para o erro mostrar o que aconteceu. */
+  | { tipo: "nenhum"; tentativas?: string }
+  /** `campo`: em qual campo (Phone/Mobile Phone) o cliente foi achado com telefone diferente do Callee Number. */
+  | { tipo: "telefone_divergente"; campo?: string };
 
 export interface CustomerLookup {
   find(calleeNumber: string): Promise<ResultadoBusca>;

@@ -258,7 +258,7 @@ describe("integração: problemas reais chegam como notificação", () => {
     const c = montarFila(async () => ({ tipo: "nenhum" }));
     c.enqueue(ev("c"));
     await c.drenar();
-    expect(toasts.at(-1)).toMatch(/nenhum cliente encontrado/);
+    expect(toasts.at(-1)).toMatch(/cliente não encontrado na Customer Data List/);
 
     // 4) consulta travando: falha da tarefa
     const d = montarFila(async () => {

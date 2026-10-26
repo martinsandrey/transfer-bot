@@ -18,13 +18,18 @@ const alvo = { "Customer Data List": "/modules/cc_cds/", "Voice Call Status": "/
 document.querySelectorAll(".standartTreeRow").forEach(el => el.addEventListener("click", () => { document.getElementById("c").src = alvo[el.textContent]; }));
 </script>`;
 
-const LISTA = (phone: string): string => `<!doctype html><title>Lista</title>
-<form id="selectForm" method="get"><table><tr><td><input name="ft[name]"></td><td><input name="ft[mob_phone]"></td><td><input name="ft[phone]" value=""></td></tr>
+const LISTA = (phone: string, mob = ""): string => `<!doctype html><title>Lista</title>
+<form id="selectForm" method="get"><table><tr><td><input name="ft[name]"></td><td><input name="ft[mob_phone]" value="${mob}"></td><td><input name="ft[phone]" value="${phone}"></td></tr>
 <tr><td><input type="submit" id="submitButton" title="Search" value="Search"></td></tr></table></form>
 <form id="listForm" method="post" action="/modules/cc_cds/delete.php"><table>
 ${
   phone.endsWith("01")
     ? `<tr><td><input type="checkbox" name="checkboxes[]"></td><td>X</td><td><a href="/modules/cc_cds/edit.php?id=1">Edit</a> <a href="/modules/cc_cds/delete.php?id=1">Delete</a></td></tr>`
+    : ""
+}
+${
+  mob.endsWith("03") && phone === ""
+    ? `<tr><td><input type="checkbox" name="checkboxes[]"></td><td><a href="/modules/cc_cds/edit.php?id=4">Edit</a></td></tr>`
     : ""
 }
 ${
@@ -39,7 +44,7 @@ const EDICAO = (
 ): string => `<!doctype html><title>Edição</title><form action="/modules/cc_cds/update.php" method="post"><table>
 <tr><td>Name：</td><td><input name="name" value="Fulano Ficticio"></td><td>Customer Type：</td><td><select name="type"><option>A</option></select></td></tr>
 <tr><td>ID Number：</td><td><input name="idn" value="000.000.000-01"></td><td>Date of Birth：</td><td><input name="dob" value="1980-01-31"></td></tr>
-<tr><td>Mobile Phone：</td><td><input name="mob" value="999"></td><td>Phone：</td><td><input name="phone" value="0119000001${id === "1" ? "01" : "02"}"></td></tr>
+<tr><td>Mobile Phone：</td><td><input name="mob" value="${id === "4" ? "011900000003" : "999"}"></td><td>Phone：</td><td><input name="phone" value="${id === "4" ? "" : `0119000001${id === "1" ? "01" : "02"}`}"></td></tr>
 <tr><td>Address：</td><td><input name="addr" value="Rua Ficticia 1"></td></tr>
 </table><input type="submit" value="Edit" id="submitButton"></form>`;
 
@@ -55,7 +60,9 @@ beforeAll(async () => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" });
     if (url.pathname === "/modules/index.php") res.end(INDEX);
     else if (url.pathname === "/modules/cc_cds/")
-      res.end(LISTA(url.searchParams.get("ft[phone]") ?? ""));
+      res.end(
+        LISTA(url.searchParams.get("ft[phone]") ?? "", url.searchParams.get("ft[mob_phone]") ?? ""),
+      );
     else if (url.pathname === "/modules/cc_cds/edit.php")
       res.end(EDICAO(url.searchParams.get("id") ?? ""));
     else res.end("<!doctype html><title>Chamadas</title><table class='adminlist'></table>");
@@ -105,8 +112,21 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("PaginaClientesPlaywright (site fictício)",
   it("sem resultado: nenhum, e ainda volta à Voice Call Status", async () => {
     acessos.length = 0;
     const r = await comPagina((_h, c) => c.find("011900000999"));
-    expect(r).toEqual({ tipo: "nenhum" });
+    expect(r).toEqual({
+      tipo: "nenhum",
+      tentativas:
+        'Phone "011900000999"; Phone "11900000999"; Mobile Phone "011900000999"; Mobile Phone "11900000999"',
+    });
     expect(acessos.at(-1)).toBe("GET /modules/cc_monitor/curcall_in.php");
+  });
+
+  it("não achou no Phone: pesquisa no Mobile Phone (com o Phone vazio) e usa o telefone desse campo", async () => {
+    const r = await comPagina((_h, c) => c.find("011900000003"));
+    expect(r).toMatchObject({
+      tipo: "ok",
+      multiplos: false,
+      registro: { nome: "Fulano Ficticio", phone: "011900000003" },
+    });
   });
 
   it("vários resultados: segue com o primeiro e marca múltiplos", async () => {

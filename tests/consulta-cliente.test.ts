@@ -15,7 +15,7 @@ import { criarNotificadorFalso } from "../src/notificador/notificador.js";
 class PaginaFalsa implements PaginaClientes {
   chamadas: string[] = [];
   constructor(
-    private readonly resultados: number | ((telefone: string) => number),
+    private readonly resultados: number | ((telefone: string, campo: string) => number),
     private readonly campos: CamposDoCadastro,
     private readonly falhaEm?: string,
   ) {}
@@ -26,10 +26,11 @@ class PaginaFalsa implements PaginaClientes {
   async abrir() {
     this.passo("abrir");
   }
-  async pesquisarPorTelefone(t: string) {
-    this.passo(`pesquisar:${t}`);
+  async pesquisarPorTelefone(t: string, campo: "phone" | "mobile" = "phone") {
+    this.passo(`${campo === "mobile" ? "pesquisarMobile" : "pesquisar"}:${t}`);
     return {
-      resultados: typeof this.resultados === "function" ? this.resultados(t) : this.resultados,
+      resultados:
+        typeof this.resultados === "function" ? this.resultados(t, campo) : this.resultados,
     };
   }
   async abrirEdicaoDoPrimeiro() {
@@ -57,6 +58,9 @@ describe("telefonesIguais", () => {
     expect(telefonesIguais("(011) 90000-0101", "011900000101")).toBe(true);
     expect(telefonesIguais("011900000101", "011900000102")).toBe(false);
     expect(telefonesIguais("", "")).toBe(false);
+    // DDI na frente de um lado só: igual, desde que o menor tenha DDD + número (10 dígitos ou mais)
+    expect(telefonesIguais("5511959361939", "011959361939")).toBe(true);
+    expect(telefonesIguais("959361939", "5511959361939")).toBe(false);
   });
 });
 
@@ -101,14 +105,19 @@ describe("ConsultaDeCliente", () => {
     expect(r).toMatchObject({ tipo: "ok", registro: { phone: "" } });
   });
 
-  it("0 resultados: 'nenhum' e não abre edição", async () => {
+  it("0 resultados: tenta Phone (com e sem o 0 na frente) e Mobile Phone (idem), não abre edição e diz o que pesquisou", async () => {
     const p = new PaginaFalsa(0, {});
-    expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({ tipo: "nenhum" });
-    // sem resultado com o 0 na frente, tenta de novo sem ele; só então desiste
+    expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
+      tipo: "nenhum",
+      tentativas:
+        'Phone "011900000101"; Phone "11900000101"; Mobile Phone "011900000101"; Mobile Phone "11900000101"',
+    });
     expect(p.chamadas).toEqual([
       "abrir",
       "pesquisar:011900000101",
       "pesquisar:11900000101",
+      "pesquisarMobile:011900000101",
+      "pesquisarMobile:11900000101",
       "voltarParaVoiceCallStatus",
     ]);
   });
@@ -127,14 +136,45 @@ describe("ConsultaDeCliente", () => {
     ]);
   });
 
-  it("achou de primeira: uma busca só; número sem 0 na frente e sem resultado: também uma busca só", async () => {
+  it("não achou no Phone: pesquisa no Mobile Phone, confere e mostra o telefone do campo Mobile Phone", async () => {
+    const p = new PaginaFalsa((_t, campo) => (campo === "mobile" ? 1 : 0), {
+      ...COMPLETO,
+      phone: "011933333333", // outro telefone no campo Phone: não pode causar "cliente errado"
+      mobilePhone: "11900000101",
+    });
+    const r = await new ConsultaDeCliente(p).find("011900000101");
+    expect(r).toMatchObject({ tipo: "ok", registro: { phone: "11900000101" } });
+    expect(p.chamadas).toEqual([
+      "abrir",
+      "pesquisar:011900000101",
+      "pesquisar:11900000101",
+      "pesquisarMobile:011900000101",
+      "abrirEdicao",
+      "lerCampos",
+      "voltarParaVoiceCallStatus",
+    ]);
+  });
+
+  it("achado pelo Mobile Phone mas o Mobile Phone do cadastro é de outro número: cliente errado, dizendo qual campo", async () => {
+    const p = new PaginaFalsa((_t, campo) => (campo === "mobile" ? 1 : 0), {
+      ...COMPLETO,
+      mobilePhone: "011944444444",
+    });
+    expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
+      tipo: "telefone_divergente",
+      campo: "Mobile Phone",
+    });
+  });
+
+  it("achou de primeira: uma busca só; número sem 0 na frente e sem resultado: uma busca por campo", async () => {
     const a = new PaginaFalsa(1, COMPLETO);
     await new ConsultaDeCliente(a).find("011900000101");
     expect(a.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual(["pesquisar:011900000101"]);
     const b = new PaginaFalsa(0, {});
-    expect(await new ConsultaDeCliente(b).find("5511900000101")).toEqual({ tipo: "nenhum" });
+    expect(await new ConsultaDeCliente(b).find("5511900000101")).toMatchObject({ tipo: "nenhum" });
     expect(b.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual([
       "pesquisar:5511900000101",
+      "pesquisarMobile:5511900000101",
     ]);
   });
 
@@ -147,6 +187,7 @@ describe("ConsultaDeCliente", () => {
     const p = new PaginaFalsa(1, { ...COMPLETO, phone: "011911111111" });
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({
       tipo: "telefone_divergente",
+      campo: "Phone",
     });
     expect(p.chamadas.at(-1)).toBe("voltarParaVoiceCallStatus");
   });

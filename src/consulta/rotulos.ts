@@ -11,6 +11,7 @@ export const ROTULOS_DO_FORMULARIO: Record<keyof CamposDoCadastro, string> = {
   cpf: "ID number",
   age: "Date of birth",
   phone: "Phone",
+  mobilePhone: "Mobile Phone",
   location: "Address",
 };
 

@@ -8,7 +8,13 @@ export interface CamposDoCadastro {
   location?: string | undefined;
   age?: string | undefined;
   phone?: string | undefined;
+  /** Campo "Mobile Phone" do cadastro (a busca também tenta por ele quando o Phone não acha). */
+  mobilePhone?: string | undefined;
 }
+
+/** Campo da Customer Data List em que o telefone é pesquisado. */
+export type CampoDeBusca = "phone" | "mobile";
+const NOME_DO_CAMPO: Record<CampoDeBusca, string> = { phone: "Phone", mobile: "Mobile Phone" };
 
 /**
  * Contato com a página Customer Data List. É a ÚNICA parte que depende do site (menu, campo Phone, botão Search,
@@ -18,8 +24,11 @@ export interface CamposDoCadastro {
 export interface PaginaClientes {
   /** Chega à Customer Data List pelo menu. */
   abrir(): Promise<void>;
-  /** Digita o telefone no campo Phone, aciona Search e espera o resultado. Devolve quantos clientes apareceram. */
-  pesquisarPorTelefone(telefone: string): Promise<{ resultados: number }>;
+  /**
+   * Digita o telefone no campo Phone (ou Mobile Phone, com `campo: "mobile"`; o outro fica vazio), aciona Search e espera o
+   * resultado. Devolve quantos clientes apareceram.
+   */
+  pesquisarPorTelefone(telefone: string, campo?: CampoDeBusca): Promise<{ resultados: number }>;
   /**
    * Clica no botão **Edit** da LINHA do cliente pesquisado (o primeiro resultado) para abrir o formulário, somente para LER.
    * É a única ação de clique no cadastro: nunca clicar em Salvar/Save/Update/Delete. O botão certo é o da linha do resultado, e só
@@ -37,13 +46,18 @@ export interface PaginaClientes {
 }
 
 /**
- * Compara telefones só pelos dígitos, ignorando zeros à esquerda (prefixo de tronco).
+ * Compara telefones só pelos dígitos, ignorando zeros à esquerda (prefixo de tronco) e o DDI na frente (um número pode ser o final
+ * do outro, desde que o menor tenha ao menos 10 dígitos, ou seja, DDD + número).
  * TODO(confirmar) (P11): formato do telefone no cadastro versus o Callee Number.
  */
 export function telefonesIguais(a: string, b: string): boolean {
   const limpa = (t: string): string => somenteDigitos(t).replace(/^0+/, "");
   const x = limpa(a);
-  return x !== "" && x === limpa(b);
+  const y = limpa(b);
+  if (x === "" || y === "") return false;
+  if (x === y) return true;
+  const [curto, longo] = x.length <= y.length ? [x, y] : [y, x];
+  return curto.length >= 10 && longo.endsWith(curto);
 }
 
 /**
@@ -65,18 +79,31 @@ export class ConsultaDeCliente implements CustomerLookup {
   async find(calleeNumber: string): Promise<ResultadoBusca> {
     try {
       await this.pagina.abrir();
-      let { resultados } = await this.pagina.pesquisarPorTelefone(calleeNumber);
-      // O Callee Number pode vir com o 0 de discagem na frente (011...), e o cadastro guardar o número sem ele: tenta de novo sem os
-      // zeros à esquerda (só leitura, mesma pesquisa). Se o número não tem zero à esquerda, não há segunda tentativa.
+      // Primeiro o campo Phone; se não achar, o Mobile Phone. Em cada um, o número como veio e, se tiver zero(s) à esquerda (o 0 de
+      // discagem, 011...), também sem eles, porque o cadastro pode guardar sem. Tudo pesquisa de leitura.
       const semZeros = somenteDigitos(calleeNumber).replace(/^0+/, "");
-      if (resultados <= 0 && semZeros !== "" && semZeros !== calleeNumber.trim())
-        ({ resultados } = await this.pagina.pesquisarPorTelefone(semZeros));
-      if (resultados <= 0) return { tipo: "nenhum" };
+      const variantes = [calleeNumber.trim()];
+      if (semZeros !== "" && semZeros !== calleeNumber.trim()) variantes.push(semZeros);
+      const tentativas: string[] = [];
+      let resultados = 0;
+      let achouEm: CampoDeBusca | null = null;
+      busca: for (const campo of ["phone", "mobile"] as const) {
+        for (const numero of variantes) {
+          tentativas.push(`${NOME_DO_CAMPO[campo]} "${numero}"`);
+          resultados = (await this.pagina.pesquisarPorTelefone(numero, campo)).resultados;
+          if (resultados > 0) {
+            achouEm = campo;
+            break busca;
+          }
+        }
+      }
+      if (achouEm === null) return { tipo: "nenhum", tentativas: tentativas.join("; ") };
       await this.pagina.abrirEdicaoDoPrimeiro();
       const c = await this.pagina.lerCampos();
-      const telefone = (c.phone ?? "").trim();
+      // O telefone do cadastro a conferir (e a mostrar na mensagem) é o do campo em que o cliente foi achado.
+      const telefone = ((achouEm === "mobile" ? c.mobilePhone : c.phone) ?? "").trim();
       if (telefone !== "" && !telefonesIguais(telefone, calleeNumber)) {
-        return { tipo: "telefone_divergente" };
+        return { tipo: "telefone_divergente", campo: NOME_DO_CAMPO[achouEm] };
       }
       return {
         tipo: "ok",

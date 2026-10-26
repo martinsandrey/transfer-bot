@@ -63,6 +63,6 @@ describe("cenário fictício completo (ponta a ponta sem navegador)", () => {
     expect(msgs).toMatch(/não é da linha 2/);
     expect(msgs).not.toMatch(/inesperada/); // a linha 3 é ignorada em silêncio
     expect(msgs).toMatch(/cliente errado/);
-    expect(msgs).toMatch(/nenhum cliente/);
+    expect(msgs).toMatch(/cliente não encontrado/);
   });
 });

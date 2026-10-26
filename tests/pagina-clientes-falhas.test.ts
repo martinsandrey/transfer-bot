@@ -15,7 +15,7 @@ ${modo === "sem_menu" ? "<p>Faça login</p>" : '<div class="m">Customer Data Lis
 <script>const alvo={"Customer Data List":"/modules/cc_cds/","Voice Call Status":"/modules/cc_monitor/curcall_in.php"};
 document.querySelectorAll(".m").forEach(e=>e.onclick=()=>{document.getElementById("c").src=alvo[e.textContent]});</script>`;
 const LISTA = (phone: string): string => `<!doctype html>
-<form method="get"><input name="ft[phone]"><input type="submit" id="submitButton" value="Search" ${modo === "busca_nao_recarrega" ? 'onclick="return false"' : ""}></form>
+<form method="get"><input name="ft[mob_phone]"><input name="ft[phone]"><input type="submit" id="submitButton" value="Search" ${modo === "busca_nao_recarrega" ? 'onclick="return false"' : ""}></form>
 <form method="post" action="/modules/cc_cds/delete.php"><table>${
   phone.endsWith("01")
     ? `<tr><td><input type="checkbox" name="checkboxes[]"></td><td>${modo === "sem_edit" ? "" : '<a href="/modules/cc_cds/edit.php?id=1">Edit</a>'}</td></tr>`

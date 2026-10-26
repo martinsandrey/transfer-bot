@@ -12,6 +12,7 @@ describe("rótulos do formulário de edição (informados pelo usuário)", () =>
       cpf: "ID number",
       age: "Date of birth",
       phone: "Phone",
+      mobilePhone: "Mobile Phone",
       location: "Address",
     });
   });
@@ -41,6 +42,7 @@ describe("rótulos do formulário de edição (informados pelo usuário)", () =>
       cpf: "000.000.000-01",
       age: "1980-05-17",
       phone: "011900000101",
+      mobilePhone: "011977777777",
       location: "Rua Exemplo, 10",
     });
   });

@@ -481,7 +481,7 @@ export class TaskQueue {
       this.mover(t, "ignorada", "cliente_nao_encontrado");
       this.deps.notificador.alerta(
         "erro",
-        `Tarefa ${t.id}: nenhum cliente encontrado para o Callee Number. Nada foi enviado.`,
+        `Tarefa ${t.id}: cliente não encontrado na Customer Data List. ${busca.tentativas ? `Pesquisei ${busca.tentativas}` : "Pesquisei o Callee Number"} e não apareceu nenhum cadastro (nem no Phone nem no Mobile Phone). Nada foi enviado.`,
       );
       return false;
     }
@@ -489,7 +489,7 @@ export class TaskQueue {
       this.mover(t, "ignorada", "telefone_divergente");
       this.deps.notificador.alerta(
         "erro",
-        `Tarefa ${t.id}: telefone do cadastro diferente do Callee Number (cliente errado). Nada foi enviado.`,
+        `Tarefa ${t.id}: o telefone ${busca.campo ? `do campo ${busca.campo} ` : ""}do cadastro é diferente do Callee Number (cliente errado). Nada foi enviado.`,
       );
       return false;
     }

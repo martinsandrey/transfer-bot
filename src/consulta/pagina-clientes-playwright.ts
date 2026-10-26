@@ -1,6 +1,6 @@
 import { abrirMenusAte } from "../navegador/menu-lateral.js";
 import type { BrowserContext, Frame, Page } from "playwright";
-import type { CamposDoCadastro, PaginaClientes } from "./consulta-cliente.js";
+import type { CamposDoCadastro, CampoDeBusca, PaginaClientes } from "./consulta-cliente.js";
 import { deveBloquear } from "./bloqueio.js";
 import { camposPorRotulo, type ParRotuloValor } from "./rotulos.js";
 
@@ -92,9 +92,17 @@ export class PaginaClientesPlaywright implements PaginaClientes {
     await f.locator('input[name="ft[phone]"]').waitFor({ timeout: this.op.timeoutMs });
   }
 
-  async pesquisarPorTelefone(telefone: string): Promise<{ resultados: number }> {
+  async pesquisarPorTelefone(
+    telefone: string,
+    campo: CampoDeBusca = "phone",
+  ): Promise<{ resultados: number }> {
     const f = await this.esperarFrame(CAMINHO_LISTA);
-    await f.locator('input[name="ft[phone]"]').fill(telefone);
+    // Os dois campos são filtros somados: o que não está sendo pesquisado precisa estar vazio (o formulário volta preenchido).
+    const [alvo, outro] =
+      campo === "mobile" ? ["ft[mob_phone]", "ft[phone]"] : ["ft[phone]", "ft[mob_phone]"];
+    const campoOutro = f.locator(`input[name="${outro}"]`);
+    if ((await campoOutro.count()) > 0) await campoOutro.fill("");
+    await f.locator(`input[name="${alvo}"]`).fill(telefone);
     // A busca recarrega o iframe: marca o documento atual e espera a marca sumir (documento novo).
     await f.evaluate(() => {
       (window as unknown as Record<string, unknown>)["__tbMarca"] = true;
