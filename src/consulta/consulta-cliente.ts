@@ -65,7 +65,12 @@ export class ConsultaDeCliente implements CustomerLookup {
   async find(calleeNumber: string): Promise<ResultadoBusca> {
     try {
       await this.pagina.abrir();
-      const { resultados } = await this.pagina.pesquisarPorTelefone(calleeNumber);
+      let { resultados } = await this.pagina.pesquisarPorTelefone(calleeNumber);
+      // O Callee Number pode vir com o 0 de discagem na frente (011...), e o cadastro guardar o número sem ele: tenta de novo sem os
+      // zeros à esquerda (só leitura, mesma pesquisa). Se o número não tem zero à esquerda, não há segunda tentativa.
+      const semZeros = somenteDigitos(calleeNumber).replace(/^0+/, "");
+      if (resultados <= 0 && semZeros !== "" && semZeros !== calleeNumber.trim())
+        ({ resultados } = await this.pagina.pesquisarPorTelefone(semZeros));
       if (resultados <= 0) return { tipo: "nenhum" };
       await this.pagina.abrirEdicaoDoPrimeiro();
       const c = await this.pagina.lerCampos();

@@ -15,7 +15,7 @@ import { criarNotificadorFalso } from "../src/notificador/notificador.js";
 class PaginaFalsa implements PaginaClientes {
   chamadas: string[] = [];
   constructor(
-    private readonly resultados: number,
+    private readonly resultados: number | ((telefone: string) => number),
     private readonly campos: CamposDoCadastro,
     private readonly falhaEm?: string,
   ) {}
@@ -28,7 +28,9 @@ class PaginaFalsa implements PaginaClientes {
   }
   async pesquisarPorTelefone(t: string) {
     this.passo(`pesquisar:${t}`);
-    return { resultados: this.resultados };
+    return {
+      resultados: typeof this.resultados === "function" ? this.resultados(t) : this.resultados,
+    };
   }
   async abrirEdicaoDoPrimeiro() {
     this.passo("abrirEdicao");
@@ -102,7 +104,38 @@ describe("ConsultaDeCliente", () => {
   it("0 resultados: 'nenhum' e não abre edição", async () => {
     const p = new PaginaFalsa(0, {});
     expect(await new ConsultaDeCliente(p).find("011900000101")).toEqual({ tipo: "nenhum" });
-    expect(p.chamadas).toEqual(["abrir", "pesquisar:011900000101", "voltarParaVoiceCallStatus"]);
+    // sem resultado com o 0 na frente, tenta de novo sem ele; só então desiste
+    expect(p.chamadas).toEqual([
+      "abrir",
+      "pesquisar:011900000101",
+      "pesquisar:11900000101",
+      "voltarParaVoiceCallStatus",
+    ]);
+  });
+
+  it("número com 0 na frente que só existe no cadastro sem o 0: acha na segunda busca e segue normalmente", async () => {
+    const p = new PaginaFalsa((t) => (t === "11900000101" ? 1 : 0), COMPLETO);
+    const r = await new ConsultaDeCliente(p).find("011900000101");
+    expect(r).toMatchObject({ tipo: "ok", registro: { nome: "Maria Exemplo" } });
+    expect(p.chamadas).toEqual([
+      "abrir",
+      "pesquisar:011900000101",
+      "pesquisar:11900000101",
+      "abrirEdicao",
+      "lerCampos",
+      "voltarParaVoiceCallStatus",
+    ]);
+  });
+
+  it("achou de primeira: uma busca só; número sem 0 na frente e sem resultado: também uma busca só", async () => {
+    const a = new PaginaFalsa(1, COMPLETO);
+    await new ConsultaDeCliente(a).find("011900000101");
+    expect(a.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual(["pesquisar:011900000101"]);
+    const b = new PaginaFalsa(0, {});
+    expect(await new ConsultaDeCliente(b).find("5511900000101")).toEqual({ tipo: "nenhum" });
+    expect(b.chamadas.filter((c) => c.startsWith("pesquisar"))).toEqual([
+      "pesquisar:5511900000101",
+    ]);
   });
 
   it("vários resultados: usa o primeiro e sinaliza", async () => {
