@@ -23,6 +23,8 @@ export interface Entrada {
   enviada: boolean;
   funcionario: string;
   cliente: string | null;
+  /** Nome do cliente (linha "NAME:" do texto da mensagem); `null` se o bloco não tem (ex.: CALLBACK) ou está vazio. */
+  nome: string | null;
   /** Código da ligação (registros novos). */
   ligacao: string | null;
   /** Ordem do bloco no arquivo (desempate). */
@@ -52,6 +54,7 @@ const RE_LIGACAO = CAMPO("Ligação");
 const RE_TIPO = /\|\s*Tipo:\s*(transferencia|callback|longa)\b/;
 const LINHA_CORPO = /^Line 1 number:\s*(\S+)/im;
 const LINHA_PH = /^Ph:\s*(\S+)/im;
+const LINHA_NOME = /^NAME:[ \t]*(.*)$/im;
 
 /** Lê os blocos de um arquivo de registro. `padrao` = tipo das mensagens do arquivo (callbacks são detectados pela marca). */
 export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): Entrada[] {
@@ -72,6 +75,7 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
       funcionario:
         RE_FUNC.exec(resto)?.[1] ?? LINHA_CORPO.exec(corpo)?.[1]?.trim() ?? SEM_FUNCIONARIO,
       cliente: RE_CLIENTE.exec(resto)?.[1] ?? LINHA_PH.exec(corpo)?.[1]?.trim() ?? null,
+      nome: LINHA_NOME.exec(corpo)?.[1]?.trim() || null,
       ligacao: RE_LIGACAO.exec(resto)?.[1] ?? null,
       ordem: saida.length,
     });
@@ -112,6 +116,8 @@ export interface Ligacao {
   quando: Date;
   funcionario: string;
   cliente: string | null;
+  /** Nome do cliente, como está na mensagem registrada; `null`/ausente se não há (ex.: CALLBACK sem a transferência no registro). */
+  nome?: string | null;
   /** `callback` = ninguém atendeu; `atendida` = não houve CALLBACK. */
   resultado: "atendida" | "callback";
   /** Foi só prévia do modo observação (nada enviado). */
@@ -279,6 +285,7 @@ export function montarLigacoes(
         quando: t.quando,
         funcionario: t.funcionario,
         cliente: t.cliente,
+        nome: t.nome,
         resultado: callback ? "callback" : "atendida",
         observacao: !t.enviada,
         semTransferencia: false,
@@ -296,6 +303,7 @@ export function montarLigacoes(
       quando: c.quando,
       funcionario: c.funcionario,
       cliente: c.cliente,
+      nome: null,
       resultado: "callback",
       observacao: !c.enviada,
       semTransferencia: true,

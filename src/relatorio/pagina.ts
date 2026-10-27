@@ -33,6 +33,7 @@ export function dadosDasLigacoes(ligacoes: readonly Ligacao[]): unknown[] {
     t: l.quando.getTime(),
     f: l.funcionario,
     c: l.cliente,
+    n: l.nome,
     r: l.resultado === "callback" ? "c" : "a",
     o: l.observacao ? 1 : 0,
     s: l.semTransferencia ? 1 : 0,
@@ -282,6 +283,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
         <th class="esq" data-k="t"><button type="button">Data e hora</button></th>
         <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
         <th class="esq" data-k="c" data-tipo="txt"><button type="button">Cliente</button></th>
+        <th class="esq" data-k="n" data-tipo="txt"><button type="button">Nome</button></th>
         <th class="esq" data-k="r" data-tipo="txt"><button type="button">Resultado</button></th>
         <th data-k="u"><button type="button">Duração até a transferência</button></th>
         <th class="esq">Corrigir</th>
@@ -418,7 +420,7 @@ const chavesFunc = {
   lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
   lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
 };
-const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), u: (c) => (c.r === "c" ? null : c.u) };
+const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", n: (c) => c.n || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), u: (c) => (c.r === "c" ? null : c.u) };
 const ORD = {
   tabela: { k: "tr", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
   longas: { k: "lg", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
@@ -544,7 +546,7 @@ function desenhar() {
 
   const lista = ordenar("detalhe", todasL);
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
-  if (!lista.length) db.append(vazioTr(6, "Nenhuma ligação transferida neste período."));
+  if (!lista.length) db.append(vazioTr(7, "Nenhuma ligação transferida neste período."));
   for (const c of lista) {
     const sel = c.rm ? el("span", "Callback removido", "selo neutro") : el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
@@ -560,7 +562,7 @@ function desenhar() {
       b.addEventListener("click", () => abrirConfirmacao(c));
       acao.append(b);
     }
-    db.append(linhaTr(el("td", dataHora(c.t), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.u)), acao));
+    db.append(linhaTr(el("td", dataHora(c.t), "esq"), el("td", rotulo(c.f), "esq"), el("td", c.c || "—", "esq"), el("td", c.n || "—", "esq"), r, el("td", c.r === "c" ? "—" : durTxt(c.u)), acao));
     if (c.rm) db.lastChild.classList.add("removida");
   }
   window.__relatorio = {
@@ -660,7 +662,7 @@ function abasDaPlanilha() {
   abas.push({ nome: "Por funcionário", larguras: [30, 14, 18, 14, 15, 14, 12, 13, 18, 15, 13, 13, 14, 14], linhas: pf, congelar: 1, filtro: "A1:N" + (linhas.length + 1), paisagem: true });
 
   // Ligações transferidas
-  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
+  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Nome", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
   for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
     const res = c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida";
     const obs = [];
@@ -670,9 +672,9 @@ function abasDaPlanilha() {
     if (c.o) obs.push("prévia do modo observação");
     if (c.s) obs.push("sem a mensagem de transferência no registro");
     const st = c.rm ? E.removido : E.texto;
-    lg.push([C(serialExcel(c.t), E.dataHora), C(rotulo(c.f), st), C(equipeTxt(c.f), st), C(c.c || "—", st), C(res, c.rm ? E.removido : c.r === "c" ? E.callback : E.atendida), C(c.r === "c" ? null : diaFr(c.u), E.duracao), C(c.r === "c" ? null : diaFr(c.d), E.duracao), C(obs.join("; "), E.texto)]);
+    lg.push([C(serialExcel(c.t), E.dataHora), C(rotulo(c.f), st), C(equipeTxt(c.f), st), C(c.c || "—", st), C(c.n || "—", st), C(res, c.rm ? E.removido : c.r === "c" ? E.callback : E.atendida), C(c.r === "c" ? null : diaFr(c.u), E.duracao), C(c.r === "c" ? null : diaFr(c.d), E.duracao), C(obs.join("; "), E.texto)]);
   }
-  abas.push({ nome: "Ligações", larguras: [20, 30, 13, 18, 18, 16, 14, 60], linhas: lg, congelar: 1, filtro: "A1:H" + lg.length, paisagem: true });
+  abas.push({ nome: "Ligações", larguras: [20, 30, 13, 18, 30, 18, 16, 14, 60], linhas: lg, congelar: 1, filtro: "A1:I" + lg.length, paisagem: true });
 
   // Ligações de 5 min
   const cinco = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Virou transferência", "Observações")];
