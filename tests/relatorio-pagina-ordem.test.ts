@@ -149,10 +149,10 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
       await clicar("detalhe", "Cliente");
       expect(await col("detalhe", 3)).toEqual(["0111", "0222", "0333", "0444", "0555", "0666"]);
       await clicar("detalhe", "Resultado");
-      expect((await col("detalhe", 4))[0]).toContain("Atendida");
+      expect((await col("detalhe", 5))[0]).toContain("Atendida"); // 4 = Nome
       await clicar("detalhe", "Duração");
-      expect((await col("detalhe", 5))[0]).toBe("5 min 00 s"); // maior primeiro
-      expect((await col("detalhe", 5)).slice(-3)).toEqual(["—", "—", "—"]);
+      expect((await col("detalhe", 6))[0]).toBe("5 min 00 s"); // maior primeiro
+      expect((await col("detalhe", 6)).slice(-3)).toEqual(["—", "—", "—"]);
       await clicar("detalhe", "Data e hora");
       expect((await col("detalhe", 3))[0]).toBe("0666");
       await clicar("detalhe", "Data e hora");
