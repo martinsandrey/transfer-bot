@@ -5,13 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { CallRow, TableSnapshot } from "../src/dominio/tipos.js";
 import { CallTracker } from "../src/monitor/call-tracker.js";
 import { RegistroEmArquivo, ARQUIVO_DURACOES } from "../src/registro/registro-arquivo.js";
-import { carimbo } from "../src/relatorio/callbacks-manuais.js";
-import {
-  lerDuracoes,
-  lerDuracoesNaLinha2,
-  lerRegistro,
-  montarLigacoes,
-} from "../src/relatorio/relatorio.js";
+import { lerDuracoes, lerDuracoesNaLinha2 } from "../src/relatorio/relatorio.js";
 
 /**
  * Caso real de 2026-10-30: a linha 2 ficou em Agent por 31 s, mas o "Call Duration" lido foi de 18 min (ele conta a ligação INTEIRA,
@@ -117,35 +111,5 @@ describe("duracoes.txt: tempo na linha 2 e duração provisória", () => {
     expect(lerDuracoes(txt).get("abc")).toBe(1800);
     // linhas antigas (sem o campo) continuam legíveis e não entram no mapa
     expect(lerDuracoesNaLinha2("2026-10-21 09:05:00 | Ligação: x | Duração: 90 s\n").size).toBe(0);
-  });
-});
-
-describe("relatório: a religação confere o tempo na linha 2", () => {
-  const hoje = new Date();
-  const em = (h: number, m: number) =>
-    new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate(), h, m, 0);
-  const bloco = (q: Date, lig: string, cb = false) =>
-    `===== ${carimbo(q)} | ENVIADA${cb ? " | CALLBACK (ligação curta)" : ""} | Funcionário: 908113 | Cliente: 011996775336 | Ligação: ${lig} =====\n${cb ? "CALLBACK" : "NAME: X"}\n\n`;
-  const REG = bloco(em(13, 10), "a1") + bloco(em(13, 11), "a1", true) + bloco(em(13, 14), "b1");
-  const montar = (naLinha2: [string, number][], duracoes: [string, number][]) =>
-    montarLigacoes(lerRegistro(REG, "transferencia"), new Map(duracoes), new Map(), {
-      religacao: { janelaMs: 3_600_000, duracaoMinSeg: 45 },
-      naLinha2: new Map(naLinha2),
-    });
-  const removido = (r: ReturnType<typeof montar>) => r.ligacoes.some((l) => l.callbackRemovido);
-
-  it("o caso do usuário: 1ª transferência callback + 2ª com 50 s na linha 2 = 1 transferência concluída", () => {
-    const r = montar([["b1", 50]], [["b1", 1000]]);
-    expect(removido(r)).toBe(true);
-    expect(r.ligacoes.find((l) => l.chave === "L:b1")?.substituiu).toBe(1);
-  });
-
-  it("2ª transferência com pouco tempo na linha 2 não remove o callback, mesmo com Call Duration enorme", () => {
-    expect(removido(montar([["b1", 30]], [["b1", 1000]]))).toBe(false);
-  });
-
-  it("registro antigo da 2ª (sem 'Na linha 2') usa a Duração, como antes", () => {
-    expect(removido(montar([], [["b1", 1000]]))).toBe(true);
-    expect(removido(montar([], [["b1", 30]]))).toBe(false);
   });
 });

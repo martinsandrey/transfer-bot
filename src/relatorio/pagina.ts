@@ -43,7 +43,11 @@ export function dadosDasLigacoes(ligacoes: readonly Ligacao[]): unknown[] {
     m: l.manual ? 1 : 0,
     // callback removido pela religação: não conta; `rm` = quando e quem fez a nova transferência atendida
     rm: l.callbackRemovido
-      ? { t: l.callbackRemovido.quando.getTime(), f: l.callbackRemovido.funcionario }
+      ? {
+          t: l.callbackRemovido.quando.getTime(),
+          f: l.callbackRemovido.funcionario,
+          c: l.callbackRemovido.eraCallback ? 1 : 0,
+        }
       : null,
     sb: l.substituiu ?? 0,
   }));
@@ -222,7 +226,8 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <ul class="explica">
       <li><b>Transferências com callback</b>: todas as ligações transferidas (inclui as que ninguém atendeu).</li>
       <li><b>Transferências sem callback</b>: as que foram atendidas por quem recebeu a transferência (linha 2; até 21/10/2026, o Stage 3).</li>
-      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. Se o mesmo cliente foi transferido de novo no mesmo dia (por qualquer funcionário) e dessa vez foi atendido (ou a transferência foi adicionada à mão), o callback é removido e as duas contam como uma só transferência, na nova (ver “Callback removido” na lista).</li>
+      <li><b>Callbacks</b>: as que ninguém atendeu ou que foram atendidas mas duraram muito pouco. </li>
+      <li><b>Só a última conta</b>: se o mesmo cliente (telefone) foi transferido mais de uma vez no mesmo dia, por qualquer funcionário, conta só a última transferência, no funcionário dela; as anteriores aparecem riscadas na lista (“Callback removido” se tinham dado callback, “Desconsiderada” se não) e não entram em nenhuma conta. A última vale pelo que aconteceu com ela: callback se deu callback, senão transferência concluída.</li>
       <li><b>Duração média</b>: média de quanto a ligação já durava quando foi transferida para a linha 2 (até 21/10/2026, o Stage 3) — o tempo antes da transferência, não o da conversa depois dela, nas transferências sem callback. Só entram as que têm essa duração registrada (as de versões anteriores do programa ficam de fora).</li>
     </ul>
     <div class="acoes">
@@ -373,6 +378,8 @@ function intervalo() {
 }
 /* callback removido pela religação: aparece na lista, mas não conta (a nova transferência atendida conta no lugar dela) */
 const conta = (c) => !c.rm;
+// Desconsiderada = o mesmo cliente foi transferido de novo depois, no mesmo dia (só a última conta). "Callback removido" = era callback.
+const rotuloRm = (c) => (c.rm.c ? "Callback removido" : "Desconsiderada");
 const dentro = (c, iv) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)) && !(iv.de && c.t < iv.de.getTime()) && !(iv.ate && c.t >= iv.ate.getTime());
 
 /* ---- agregação ---- */
@@ -420,7 +427,7 @@ const chavesFunc = {
   lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
   lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
 };
-const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", n: (c) => c.n || "", r: (c) => (c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida"), u: (c) => (c.r === "c" ? null : c.u) };
+const chavesDet = { t: (c) => c.t, f: (c) => rotulo(c.f), c: (c) => c.c || "", n: (c) => c.n || "", r: (c) => (c.rm ? rotuloRm(c) : c.r === "c" ? "Callback" : "Atendida"), u: (c) => (c.r === "c" ? null : c.u) };
 const ORD = {
   tabela: { k: "tr", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
   longas: { k: "lg", dir: -1, chaves: chavesFunc, desempate: (a, b) => txtCmp(rotulo(a.f), rotulo(b.f)) },
@@ -548,10 +555,10 @@ function desenhar() {
   const db = $("detalhe").tBodies[0]; db.replaceChildren();
   if (!lista.length) db.append(vazioTr(7, "Nenhuma ligação transferida neste período."));
   for (const c of lista) {
-    const sel = c.rm ? el("span", "Callback removido", "selo neutro") : el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
+    const sel = c.rm ? el("span", rotuloRm(c), "selo neutro") : el("span", c.r === "c" ? "Callback" : "Atendida", "selo " + (c.r === "c" ? "alerta" : "ok"));
     const r = el("td", undefined, "esq"); r.append(sel);
-    if (c.rm) r.append(" ", el("span", "(o cliente foi transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + " e atendido; conta como uma só transferência, na nova)", "explica"));
-    if (c.sb) r.append(" ", el("span", "(substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente)", "explica"));
+    if (c.rm) r.append(" ", el("span", "(o cliente foi transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + "; no mesmo dia só a última transferência conta)", "explica"));
+    if (c.sb) r.append(" ", el("span", "(vale no lugar de " + (c.sb > 1 ? c.sb + " transferências anteriores" : "1 transferência anterior") + " do mesmo cliente no dia)", "explica"));
     if (c.m) r.append(" ", el("span", "(marcado no relatório)", "explica"));
     if (c.o) r.append(" ", el("span", "(prévia)", "explica"));
     if (c.s) r.append(" ", el("span", "(sem a mensagem de transferência no registro)", "explica"));
@@ -636,7 +643,7 @@ function abasDaPlanilha() {
     [C("Duração média até a transferência", E.texto), C(diaFr(media(T)), E.duracao), C(T.nd ? "de " + T.nd + " transferência(s) sem callback com a duração registrada" : "sem duração registrada", E.texto)],
     [C("Ligações de 5 min", E.texto), C(T.lg, E.inteiro), C("ainda no Stage 1", E.texto)],
     [C("Ligações de 5 min que viraram transferência", E.texto), C(razao(T.lgTr, T.lgAv), E.porcentagem), C(T.lgAv ? T.lgTr + " de " + T.lgAv + " ligações de 5 min" : "sem dados", E.texto)],
-    [C("Callbacks removidos (cliente transferido de novo e atendido)", E.texto), C(removidos, E.inteiro), C("não entram nas contas; aparecem riscados na aba Ligações", E.texto)],
+    [C("Desconsideradas (cliente transferido de novo no mesmo dia)", E.texto), C(removidos, E.inteiro), C("não entram nas contas; aparecem riscados na aba Ligações", E.texto)],
     [],
     [C("Antes e depois do meio-dia (horário de Brasília)", E.secao), C(null, E.secao), C(null, E.secao), C(null, E.secao)],
     cab("Indicador", "Antes do meio-dia", "Depois do meio-dia", "Diferença (depois − antes)"),
@@ -664,10 +671,10 @@ function abasDaPlanilha() {
   // Ligações transferidas
   const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Nome", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
   for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
-    const res = c.rm ? "Callback removido" : c.r === "c" ? "Callback" : "Atendida";
+    const res = c.rm ? rotuloRm(c) : c.r === "c" ? "Callback" : "Atendida";
     const obs = [];
-    if (c.rm) obs.push("cliente transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + " e atendido (não conta)");
-    if (c.sb) obs.push("substitui " + (c.sb > 1 ? c.sb + " callbacks anteriores" : "1 callback anterior") + " do mesmo cliente");
+    if (c.rm) obs.push("cliente transferido de novo em " + dataHora(c.rm.t) + " por " + rotulo(c.rm.f) + "; no mesmo dia só a última conta (esta não conta)");
+    if (c.sb) obs.push("vale no lugar de " + (c.sb > 1 ? c.sb + " transferências anteriores" : "1 transferência anterior") + " do mesmo cliente no dia");
     if (c.m) obs.push("marcado como callback no relatório");
     if (c.o) obs.push("prévia do modo observação");
     if (c.s) obs.push("sem a mensagem de transferência no registro");

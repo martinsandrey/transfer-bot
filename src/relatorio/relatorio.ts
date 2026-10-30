@@ -154,26 +154,23 @@ export interface Ligacao {
   /** CALLBACK do bot: quando ele foi registrado. */
   quandoCallback?: Date;
   /**
-   * CALLBACK do bot desfeito porque o MESMO cliente foi transferido de novo (por qualquer funcionário) e dessa vez foi atendido
-   * por tempo suficiente, no mesmo dia (ver `OpcoesMontagem.religacao`). A ligação deixa de contar: ela e a nova viram UMA
-   * transferência normal, contada na nova.
+   * Desconsiderada porque o MESMO cliente foi transferido de novo (por qualquer funcionário) depois, no mesmo dia: só a última
+   * conta (ver `aplicarSoAUltima`). Não entra em nenhuma contagem. `quando`/`funcionario` são os da transferência que vale;
+   * `eraCallback`: a desconsiderada tinha dado callback (o "callback removido").
    */
-  callbackRemovido?: { quando: Date; funcionario: string };
-  /** Transferência digitada à mão no relatório (sem duração; vale como "atendida" na regra da religação). */
+  callbackRemovido?: { quando: Date; funcionario: string; eraCallback: boolean };
+  /** Transferência digitada à mão no relatório. */
   adicionadaAMao?: boolean;
-  /** Nova transferência atendida que absorveu tantos CALLBACKs anteriores do mesmo cliente. */
+  /** Quantas transferências anteriores do mesmo cliente, no mesmo dia, esta (a última) absorveu. */
   substituiu?: number;
 }
 
 export interface OpcoesMontagem {
   /**
-   * Religação: CALLBACK do bot é desfeito se o mesmo cliente for transferido de novo, no mesmo dia do CALLBACK (`janelaMs` > 0 liga
-   * a regra; o valor em si não é mais usado), e essa nova
-   * transferência tiver sido atendida e ficado pelo menos `duracaoMinSeg` na linha 2 ("Na linha 2" de duracoes.txt; em registro
-   * antigo, sem esse campo, vale a "Duração" da ligação inteira) ou tiver sido adicionada à mão. Ausente ou
-   * `janelaMs` 0 = desligado.
+   * Regra "só a última conta por cliente e por dia" (ver `aplicarSoAUltima`). `janelaMs` > 0 liga a regra (o valor em si não é mais
+   * usado); ausente ou 0 = desligada. `duracaoMinSeg` não é mais usado (aceito só por compatibilidade).
    */
-  religacao?: { janelaMs: number; duracaoMinSeg: number };
+  religacao?: { janelaMs: number; duracaoMinSeg?: number };
   /** Duração até a transferência por código de ligação (ver `lerDuracoesAteTransferencia`). */
   ateTransferencia?: ReadonlyMap<string, number>;
   /** Tempo só na linha 2 por código de ligação (ver `lerDuracoesNaLinha2`). */
@@ -183,45 +180,37 @@ export interface OpcoesMontagem {
 /** Só os números do telefone, sem zeros à esquerda (o 0 do DDD digitado à mão: 011963507426 e 11963507426 são o mesmo número). */
 const soDigitos = (s: string | null): string => (s ?? "").replace(/\D+/g, "").replace(/^0+/, "");
 
-/** Aplica a regra da religação (ver `OpcoesMontagem.religacao`) na lista já montada. */
-function aplicarReligacao(
-  ligacoes: Ligacao[],
-  op: { janelaMs: number; duracaoMinSeg: number },
-): void {
-  // Candidatas a "nova transferência": atendidas (nem CALLBACK do bot nem marcadas à mão) com duração registrada suficiente.
-  const atendidas = ligacoes.filter(
-    (l) =>
-      !l.semTransferencia &&
-      l.resultado === "atendida" &&
-      // a transferência digitada à mão não tem duração: vale como atendida (foi o usuário que confirmou que deu certo)
-      (l.adicionadaAMao === true ||
-        (l.naLinha2Seg != null
-          ? l.naLinha2Seg >= op.duracaoMinSeg
-          : l.duracaoSeg !== null && l.duracaoSeg >= op.duracaoMinSeg)) &&
-      soDigitos(l.cliente) !== "",
-  );
+/**
+ * Regra "só a última conta" (decisão do usuário, 2026-10-30): por cliente (telefone) e por dia, conta apenas a ÚLTIMA transferência;
+ * as anteriores do mesmo cliente no mesmo dia são desconsideradas (`callbackRemovido`), tenham dado callback ou não, e quem fez a
+ * última recebe a contagem. A última vale pelo que aconteceu com ela: callback se deu callback, senão transferência concluída.
+ * Cobre: callback e depois nova transferência = 1 transferência concluída; duas transferências sem callback = só a última;
+ * transferência concluída e depois callback = 1 callback. Prévias do modo observação não se misturam com mensagens enviadas.
+ */
+function aplicarSoAUltima(ligacoes: Ligacao[]): void {
+  const dia = (d: Date): string => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const porDia = new Map<string, Ligacao[]>();
   for (const l of ligacoes) {
-    // Só o CALLBACK do bot (o marcado à mão no relatório é decisão do usuário e fica como está).
-    if (l.resultado !== "callback" || l.manual || !l.quandoCallback) continue;
-    const cliente = soDigitos(l.cliente);
-    if (cliente === "") continue;
-    const dia = l.quandoCallback;
-    const nova = atendidas
-      .filter(
-        (o) =>
-          o !== l &&
-          o.observacao === l.observacao &&
-          mesmoTelefone(o.cliente, l.cliente) &&
-          o.quando.getTime() > l.quando.getTime() &&
-          // vale no mesmo dia do CALLBACK (decisão do usuário, 2026-10-23)
-          o.quando.getFullYear() === dia.getFullYear() &&
-          o.quando.getMonth() === dia.getMonth() &&
-          o.quando.getDate() === dia.getDate(),
-      )
-      .sort((a, b) => a.quando.getTime() - b.quando.getTime())[0];
-    if (!nova) continue;
-    l.callbackRemovido = { quando: nova.quando, funcionario: nova.funcionario };
-    nova.substituiu = (nova.substituiu ?? 0) + 1;
+    if (soDigitos(l.cliente) === "") continue;
+    const k = `${l.observacao ? "o" : "r"}|${dia(l.quando)}`;
+    porDia.set(k, [...(porDia.get(k) ?? []), l]);
+  }
+  for (const doDia of porDia.values()) {
+    // do mais recente para o mais antigo: o primeiro de cada cliente é o que vale; os seguintes (mais antigos) são desconsiderados
+    const validas: Ligacao[] = [];
+    for (const l of [...doDia].sort((a, b) => b.quando.getTime() - a.quando.getTime())) {
+      const ultima = validas.find((v) => mesmoTelefone(v.cliente, l.cliente));
+      if (!ultima) {
+        validas.push(l);
+        continue;
+      }
+      l.callbackRemovido = {
+        quando: ultima.quando,
+        funcionario: ultima.funcionario,
+        eraCallback: l.resultado === "callback",
+      };
+      ultima.substituiu = (ultima.substituiu ?? 0) + 1;
+    }
   }
 }
 
@@ -336,7 +325,7 @@ export function montarLigacoes(
       quandoCallback: c.quando,
     })),
   ].sort((a, b) => a.quando.getTime() - b.quando.getTime());
-  if (op.religacao && op.religacao.janelaMs > 0) aplicarReligacao(ligacoes, op.religacao);
+  if (op.religacao && op.religacao.janelaMs > 0) aplicarSoAUltima(ligacoes);
 
   const entradasLongas = unicas.filter((e) => e.tipo === "longa");
   // Transferências adicionadas à mão: cada uma "transfere" a ligação de 5 min mais recente do mesmo cliente (antes dela).

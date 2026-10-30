@@ -10,7 +10,7 @@ export function lerEnv(caminho = ".env"): {
   pasta: string;
   apelidos: Map<string, string>;
   equipePaquistanesDigitos: string[];
-  religacao: { janelaMs: number; duracaoMinSeg: number };
+  religacao: { janelaMs: number };
   fuso: string;
   /** Minutos que definem a ligação longa (DURACAO_LONGA_MIN); só muda os textos do relatório. */
   duracaoLongaMin: number;
@@ -18,9 +18,8 @@ export function lerEnv(caminho = ".env"): {
   let pasta = "registros";
   let apelidos = new Map<string, string>();
   let digitos: string[] = ["0"];
-  // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60, CALLBACK_LINHA2_SEG 45.
+  // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60 (hoje só liga/desliga a regra "só a última conta").
   let janelaMin = 60;
-  let duracaoMinSeg = 45;
   let fuso = FUSO_PADRAO;
   let duracaoLongaMin = 5;
   const inteiro = (v: string | undefined, min: number, max: number): number | null => {
@@ -38,7 +37,6 @@ export function lerEnv(caminho = ".env"): {
       const d = interpretarDigitos((env["EQUIPE_PAQUISTANES_DIGITOS"] ?? "").trim() || "0");
       if (d) digitos = [...d];
       janelaMin = inteiro(env["CALLBACK_RELIGACAO_MIN"], 0, 1440) ?? janelaMin;
-      duracaoMinSeg = inteiro(env["CALLBACK_LINHA2_SEG"], 0, 3600) ?? duracaoMinSeg;
       duracaoLongaMin = inteiro(env["DURACAO_LONGA_MIN"], 1, 600) ?? duracaoLongaMin;
       const f = (env["FUSO_HORARIO"] ?? "").trim();
       if (f && fusoValido(f)) fuso = f;
@@ -50,7 +48,7 @@ export function lerEnv(caminho = ".env"): {
     pasta: resolve(pasta),
     apelidos,
     equipePaquistanesDigitos: digitos,
-    religacao: { janelaMs: janelaMin * 60_000, duracaoMinSeg },
+    religacao: { janelaMs: janelaMin * 60_000 },
     fuso,
     duracaoLongaMin,
   };
