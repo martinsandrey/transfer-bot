@@ -14,8 +14,6 @@ export interface DadosDaPagina {
   inicial: { periodo: string; de?: string; ate?: string };
   /** Apelidos (número só com dígitos → nome). O apelido sempre aparece junto do número. */
   apelidos?: ReadonlyMap<string, string>;
-  /** Penúltimos dígitos da equipe do paquistanês (a caixa "Mostrar equipe do paquistanês" usa isto). */
-  equipePaquistanesDigitos?: readonly string[];
   /** Página servida pelo `relatorio.bat` (servidor local): habilita "Marcar como callback". Sem isto, a página só mostra. */
   servidor?: { token: string };
 }
@@ -65,7 +63,7 @@ export function dadosDasLongas(longas: DadosDaPagina["longas"]): unknown[] {
 }
 
 /**
- * Página HTML autônoma (sem internet, sem bibliotecas): filtros de período, equipe e ordenação funcionam dentro da própria página.
+ * Página HTML autônoma (sem internet, sem bibliotecas): filtros de período e ordenação funcionam dentro da própria página.
  * Os dados (telefones de clientes) ficam só no arquivo local, que fica na pasta de registros (ignorada pelo git).
  */
 export function paginaHtml(d: DadosDaPagina): string {
@@ -75,7 +73,6 @@ export function paginaHtml(d: DadosDaPagina): string {
     ligacoes: dadosDasLigacoes(d.ligacoes),
     longas: dadosDasLongas(d.longas),
     ap: Object.fromEntries(d.apelidos ?? []),
-    pk: [...(d.equipePaquistanesDigitos ?? ["0"])],
     inicial: d.inicial,
     srv: d.servidor ? { token: d.servidor.token } : null,
   };
@@ -156,7 +153,6 @@ footer{color:var(--suave);font-size:12px;margin-top:22px}
 .chk.suave{color:var(--suave)}
 h3{font-size:15px;margin:18px 0 8px}
 .dif{color:var(--suave)}
-.equipe{display:inline-block;padding:1px 8px;border-radius:999px;font-size:12px;border:1px solid var(--linha);color:var(--suave)}
 .horas{display:grid;grid-template-columns:48px 1fr 1fr;gap:4px 12px;align-items:center;font-variant-numeric:tabular-nums;font-size:13px}
 .horas .cab{color:var(--suave);font-weight:600}
 .horas .h{color:var(--suave)}
@@ -203,7 +199,6 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
       <label>De <input type="date" id="de"></label>
       <label>até <input type="date" id="ate"></label>
     </div>
-    <label class="chk"><input type="checkbox" id="pk" checked> Mostrar equipe do paquistanês</label>
     <label class="chk suave"><input type="checkbox" id="obs"> Incluir também as prévias do modo observação (nada foi enviado)</label>
   </section>
 
@@ -215,7 +210,6 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <div class="rolagem"><table id="tabela">
       <thead><tr>
         <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
-        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
         <th data-k="tr"><button type="button">Transferências com callback</button></th>
         <th data-k="sem"><button type="button">Transferências sem callback</button></th>
         <th data-k="cb"><button type="button">Callbacks</button></th>
@@ -245,7 +239,6 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <div class="rolagem"><table id="longas">
       <thead><tr>
         <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
-        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
         <th data-k="lg"><button type="button">Ligações de 5 min</button></th>
         <th data-k="lgTr"><button type="button">Transferidas</button></th>
         <th data-k="pTr"><button type="button">% transferidas</button></th>
@@ -271,7 +264,6 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     <div class="rolagem"><table id="meio">
       <thead><tr>
         <th class="esq" data-k="f" data-tipo="txt"><button type="button">Funcionário</button></th>
-        <th class="esq" data-k="eq" data-tipo="txt"><button type="button">Equipe</button></th>
         <th data-k="lgM"><button type="button">5 min antes do meio-dia</button></th>
         <th data-k="trM"><button type="button">Transferências antes</button></th>
         <th data-k="cM"><button type="button">% transferidas antes</button></th>
@@ -345,14 +337,10 @@ function deslocFuso(t) { // minutos entre o fuso do programa e o UTC no instante
   return Math.round((Date.UTC(v("year"), v("month") - 1, v("day"), v("hour"), v("minute"), v("second")) - Math.floor(t / 1000) * 1000) / 60000);
 }
 const $ = (id) => document.getElementById(id);
-const estado = { p: "hoje", de: "", ate: "", obs: false, pk: true };
+const estado = { p: "hoje", de: "", ate: "", obs: false };
 
-/* ---- funcionários: apelido sempre junto do número; equipe pelo penúltimo dígito ---- */
-const PK = new Set(D.pk);
+/* ---- funcionários: apelido sempre junto do número ---- */
 const dig = (f) => String(f).replace(/\\D+/g, "");
-const penult = (f) => { const d = dig(f); return d.length >= 2 ? d.charAt(d.length - 2) : ""; };
-const ehPk = (f) => PK.has(penult(f));
-const equipeTxt = (f) => (ehPk(f) ? "Paquistanês" : "Própria");
 const rotulo = (f) => { if (dig(f) === "") return String(f); const n = D.ap[dig(f)]; return n ? n + " (" + f + ")" : f + " (sem apelido)"; };
 /* Brasília = UTC-3 (sem horário de verão desde 2019) */
 const horaBR = (t) => new Date(t - 3 * 3600000).getUTCHours();
@@ -383,7 +371,7 @@ function intervalo() {
 const conta = (c) => !c.rm;
 // Desconsiderada = o mesmo cliente foi transferido de novo depois, no mesmo dia (só a última conta). "Callback removido" = era callback.
 const rotuloRm = (c) => (c.rm.c ? "Callback removido" : "Desconsiderada");
-const dentro = (c, iv) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)) && !(iv.de && c.t < iv.de.getTime()) && !(iv.ate && c.t >= iv.ate.getTime());
+const dentro = (c, iv) => (estado.obs || !c.o) && !(iv.de && c.t < iv.de.getTime()) && !(iv.ate && c.t >= iv.ate.getTime());
 
 /* ---- agregação ---- */
 function agregar(L, G) {
@@ -425,7 +413,7 @@ function cartao(rot, num, nota, cls) {
 const vazio = (x) => x === null || x === undefined || (typeof x === "number" && isNaN(x));
 const txtCmp = (a, b) => String(a).localeCompare(String(b), "pt-BR", { numeric: true, sensitivity: "base" });
 const chavesFunc = {
-  f: (x) => rotulo(x.f), eq: (x) => equipeTxt(x.f),
+  f: (x) => rotulo(x.f),
   tr: (x) => x.a.tr, sem: (x) => x.a.sem, cb: (x) => x.a.cb, pc: (x) => razao(x.a.cb, x.a.tr), med: (x) => media(x.a), lg: (x) => x.a.lg,
   lgTr: (x) => x.a.lgTr, pTr: (x) => razao(x.a.lgTr, x.a.lgAv), lgNao: (x) => x.a.lgAv - x.a.lgTr, pNao: (x) => razao(x.a.lgAv - x.a.lgTr, x.a.lgAv),
   lgM: (x) => x.m.lg, trM: (x) => x.m.tr, cM: (x) => razao(x.m.lgTr, x.m.lgAv), lgT: (x) => x.t.lg, trT: (x) => x.t.tr, cT: (x) => razao(x.t.lgTr, x.t.lgAv),
@@ -460,15 +448,13 @@ for (const id of Object.keys(ORD)) {
 }
 
 /* ---- desenho ---- */
-const selaEquipe = (f) => el("span", equipeTxt(f), "equipe");
-function celEquipe(f) { const td = el("td", undefined, "esq"); td.append(selaEquipe(f)); return td; }
 
 function desenharTransferencias(linhas, T) {
   const tb = $("tabela").tBodies[0]; tb.replaceChildren();
   if (!linhas.length) tb.append(vazioTr(8, "Nenhuma mensagem registrada neste período."));
   for (const x of linhas) {
     const pc = el("td", pctTxt(x.a.cb, x.a.tr)); const b = el("span", undefined, "barra"); const i = el("i"); i.style.width = (x.a.tr ? Math.round((x.a.cb / x.a.tr) * 1000) / 10 : 0) + "%"; b.append(i); pc.append(b);
-    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.a.tr)), el("td", String(x.a.sem)), el("td", String(x.a.cb)), pc, el("td", durTxt(media(x.a))), el("td", String(x.a.lg))));
+    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), el("td", String(x.a.tr)), el("td", String(x.a.sem)), el("td", String(x.a.cb)), pc, el("td", durTxt(media(x.a))), el("td", String(x.a.lg))));
   }
   const tf = $("tabela").tFoot; tf.replaceChildren();
   tf.append(linhaTr(el("td", "TOTAL", "esq"), el("td", "", "esq"), el("td", String(T.tr)), el("td", String(T.sem)), el("td", String(T.cb)), el("td", pctTxt(T.cb, T.tr)), el("td", durTxt(media(T))), el("td", String(T.lg))));
@@ -479,13 +465,13 @@ function desenharLongas(linhas, T) {
   if (!linhas.length) tb.append(vazioTr(7, "Nenhuma ligação de 5 minutos neste período."));
   for (const x of linhas) {
     const nao = x.a.lgAv - x.a.lgTr;
-    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.a.lg)), el("td", String(x.a.lgTr)), el("td", pctTxt(x.a.lgTr, x.a.lgAv)), el("td", String(nao)), el("td", pctTxt(nao, x.a.lgAv))));
+    tb.append(linhaTr(el("td", rotulo(x.f), "esq"), el("td", String(x.a.lg)), el("td", String(x.a.lgTr)), el("td", pctTxt(x.a.lgTr, x.a.lgAv)), el("td", String(nao)), el("td", pctTxt(nao, x.a.lgAv))));
   }
   const tf = $("longas").tFoot; tf.replaceChildren();
   const naoT = T.lgAv - T.lgTr;
   tf.append(linhaTr(el("td", "TOTAL", "esq"), el("td", "", "esq"), el("td", String(T.lg)), el("td", String(T.lgTr)), el("td", pctTxt(T.lgTr, T.lgAv)), el("td", String(naoT)), el("td", pctTxt(naoT, T.lgAv))));
   const semCod = T.lg - T.lgAv;
-  $("nota-longas").textContent = "Uma ligação de 5 min conta como transferida se a mesma ligação foi transferida depois (a transferência pode ter vindo de qualquer equipe). Uma transferência adicionada à mão conta para a ligação de 5 min do mesmo telefone que começou até 2 horas antes dela." + (semCod > 0 ? " " + semCod + " ligação(ões) antiga(s), sem o código da ligação no registro, não entram nas porcentagens." : "") + " Quem ainda está na ligação aparece como não transferida até ser transferida.";
+  $("nota-longas").textContent = "Uma ligação de 5 min conta como transferida se a mesma ligação foi transferida depois (a transferência pode ter vindo de qualquer funcionário). Uma transferência adicionada à mão conta para a ligação de 5 min do mesmo telefone que começou até 2 horas antes dela." + (semCod > 0 ? " " + semCod + " ligação(ões) antiga(s), sem o código da ligação no registro, não entram nas porcentagens." : "") + " Quem ainda está na ligação aparece como não transferida até ser transferida.";
 }
 
 function sinal(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n); }
@@ -525,7 +511,7 @@ function desenharMeioDia(L, G, linhas) {
   const mb = $("meio").tBodies[0]; mb.replaceChildren();
   if (!linhas.length) mb.append(vazioTr(8, "Nenhum movimento neste período."));
   for (const x of ordenar("meio", linhas)) {
-    mb.append(linhaTr(el("td", rotulo(x.f), "esq"), celEquipe(x.f), el("td", String(x.m.lg)), el("td", String(x.m.tr)), el("td", pctTxt(x.m.lgTr, x.m.lgAv)), el("td", String(x.t.lg)), el("td", String(x.t.tr)), el("td", pctTxt(x.t.lgTr, x.t.lgAv))));
+    mb.append(linhaTr(el("td", rotulo(x.f), "esq"), el("td", String(x.m.lg)), el("td", String(x.m.tr)), el("td", pctTxt(x.m.lgTr, x.m.lgAv)), el("td", String(x.t.lg)), el("td", String(x.t.tr)), el("td", pctTxt(x.t.lgTr, x.t.lgAv))));
   }
   return { M, T: Tt };
 }
@@ -587,7 +573,7 @@ function desenhar() {
 function sincronizar() {
   for (const b of $("filtros").children) b.setAttribute("aria-pressed", String(b.dataset.p === estado.p));
   $("datas").hidden = estado.p !== "personalizado";
-  $("de").value = estado.de; $("ate").value = estado.ate; $("obs").checked = estado.obs; $("pk").checked = estado.pk;
+  $("de").value = estado.de; $("ate").value = estado.ate; $("obs").checked = estado.obs;
   desenhar();
 }
 
@@ -599,7 +585,6 @@ $("filtros").addEventListener("click", (e) => {
 $("de").addEventListener("input", () => { estado.de = $("de").value; if (!estado.ate || estado.ate < estado.de) estado.ate = estado.de; sincronizar(); });
 $("ate").addEventListener("input", () => { estado.ate = $("ate").value; sincronizar(); });
 $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desenhar(); });
-$("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar(); });
 /* ---- planilha Excel (.xlsx) com o que está na tela (mesmo período e filtros) ---- */
 const montarXlsx = /*XLSX*/null;
 const montarTabelaMensal = /*TABELAMENSAL*/null;
@@ -623,7 +608,7 @@ function abasDaPlanilha() {
   const T = agregar(L, G);
   const linhas = ordenar("tabela", porFuncionario(L, G));
   const geradoEm = new Date();
-  const filtros = "Equipe do paquistanês: " + (estado.pk ? "incluída" : "fora") + " · Prévias do modo observação: " + (estado.obs ? "incluídas" : "fora");
+  const filtros = "Prévias do modo observação: " + (estado.obs ? "incluídas" : "fora");
   const abas = [];
 
   // Resumo
@@ -663,17 +648,17 @@ function abasDaPlanilha() {
   abas.push({ nome: "Resumo", larguras: [50, 18, 22, 60], linhas: r, mesclar: ["A1:D1", "A16:D16"], paisagem: true });
 
   // Por funcionário
-  const pf = [cab("Funcionário", "Número", "Apelido", "Equipe", "Transferências", "Sem callback", "Callbacks", "% de callback", "Duração média até a transferência", "Transferências com duração", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas")];
-  const linhaFunc = (nome, num, ap, eq, a, total) => {
+  const pf = [cab("Funcionário", "Número", "Apelido", "Transferências", "Sem callback", "Callbacks", "% de callback", "Duração média até a transferência", "Transferências com duração", "Ligações de 5 min", "5 min transferidas", "% 5 min transferidas", "5 min não transferidas")];
+  const linhaFunc = (nome, num, ap, a, total) => {
     const [tx, ni, pc, du] = total ? [E.totalTexto, E.totalInteiro, E.totalPorcentagem, E.totalDuracao] : [E.texto, E.inteiro, E.porcentagem, E.duracao];
-    return [C(nome, tx), C(num, tx), C(ap, tx), C(eq, tx), C(a.tr, ni), C(a.sem, ni), C(a.cb, ni), C(razao(a.cb, a.tr), pc), C(diaFr(media(a)), du), C(a.nd, ni), C(a.lg, ni), C(a.lgTr, ni), C(razao(a.lgTr, a.lgAv), pc), C(a.lgAv - a.lgTr, ni)];
+    return [C(nome, tx), C(num, tx), C(ap, tx), C(a.tr, ni), C(a.sem, ni), C(a.cb, ni), C(razao(a.cb, a.tr), pc), C(diaFr(media(a)), du), C(a.nd, ni), C(a.lg, ni), C(a.lgTr, ni), C(razao(a.lgTr, a.lgAv), pc), C(a.lgAv - a.lgTr, ni)];
   };
-  for (const x of linhas) pf.push(linhaFunc(rotulo(x.f), String(x.f), apelido(x.f), equipeTxt(x.f), x.a, false));
-  pf.push(linhaFunc("TOTAL", "", "", "", T, true));
-  abas.push({ nome: "Por funcionário", larguras: [30, 14, 18, 14, 15, 14, 12, 13, 18, 15, 13, 13, 14, 14], linhas: pf, congelar: 1, filtro: "A1:N" + (linhas.length + 1), paisagem: true });
+  for (const x of linhas) pf.push(linhaFunc(rotulo(x.f), String(x.f), apelido(x.f), x.a, false));
+  pf.push(linhaFunc("TOTAL", "", "", T, true));
+  abas.push({ nome: "Por funcionário", larguras: [30, 14, 18, 15, 14, 12, 13, 18, 15, 13, 13, 14, 14], linhas: pf, congelar: 1, filtro: "A1:M" + (linhas.length + 1), paisagem: true });
 
   // Ligações transferidas
-  const lg = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Nome", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
+  const lg = [cab("Data e hora", "Funcionário", "Cliente", "Nome", "Resultado", "Duração até a transferência", "Duração depois da transferência", "Observações")];
   for (const c of [...todasL].sort((a, b) => a.t - b.t)) {
     const res = c.rm ? rotuloRm(c) : c.r === "c" ? "Callback" : "Atendida";
     const obs = [];
@@ -683,22 +668,22 @@ function abasDaPlanilha() {
     if (c.o) obs.push("prévia do modo observação");
     if (c.s) obs.push("sem a mensagem de transferência no registro");
     const st = c.rm ? E.removido : E.texto;
-    lg.push([C(serialExcel(c.t), E.dataHora), C(rotulo(c.f), st), C(equipeTxt(c.f), st), C(c.c || "—", st), C(c.n || "—", st), C(res, c.rm ? E.removido : c.r === "c" ? E.callback : E.atendida), C(c.r === "c" ? null : diaFr(c.u), E.duracao), C(c.r === "c" ? null : diaFr(c.d), E.duracao), C(obs.join("; "), E.texto)]);
+    lg.push([C(serialExcel(c.t), E.dataHora), C(rotulo(c.f), st), C(c.c || "—", st), C(c.n || "—", st), C(res, c.rm ? E.removido : c.r === "c" ? E.callback : E.atendida), C(c.r === "c" ? null : diaFr(c.u), E.duracao), C(c.r === "c" ? null : diaFr(c.d), E.duracao), C(obs.join("; "), E.texto)]);
   }
-  abas.push({ nome: "Ligações", larguras: [20, 30, 13, 18, 30, 18, 16, 14, 60], linhas: lg, congelar: 1, filtro: "A1:I" + lg.length, paisagem: true });
+  abas.push({ nome: "Ligações", larguras: [20, 30, 18, 30, 18, 16, 14, 60], linhas: lg, congelar: 1, filtro: "A1:H" + lg.length, paisagem: true });
 
   // Ligações de 5 min
-  const cinco = [cab("Data e hora", "Funcionário", "Equipe", "Cliente", "Virou transferência", "Observações")];
+  const cinco = [cab("Data e hora", "Funcionário", "Cliente", "Virou transferência", "Observações")];
   for (const g of [...G].sort((a, b) => a.t - b.t))
-    cinco.push([C(serialExcel(g.t), E.dataHora), C(rotulo(g.f), E.texto), C(equipeTxt(g.f), E.texto), C(g.c || "—", E.texto), C(g.x === null || g.x === undefined ? "Sem código (registro antigo)" : g.x ? "Sim" : "Não", g.x ? E.atendida : E.texto), C(g.o ? "prévia do modo observação" : "", E.texto)]);
-  abas.push({ nome: "Ligações de 5 min", larguras: [20, 30, 13, 18, 26, 28], linhas: cinco, congelar: 1, filtro: "A1:F" + cinco.length });
+    cinco.push([C(serialExcel(g.t), E.dataHora), C(rotulo(g.f), E.texto), C(g.c || "—", E.texto), C(g.x === null || g.x === undefined ? "Sem código (registro antigo)" : g.x ? "Sim" : "Não", g.x ? E.atendida : E.texto), C(g.o ? "prévia do modo observação" : "", E.texto)]);
+  abas.push({ nome: "Ligações de 5 min", larguras: [20, 30, 18, 26, 28], linhas: cinco, congelar: 1, filtro: "A1:E" + cinco.length });
 
   // Antes e depois do meio-dia, por funcionário
-  const md = [cab("Funcionário", "Equipe", "5 min antes do meio-dia", "Transferências antes", "Callbacks antes", "% 5 min transferidas antes", "5 min depois do meio-dia", "Transferências depois", "Callbacks depois", "% 5 min transferidas depois")];
+  const md = [cab("Funcionário", "5 min antes do meio-dia", "Transferências antes", "Callbacks antes", "% 5 min transferidas antes", "5 min depois do meio-dia", "Transferências depois", "Callbacks depois", "% 5 min transferidas depois")];
   for (const x of ordenar("meio", linhas))
-    md.push([C(rotulo(x.f), E.texto), C(equipeTxt(x.f), E.texto), C(x.m.lg, E.inteiro), C(x.m.tr, E.inteiro), C(x.m.cb, E.inteiro), C(razao(x.m.lgTr, x.m.lgAv), E.porcentagem), C(x.t.lg, E.inteiro), C(x.t.tr, E.inteiro), C(x.t.cb, E.inteiro), C(razao(x.t.lgTr, x.t.lgAv), E.porcentagem)]);
-  md.push([C("TOTAL", E.totalTexto), C("", E.totalTexto), C(M.lg, E.totalInteiro), C(M.tr, E.totalInteiro), C(M.cb, E.totalInteiro), C(razao(M.lgTr, M.lgAv), E.totalPorcentagem), C(Tt.lg, E.totalInteiro), C(Tt.tr, E.totalInteiro), C(Tt.cb, E.totalInteiro), C(razao(Tt.lgTr, Tt.lgAv), E.totalPorcentagem)]);
-  abas.push({ nome: "Meio-dia por funcionário", larguras: [30, 13, 14, 14, 12, 15, 14, 14, 12, 15], linhas: md, congelar: 1, filtro: "A1:J" + (md.length - 1), paisagem: true });
+    md.push([C(rotulo(x.f), E.texto), C(x.m.lg, E.inteiro), C(x.m.tr, E.inteiro), C(x.m.cb, E.inteiro), C(razao(x.m.lgTr, x.m.lgAv), E.porcentagem), C(x.t.lg, E.inteiro), C(x.t.tr, E.inteiro), C(x.t.cb, E.inteiro), C(razao(x.t.lgTr, x.t.lgAv), E.porcentagem)]);
+  md.push([C("TOTAL", E.totalTexto), C(M.lg, E.totalInteiro), C(M.tr, E.totalInteiro), C(M.cb, E.totalInteiro), C(razao(M.lgTr, M.lgAv), E.totalPorcentagem), C(Tt.lg, E.totalInteiro), C(Tt.tr, E.totalInteiro), C(Tt.cb, E.totalInteiro), C(razao(Tt.lgTr, Tt.lgAv), E.totalPorcentagem)]);
+  abas.push({ nome: "Meio-dia por funcionário", larguras: [30, 14, 14, 12, 15, 14, 14, 12, 15], linhas: md, congelar: 1, filtro: "A1:I" + (md.length - 1), paisagem: true });
 
   // Por hora (Brasília)
   const h5 = new Array(24).fill(0), hT = new Array(24).fill(0), hC = new Array(24).fill(0);
@@ -718,7 +703,7 @@ window.__abasDaPlanilha = abasDaPlanilha;
 $("mes-csv").value = new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
 $("mes-btn").addEventListener("click", () => {
   const mes = $("mes-csv").value || new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
-  const lista = D.ligacoes.filter((c) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)));
+  const lista = D.ligacoes.filter((c) => estado.obs || !c.o);
   const T = montarTabelaMensal(lista, mes, D.fuso);
   const linhas = [cab("編號", ...Array.from({ length: T.dias }, (_, i) => String(i + 1)))];
   for (const r of T.linhas) linhas.push([C(r.chave, E.texto), ...r.contagem.map((n) => C(n, E.inteiro))]);

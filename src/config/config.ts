@@ -4,7 +4,6 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { z } from "zod";
-import { interpretarDigitos, type FiltroFuncionarios } from "../monitor/filtro-funcionario.js";
 import { interpretarApelidos } from "./apelidos.js";
 
 export type ModoEnvio = "observacao" | "live";
@@ -57,12 +56,8 @@ export interface AppConfig {
     timeoutEnvioMs: number;
     arquivoSessao: string;
   };
-  /** Quais funcionários (pelo penúltimo dígito do Callback Number do Stage 1) vão para cada grupo. */
-  filtroFuncionarios: FiltroFuncionarios;
   /** Apelidos dos funcionários (número → nome). Sempre mostrados junto do número. */
   apelidos: ReadonlyMap<string, string>;
-  /** Penúltimos dígitos que identificam a equipe do paquistanês (o relatório pode ocultá-la). */
-  equipePaquistanesDigitos: readonly string[];
   /** Minutos de duração (em Stage 1) que disparam a mensagem do segundo grupo. */
   duracaoLongaMin: number;
   /** Minutos em que o mesmo cliente não recebe de novo a mensagem de 5 min. 0 = desligado. */
@@ -189,10 +184,7 @@ const esquema = z.object({
   TELEGRAM_DESTINO_5MIN: textoOpcional,
   DURACAO_LONGA_MIN: inteiro("DURACAO_LONGA_MIN", 5, 1, 600),
   REPETICAO_5MIN_MIN: inteiro("REPETICAO_5MIN_MIN", 30, 0, 1440),
-  PENULTIMO_DIGITO_TRANSFERENCIA: textoOpcional,
-  PENULTIMO_DIGITO_5MIN: textoOpcional,
   APELIDOS_FUNCIONARIOS: textoOpcional,
-  EQUIPE_PAQUISTANES_DIGITOS: textoOpcional,
   TIMEOUT_ENVIO_TELEGRAM_MS: inteiro("TIMEOUT_ENVIO_TELEGRAM_MS", 30000, 1000, 600000),
   VALIDADE_MENSAGEM_MIN: inteiro("VALIDADE_MENSAGEM_MIN", 15, 0, 100000),
   FUSO_HORARIO: z.preprocess(
@@ -245,26 +237,10 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       'SEND_MODE=live exige TELEGRAM_API_ID e TELEGRAM_API_HASH (crie em https://my.telegram.org, "API development tools").',
     );
   }
-  // Transferências: por padrão só os funcionários com penúltimo dígito 1 (equipe do usuário). 5 min: todos. "*" = todos.
-  const digitosTransferencia = interpretarDigitos(c.PENULTIMO_DIGITO_TRANSFERENCIA ?? "1");
-  const digitos5min = interpretarDigitos(c.PENULTIMO_DIGITO_5MIN ?? "*");
-  if (digitosTransferencia === undefined)
-    problemas.push(
-      'PENULTIMO_DIGITO_TRANSFERENCIA: use dígitos de 0 a 9 separados por vírgula (ex.: "1" ou "0,1") ou "*" para todos.',
-    );
-  if (digitos5min === undefined)
-    problemas.push(
-      'PENULTIMO_DIGITO_5MIN: use dígitos de 0 a 9 separados por vírgula (ex.: "1" ou "0,1") ou "*" para todos.',
-    );
   const ap = interpretarApelidos(c.APELIDOS_FUNCIONARIOS);
   if (ap.invalidos.length)
     problemas.push(
       `APELIDOS_FUNCIONARIOS: use "numero=Nome" separados por ponto e vírgula (ex.: 908113=Maria; 908114=João). Item inválido: "${ap.invalidos[0]}".`,
-    );
-  const digitosPk = interpretarDigitos(c.EQUIPE_PAQUISTANES_DIGITOS ?? "0");
-  if (digitosPk === undefined || digitosPk === null)
-    problemas.push(
-      'EQUIPE_PAQUISTANES_DIGITOS: use dígitos de 0 a 9 separados por vírgula (ex.: "0" ou "0,2"). Deixe em branco para o padrão "0".',
     );
   if (problemas.length) throw new ErroDeConfiguracao(problemas);
 
@@ -311,12 +287,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       timeoutEnvioMs: c.TIMEOUT_ENVIO_TELEGRAM_MS,
       arquivoSessao: join(dados, "telegram", "sessao.txt"),
     },
-    filtroFuncionarios: {
-      transferencia: digitosTransferencia ?? null,
-      longa: digitos5min ?? null,
-    },
     apelidos: ap.apelidos,
-    equipePaquistanesDigitos: [...(digitosPk ?? [])],
     duracaoLongaMin: c.DURACAO_LONGA_MIN,
     repeticao5minMin: c.REPETICAO_5MIN_MIN,
     validadeMensagemMin: c.VALIDADE_MENSAGEM_MIN,

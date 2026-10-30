@@ -44,7 +44,6 @@ Abra com `configurar.bat`. Principais itens (a lista completa, comentada, está 
 | `SEND_MODE`                                                       | `observacao` (padrão: só mostra) ou `live` (envia de verdade).                                                                                                       |
 | `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`                            | Credenciais do Telegram (my.telegram.org).                                                                                                                           |
 | `TELEGRAM_DESTINO`                                                | `me`, nome exato do canal/grupo (aceita chinês), `@usuario` ou ID.                                                                                                   |
-| `PENULTIMO_DIGITO_TRANSFERENCIA`, `PENULTIMO_DIGITO_5MIN`         | Quais funcionários geram mensagem em cada grupo (ver "Funcionários por dígito"). Padrão: transferências `1`, 5 min `*` (todos).                                      |
 | `TELEGRAM_DESTINO_5MIN`, `DURACAO_LONGA_MIN`                      | 2º grupo: ligações que chegam a N min (padrão 5) **ainda em Stage 1**. Vazio = desligado.                                                                            |
 | `VALIDADE_MENSAGEM_MIN`                                           | Mensagem mais velha que isso não é enviada (padrão 15; 0 = nunca descarta).                                                                                          |
 | `JANELA_TRANSFERENCIA_SEG`                                        | Tempo máximo entre o Stage 1 sumir e a linha de destino aparecer (padrão 60).                                                                                        |
@@ -88,29 +87,7 @@ Abra **`relatorio.bat`**: o navegador abre uma página com o relatório e os fil
 
 **Corrigir uma ligação:** na lista "Ligações do período", o botão **Marcar como callback** (em cada ligação atendida) abre uma janela de confirmação; ao confirmar, o relatório passa a contar aquela transferência como callback (sai da duração média). Vale **só para o relatório**: nada é enviado ao Telegram. A marcação fica gravada em `registros\callbacks-manuais.txt` e aparece como "(marcado no relatório)"; o botão **Desfazer** volta atrás. Para isso, **deixe a janela preta do `relatorio.bat` aberta** enquanto usa a página (é ela que grava); se a aba for fechada, o endereço para reabrir aparece nessa janela. **Atualização automática:** enquanto a janela do `relatorio.bat` estiver aberta, a página busca os registros de novo a cada 10 segundos e redesenha tabelas e totais sem recarregar (mantém filtro e rolagem); mostra "Atualizado às HH:MM:SS", tem o botão **Pausar atualização**, não atualiza com a janela de confirmação aberta nem com a aba escondida, e avisa "Sem conexão com o relatório" (mantendo a tabela) se a janela do `.bat` for fechada. O arquivo `relatorio.html` aberto direto (sem o `.bat`) só mostra, sem os botões e sem atualizar. O relatório é calculado a partir dos `.txt` de registro: cada ligação recebe um código no cabeçalho do registro, e o CALLBACK é ligado à transferência da MESMA ligação por esse código (registros antigos, sem código, são ligados por proximidade e funcionário).
 
-**Equipe, apelidos e meio-dia no relatório.** A caixa **"Mostrar equipe do paquistanês"** liga/desliga a equipe do paquistanês em toda a página (`EQUIPE_PAQUISTANES_DIGITOS`, padrão `0`: o penúltimo dígito do Callback Number). `APELIDOS_FUNCIONARIOS=908113=Maria; 908114=João` mostra **sempre nome e número juntos** ("Maria (908113)"; sem apelido: "908113 (sem apelido)"), no relatório e nos avisos do Windows/console. A tabela "Ligações de 5 minutos: viraram transferência?" mostra, por funcionário, quantas ligações de 5 min foram transferidas e quantas não (e as %). A seção "Antes e depois do meio-dia (horário de Brasília)" compara ligações de 5 min, transferências, callbacks, taxas e duração, com gráfico por hora e quadro por funcionário. Para as transferências do paquistanês entrarem nessas contas, o programa grava `registros\sem-mensagem.txt` (eventos que o filtro não deixou enviar).
-
-### Funcionários por dígito
-
-O Callback Number do Stage 1 (quem fez a transferência) termina em três dígitos `[linha][dono][qualquer]`: o antepenúltimo é a linha
-(1 = primeira, 3 = segunda) e o **penúltimo** é o dono do funcionário (0 = equipe do paquistanês, 1 = a sua). Quais valores do penúltimo
-dígito geram mensagem em cada grupo vem do `.env` (lista separada por vírgula, ou `*` para todos):
-
-```
-PENULTIMO_DIGITO_TRANSFERENCIA=1   # grupo de transferências (e o aviso CALLBACK): só funcionários com 1
-PENULTIMO_DIGITO_5MIN=*            # grupo de 5 minutos: todos
-```
-
-Quando todos os funcionários forem seus, use `*` (ou `0,1`); se surgirem outros valores, é só incluí-los (ex.: `1,2`). Se o número tiver
-menos de dois dígitos e houver filtro, a mensagem não é gerada e você recebe um aviso. Ligações filtradas ficam no log como `funcionario_filtrado`.
-
-Com `TELEGRAM_DESTINO_5MIN` preenchido (nome do grupo ou ID, como no `TELEGRAM_DESTINO`), o programa também envia **a mesma mensagem** (mesmo modelo) para esse grupo quando uma ligação chega a `DURACAO_LONGA_MIN` minutos (padrão 5) **ainda em Stage 1**.
-
-- O grupo das transferências recebe só transferências; o segundo grupo recebe só as que fizeram 5 min no Stage 1.
-- Se a ligação chegou a 5 min já no Stage 3 (depois de transferida), **não** vai ao segundo grupo. Se fez 5 min no Stage 1 e depois foi transferida, vai aos dois.
-- Ligações que já passavam de 5 min quando o programa abriu **não** geram mensagem (só as que cruzam o tempo depois).
-- Se a ligação já fez 5 min no Stage 1 e a mensagem **já foi enviada** ao 2º grupo, ao ser transferida o programa **reenvia essa mensagem** ao grupo das transferências (sem consultar o cadastro de novo e sem rótulo de "encaminhada"). O programa **lê a mensagem no grupo de 5 min no momento da transferência**, então se você a **editou** lá, o texto editado é o que vai para o grupo das transferências. Se a mensagem foi apagada ou não deu para lê-la, usa o texto original e avisa no console. Se foi transferida antes dos 5 min, a mensagem é criada normalmente. Se a mensagem de 5 min falhou, o fluxo normal é usado.
-- Cada ligação gera no máximo uma mensagem do 2º grupo. Cada consulta ao cadastro pausa a leitura da tabela por alguns segundos.
+**Apelidos e meio-dia no relatório.** Todos os funcionários são seus: todas as transferências geram mensagem e entram no relatório. `APELIDOS_FUNCIONARIOS=908113=Maria; 908114=João` mostra **sempre nome e número juntos** ("Maria (908113)"; sem apelido: "908113 (sem apelido)"), no relatório e nos avisos do Windows/console. A tabela "Ligações de 5 minutos: viraram transferência?" mostra, por funcionário, quantas ligações de 5 min foram transferidas e quantas não (e as %). A seção "Antes e depois do meio-dia (horário de Brasília)" compara ligações de 5 min, transferências, callbacks, taxas e duração, com gráfico por hora e quadro por funcionário.
 
 ## Modelo da mensagem
 

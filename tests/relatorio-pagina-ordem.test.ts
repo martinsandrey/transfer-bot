@@ -117,22 +117,22 @@ describe.skipIf(!CHROMIUM_DE_TESTE)(
 
     it("colunas numéricas: 1º clique = maior primeiro; 2º = menor primeiro", async () => {
       await clicar("tabela", "Callbacks");
-      expect((await col("tabela", 5))[0]).toBe("1");
-      expect((await col("tabela", 5)).map(Number)).toEqual(
-        [...(await col("tabela", 5)).map(Number)].sort((a, b) => b - a),
+      expect((await col("tabela", 4))[0]).toBe("1");
+      expect((await col("tabela", 4)).map(Number)).toEqual(
+        [...(await col("tabela", 4)).map(Number)].sort((a, b) => b - a),
       );
       await clicar("tabela", "Callbacks");
-      expect((await col("tabela", 5)).map(Number)).toEqual(
-        [...(await col("tabela", 5)).map(Number)].sort((a, b) => a - b),
+      expect((await col("tabela", 4)).map(Number)).toEqual(
+        [...(await col("tabela", 4)).map(Number)].sort((a, b) => a - b),
       );
     });
 
     it("duração média: quem não tem duração fica sempre por último, nos dois sentidos", async () => {
       await clicar("tabela", "Duração média");
-      expect((await col("tabela", 7))[0]).toBe("3 min 30 s"); // (120 + 300) / 2 do 908114
-      expect((await col("tabela", 7)).slice(1)).toEqual(["—", "—"]);
+      expect((await col("tabela", 6))[0]).toBe("3 min 30 s"); // (120 + 300) / 2 do 908114
+      expect((await col("tabela", 6)).slice(1)).toEqual(["—", "—"]);
       await clicar("tabela", "Duração média");
-      expect((await col("tabela", 7))[0]).toBe("3 min 30 s"); // o único com valor continua na frente
+      expect((await col("tabela", 6))[0]).toBe("3 min 30 s"); // o único com valor continua na frente
     });
 
     it("a lista ligação a ligação ordena por funcionário, cliente, resultado, duração e hora — sem afetar a outra tabela", async () => {

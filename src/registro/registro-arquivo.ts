@@ -25,12 +25,6 @@ export const NOME_ARQUIVO: Record<TipoRegistro, string> = {
   callback: "transferencias-concluidas.txt", // o CALLBACK fica junto das transferências, marcado
 };
 
-/**
- * Eventos que NÃO geraram mensagem (funcionário fora do filtro do .env, ex.: equipe do paquistanês), só para o relatório poder
- * comparar equipes e calcular quantas ligações de 5 min viraram transferência. Uma linha-cabeçalho por evento, sem texto de cliente.
- */
-export const ARQUIVO_SEM_MENSAGEM = "sem-mensagem.txt";
-
 /** Durações das ligações transferidas e atendidas (uma linha por ligação), para a duração média do relatório. */
 export const ARQUIVO_DURACOES = "duracoes.txt";
 
@@ -68,25 +62,6 @@ export class RegistroEmArquivo {
         `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s${r.ateTransferenciaSeg == null ? "" : ` | Até a transferência: ${Math.max(0, Math.round(r.ateTransferenciaSeg))} s`}${r.naLinha2Seg == null ? "" : ` | Na linha 2: ${Math.max(0, Math.round(r.naLinha2Seg))} s`}${r.provisoria ? " | provisória" : ""}\n`,
         { encoding: "utf8" },
       );
-    } catch (e) {
-      if (!this.avisou) {
-        this.avisou = true;
-        this.aoFalhar(e);
-      }
-    }
-  }
-
-  registrarSemMensagem(r: {
-    tipo: TipoRegistro;
-    funcionario: string;
-    cliente: string;
-    ligacao: string;
-    detalhe?: string;
-  }): void {
-    try {
-      mkdirSync(this.pasta, { recursive: true });
-      const cab = `===== ${this.carimbo()} | SEM MENSAGEM (fora do filtro) | Tipo: ${r.tipo} | Funcionário: ${r.funcionario.replace(/\s+/g, "")} | Cliente: ${r.cliente.replace(/\s+/g, "")} | Ligação: ${r.ligacao}${r.detalhe ? ` | ${r.detalhe}` : ""} =====\n\n`;
-      appendFileSync(join(this.pasta, ARQUIVO_SEM_MENSAGEM), cab, { encoding: "utf8" });
     } catch (e) {
       if (!this.avisou) {
         this.avisou = true;

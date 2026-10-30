@@ -2,14 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { parseEnv } from "node:util";
 import { interpretarApelidos } from "../config/apelidos.js";
-import { interpretarDigitos } from "../monitor/filtro-funcionario.js";
 import { FUSO_PADRAO, fusoValido } from "../util/fuso.js";
 
 /** Lê só o que o relatório precisa do `.env` (sem exigir o resto da configuração). Valores inválidos são ignorados. */
 export function lerEnv(caminho = ".env"): {
   pasta: string;
   apelidos: Map<string, string>;
-  equipePaquistanesDigitos: string[];
   religacao: { janelaMs: number };
   fuso: string;
   /** Minutos que definem a ligação longa (DURACAO_LONGA_MIN); só muda os textos do relatório. */
@@ -17,7 +15,6 @@ export function lerEnv(caminho = ".env"): {
 } {
   let pasta = "registros";
   let apelidos = new Map<string, string>();
-  let digitos: string[] = ["0"];
   // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60 (hoje só liga/desliga a regra "só a última conta").
   let janelaMin = 60;
   let fuso = FUSO_PADRAO;
@@ -34,8 +31,6 @@ export function lerEnv(caminho = ".env"): {
       const v = (env["PASTA_REGISTROS"] ?? "").trim();
       if (v) pasta = v;
       apelidos = interpretarApelidos(env["APELIDOS_FUNCIONARIOS"]).apelidos;
-      const d = interpretarDigitos((env["EQUIPE_PAQUISTANES_DIGITOS"] ?? "").trim() || "0");
-      if (d) digitos = [...d];
       janelaMin = inteiro(env["CALLBACK_RELIGACAO_MIN"], 0, 1440) ?? janelaMin;
       duracaoLongaMin = inteiro(env["DURACAO_LONGA_MIN"], 1, 600) ?? duracaoLongaMin;
       const f = (env["FUSO_HORARIO"] ?? "").trim();
@@ -47,7 +42,6 @@ export function lerEnv(caminho = ".env"): {
   return {
     pasta: resolve(pasta),
     apelidos,
-    equipePaquistanesDigitos: digitos,
     religacao: { janelaMs: janelaMin * 60_000 },
     fuso,
     duracaoLongaMin,

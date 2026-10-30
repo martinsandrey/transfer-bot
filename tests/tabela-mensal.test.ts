@@ -78,7 +78,7 @@ describe("tabela do mês (2 últimos números da linha 1 x dia do mês)", () => 
 });
 
 describe.skipIf(!CHROMIUM_DE_TESTE)("botão Baixar tabela do mês (Excel)", () => {
-  it("baixa um .xlsx com colunas de verdade (cabeçalho em chinês, uma coluna por dia), respeitando os filtros da página", async () => {
+  it("baixa um .xlsx com colunas de verdade (cabeçalho em chinês, uma coluna por dia), respeitando a caixa de prévias da página", async () => {
     const hoje = new Date();
     const em = (d: number, h: number) => new Date(hoje.getFullYear(), hoje.getMonth(), d, h, 0, 0);
     const bloco = (q: Date, func: string, cli: string, lig: string) =>
@@ -86,7 +86,7 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("botão Baixar tabela do mês (Excel)", () =
     const reg =
       bloco(em(2, 9), "908111", "0111", "a") +
       bloco(em(2, 10), "908111", "0222", "b") +
-      bloco(em(3, 9), "908121", "0333", "c"); // 21: equipe do paquistanês (penúltimo dígito 2)
+      bloco(em(3, 9), "908121", "0333", "c");
     const m = montarLigacoes(lerRegistro(reg, "transferencia"), new Map());
     const pasta = mkdtempSync(join(tmpdir(), "tb-mes-"));
     const arq = join(pasta, "r.html");
@@ -96,7 +96,6 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("botão Baixar tabela do mês (Excel)", () =
         geradoEm: new Date(),
         ...m,
         inicial: { periodo: "hoje" },
-        equipePaquistanesDigitos: ["2"],
       }),
     );
     const host = await navegadorDeTeste();
@@ -131,12 +130,8 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("botão Baixar tabela do mês (Excel)", () =
       // dia 2: o funcionário 11 fez 2 (coluna D = dia 3? B = dia 1, C = dia 2)
       expect(planilha).toMatch(/<c r="C2"[^>]*><v>2<\/v><\/c>/);
       expect(planilha).toMatch(/<c r="D3"[^>]*><v>1<\/v><\/c>/);
-      // desligando a equipe do paquistanês na página, a linha 21 some do arquivo
-      await pagina.uncheck("#pk");
-      const b = await baixar();
-      const so = b.z.get("xl/worksheets/sheet1.xml") as string;
-      expect(so.match(/<row /g)).toHaveLength(3); // cabeçalho, 11 e 總計 (sem a linha 21)
-      expect(planilha.match(/<row /g)).toHaveLength(4); // com a equipe: cabeçalho, 11, 21 e 總計
+      // as prévias do modo observação só entram quando a caixa da página está ligada (aqui não há prévias)
+      expect(planilha.match(/<row /g)).toHaveLength(4); // cabeçalho, 11, 21 e 總計
     } finally {
       await host.encerrar();
     }

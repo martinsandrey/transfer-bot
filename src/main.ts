@@ -217,7 +217,6 @@ async function principal(): Promise<void> {
   const opMonitor = {
     pausarDuranteConsulta: true,
     intervaloMs: cfg.monitor.intervaloMs,
-    ...(!simulado ? { filtroFuncionarios: cfg.filtroFuncionarios } : {}),
     apelidos: cfg.apelidos,
     toastSoDaEnviada: cfg.modo === "live" && !simulado,
     destinoStage: cfg.monitor.destinoStage,
@@ -241,14 +240,6 @@ async function principal(): Promise<void> {
   console.log(
     `\nModo: ${cfg.modo === "observacao" ? "OBSERVAÇÃO (nada é enviado)" : "ENVIO REAL"}${simulado ? " — SIMULAÇÃO com dados fictícios" : ""}`,
   );
-
-  if (!simulado) {
-    const desc = (d: ReadonlySet<string> | null): string =>
-      d === null ? "todos os funcionários" : `penúltimo dígito ${[...d].join(" ou ")}`;
-    console.log(
-      `Funcionários: transferências = ${desc(cfg.filtroFuncionarios.transferencia)}; ligações de ${cfg.duracaoLongaMin} minutos = ${desc(cfg.filtroFuncionarios.longa)}.`,
-    );
-  }
 
   if (simulado) {
     const sender: MessageSender = new EnviadorConsole();
@@ -511,18 +502,6 @@ ${t}
                 await garantir();
               },
               aoPrecisarReiniciar: () => pedirReinicio(),
-            }
-          : {}),
-        ...(registro
-          ? {
-              aoFiltrar: (i) =>
-                registro.registrarSemMensagem({
-                  tipo: i.tipo,
-                  funcionario: i.callback,
-                  cliente: i.callee,
-                  ligacao: idDaLigacao(i.vinculo),
-                  ...(i.detalhe ? { detalhe: i.detalhe } : {}),
-                }),
             }
           : {}),
       },

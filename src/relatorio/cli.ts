@@ -90,7 +90,7 @@ async function principal(): Promise<void> {
     inicial = { periodo: resto[0] };
   }
 
-  const { pasta, apelidos, equipePaquistanesDigitos, religacao, fuso, duracaoLongaMin } = lerEnv();
+  const { pasta, apelidos, religacao, fuso, duracaoLongaMin } = lerEnv();
   aplicarFuso(fuso);
   const ler = (arquivo: string): string | null => {
     const caminho = join(pasta, arquivo);
@@ -128,7 +128,6 @@ async function principal(): Promise<void> {
           ...m,
           inicial,
           apelidos,
-          equipePaquistanesDigitos,
           ...(servidor ? { servidor } : {}),
         })
       : null;

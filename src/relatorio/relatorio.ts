@@ -1,8 +1,4 @@
-import {
-  ARQUIVO_DURACOES,
-  ARQUIVO_SEM_MENSAGEM,
-  NOME_ARQUIVO,
-} from "../registro/registro-arquivo.js";
+import { ARQUIVO_DURACOES, NOME_ARQUIVO } from "../registro/registro-arquivo.js";
 import { chaveDaTransferencia } from "./callbacks-manuais.js";
 import { ARQUIVO_TRANSFERENCIAS_MANUAIS } from "./transferencias-manuais.js";
 
@@ -70,7 +66,7 @@ export function lerRegistro(texto: string, padrao: "transferencia" | "longa"): E
         (RE_TIPO.exec(resto)?.[1] as TipoEntrada | undefined) ??
         (resto.includes("CALLBACK") ? "callback" : padrao),
       quando: new Date(Number(a), Number(mes) - 1, Number(d), Number(h), Number(mi), Number(s)),
-      // "SEM MENSAGEM (fora do filtro)": o evento aconteceu de verdade, só não gerou mensagem (conta como real, não como prévia).
+      // "SEM MENSAGEM (...)" (ex.: transferência adicionada à mão): aconteceu de verdade, só não gerou mensagem (conta como real, não como prévia).
       enviada: resto.startsWith("ENVIADA") || resto.startsWith("SEM MENSAGEM"),
       funcionario:
         RE_FUNC.exec(resto)?.[1] ?? LINHA_CORPO.exec(corpo)?.[1]?.trim() ?? SEM_FUNCIONARIO,
@@ -531,7 +527,6 @@ export const ARQUIVOS_DO_RELATORIO: ReadonlyArray<{
 }> = [
   { arquivo: NOME_ARQUIVO.transferencia, padrao: "transferencia" },
   { arquivo: NOME_ARQUIVO.longa, padrao: "longa" },
-  { arquivo: ARQUIVO_SEM_MENSAGEM, padrao: "transferencia" },
   { arquivo: ARQUIVO_TRANSFERENCIAS_MANUAIS, padrao: "transferencia" },
 ];
 
