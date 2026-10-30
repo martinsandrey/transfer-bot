@@ -22,6 +22,8 @@ const CAMPOS_PERMITIDOS = new Set([
   "grupo",
   "linhas",
   "duracaoMs",
+  "duracaoSeg",
+  "agentSeg",
   "tentativa",
   "modo",
   "memoriaMb",

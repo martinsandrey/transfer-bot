@@ -139,6 +139,21 @@ export interface OpcoesTracker {
     ateTransferenciaSeg: number | null;
   }) => void;
   /**
+   * Diagnóstico (sem telefones, vai para o log): chamado uma vez quando o acompanhamento de uma ligação transferida termina, com o
+   * que o rastreador viu e por que decidiu o que decidiu. Serve para descobrir CALLBACKs que o programa não pegou.
+   * - `motivo`: `atendida` (durou o mínimo), `ligacao_curta` (CALLBACK), `sem_atendimento` (CALLBACK) ou `foi_adiante` (passou para a linha 3);
+   * - `callDurationSeg`: maior "Call Duration" lido nas linhas de destino (é o que decide o CALLBACK por ligação curta);
+   * - `agentRelogioSeg`: tempo medido pelo relógio entre a primeira e a última leitura com uma linha de destino em "Agent";
+   * - `linhasDestino`: quantas linhas de destino diferentes (funcionários que receberam a chamada) apareceram para esse cliente.
+   */
+  aoDecidirAtendimento?: (info: {
+    ocorrencia: string;
+    motivo: "atendida" | "ligacao_curta" | "sem_atendimento" | "foi_adiante";
+    callDurationSeg: number | null;
+    agentRelogioSeg: number | null;
+    linhasDestino: number;
+  }) => void;
+  /**
    * Evidência real (2026-10-16): na transferência a linha do Stage 1 SOME e aparece OUTRA linha em "Stage 3 Agent", com outro
    * Callback Number (o do agente do Stage 3) e o MESMO Callee Number. A transferência é detectada ligando as duas pelo Callee.
    * Esta é a janela máxima entre a última vez que a linha do Stage 1 Agent foi vista e o surgimento da linha do Stage 3 (padrão 60 s).
@@ -222,6 +237,10 @@ export class CallTracker {
       duracaoAteTransferenciaSeg: number | null;
       /** Fluxo novo: a ligação já apareceu na linha 3 (seguiu adiante depois da linha 2). */
       foiAdiante?: boolean;
+      /** Última leitura com uma linha de destino em "Agent" (diagnóstico). */
+      ultimoAgent?: number;
+      /** Callback Numbers das linhas de destino já vistas para esse cliente (diagnóstico; só a contagem vai para o log). */
+      linhasDestino?: Set<string>;
     }
   >();
   private anomaliasAtivas = new Set<string>();
@@ -606,6 +625,7 @@ export class CallTracker {
     /** Fluxo novo: callees que já estão na linha 3 (a ligação seguiu adiante depois da linha 2). */
     const adiante = new Set<string>();
     const duracoes = new Map<string, number>();
+    const linhasDoDestino = new Map<string, string[]>();
     const contaDuracao = (n: number | null): boolean =>
       n === this.destino || (this.destino === 3 && n === 4);
     for (const r of s.rows) {
@@ -622,6 +642,10 @@ export class CallTracker {
         );
       if (st.numero !== this.destino) continue;
       comStage3.add(r.calleeNumber);
+      linhasDoDestino.set(r.calleeNumber, [
+        ...(linhasDoDestino.get(r.calleeNumber) ?? []),
+        r.callbackNumber,
+      ]);
       if (st.sub === "agent") comAgent.add(r.calleeNumber);
     }
     // Linhas de Stage 3 incompletas (dado faltando) também provam que o Stage 3 continua na tabela.
@@ -642,7 +666,9 @@ export class CallTracker {
       if (comAgent.has(callee)) {
         sg.atendida = true;
         sg.inicioAtendimento ??= s.readAt;
+        sg.ultimoAgent = s.readAt;
       }
+      for (const n of linhasDoDestino.get(callee) ?? []) (sg.linhasDestino ??= new Set()).add(n);
       if (comStage3.has(callee) || cega) sg.ultimoStage3 = s.readAt;
       if (adiante.has(callee)) sg.foiAdiante = true;
       const d = duracoes.get(callee);
@@ -657,9 +683,13 @@ export class CallTracker {
               ? null
               : Math.round((sg.ultimoStage3 - sg.inicioAtendimento) / 1000));
           this.seguimentos.delete(callee);
+          const curta = !sg.foiAdiante && minimoSeg > 0 && duracao !== null && duracao < minimoSeg;
+          this.diagnosticar(
+            sg,
+            sg.foiAdiante ? "foi_adiante" : curta ? "ligacao_curta" : "atendida",
+          );
           // Passou para a linha 3: a ligação seguiu em frente, nunca é CALLBACK por ser curta (pedido do usuário).
-          if (!sg.foiAdiante && minimoSeg > 0 && duracao !== null && duracao < minimoSeg)
-            this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
+          if (curta) this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
           else if (duracao !== null)
             this.op.aoEncerrarLigacao?.({
               vinculo: sg.vinculo,
@@ -678,10 +708,34 @@ export class CallTracker {
       if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 >= espera) {
         this.seguimentos.delete(callee);
         // Não vimos o atendimento na linha 2, mas a ligação chegou à linha 3 (só chega lá passando pela 2): não é CALLBACK.
+        this.diagnosticar(sg, sg.foiAdiante ? "foi_adiante" : "sem_atendimento");
         if (sg.foiAdiante) continue;
         this.emitirCallback(sg, callee, "sem_atendimento", undefined, s.readAt, eventos);
       }
     }
+  }
+
+  /** Entrega ao log (sem telefones) o que o rastreador viu ao decidir o fim do acompanhamento. */
+  private diagnosticar(
+    sg: {
+      ocId: string;
+      maiorDuracaoSeg: number | null;
+      inicioAtendimento: number | null;
+      ultimoAgent?: number;
+      linhasDestino?: Set<string>;
+    },
+    motivo: "atendida" | "ligacao_curta" | "sem_atendimento" | "foi_adiante",
+  ): void {
+    this.op.aoDecidirAtendimento?.({
+      ocorrencia: sg.ocId,
+      motivo,
+      callDurationSeg: sg.maiorDuracaoSeg,
+      agentRelogioSeg:
+        sg.inicioAtendimento === null || sg.ultimoAgent === undefined
+          ? null
+          : Math.round((sg.ultimoAgent - sg.inicioAtendimento) / 1000),
+      linhasDestino: sg.linhasDestino?.size ?? 0,
+    });
   }
 
   private emitirCallback(

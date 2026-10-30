@@ -180,6 +180,16 @@ async function principal(): Promise<void> {
       ? { destinoDigito: cfg.monitor.destinoDigito }
       : {}),
     aoEncerrarLigacao: (i) => ganchos.encerrada?.(i),
+    // Diário do porquê de cada ligação ter sido (ou não) CALLBACK: ajuda a achar CALLBACKs que o programa não pegou.
+    aoDecidirAtendimento: (i) =>
+      log.info("Acompanhamento da ligação encerrado", {
+        evento: "acompanhamento_fim",
+        idCurto: i.ocorrencia,
+        motivo: i.motivo,
+        ...(i.callDurationSeg !== null ? { duracaoSeg: i.callDurationSeg } : {}),
+        ...(i.agentRelogioSeg !== null ? { agentSeg: i.agentRelogioSeg } : {}),
+        contagem: i.linhasDestino,
+      }),
     // Segundo grupo: ligação que chega ao tempo mínimo AINDA em Stage 1 (só se TELEGRAM_DESTINO_5MIN estiver preenchido).
     ...(!simulado && cfg.telegram.destinoLonga
       ? { duracaoLongaSeg: cfg.duracaoLongaMin * 60 }
