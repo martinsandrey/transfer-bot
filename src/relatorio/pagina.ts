@@ -234,7 +234,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     </ul>
     <div class="acoes">
       <button class="acao" id="planilha">Baixar planilha (Excel)</button>
-      <span class="sem-print"><label for="mes-csv">Tabela por dia do mês:</label> <input type="month" id="mes-csv"> <button class="acao" id="mes-btn">Baixar tabela do mês (CSV)</button></span>
+      <span class="sem-print"><label for="mes-csv">Tabela por dia do mês:</label> <input type="month" id="mes-csv"> <button class="acao" id="mes-btn">Baixar tabela do mês (Excel)</button></span>
       <button class="acao" onclick="window.print()">Imprimir</button>
       <button class="acao sem-print" id="adicionar-btn" hidden>Adicionar transferência manual</button>
     </div>
@@ -714,13 +714,19 @@ function abasDaPlanilha() {
   return { abas, arquivo: nomeArquivo(iv) };
 }
 window.__abasDaPlanilha = abasDaPlanilha;
-/* Tabela simples do mês: 2 últimos números da linha 1 x dia do mês, só transferências concluídas (CSV com ";" e BOM para o Excel). */
+/* Tabela simples do mês: 2 últimos números da linha 1 x dia do mês, só transferências concluídas (planilha .xlsx, uma coluna por dia). */
 $("mes-csv").value = new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
 $("mes-btn").addEventListener("click", () => {
   const mes = $("mes-csv").value || new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
   const lista = D.ligacoes.filter((c) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)));
-  const blob = new Blob(["\ufeff" + montarTabelaMensal(lista, mes, D.fuso)], { type: "text/csv;charset=utf-8" });
-  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "transferencias-por-dia_" + mes + ".csv"; a.click();
+  const T = montarTabelaMensal(lista, mes, D.fuso);
+  const linhas = [cab("編號", ...Array.from({ length: T.dias }, (_, i) => String(i + 1)))];
+  for (const r of T.linhas) linhas.push([C(r.chave, E.texto), ...r.contagem.map((n) => C(n, E.inteiro))]);
+  linhas.push([C("總計", E.totalTexto), ...T.totais.map((n) => C(n, E.totalInteiro))]);
+  const abas = [{ nome: "Transferências por dia", larguras: [10, ...Array.from({ length: T.dias }, () => 6)], linhas, congelar: 1 }];
+  const blob = new Blob([montarXlsx(abas)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "transferencias-por-dia_" + mes + ".xlsx"; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
 });
 $("planilha").addEventListener("click", () => {
   const { abas, arquivo } = abasDaPlanilha();

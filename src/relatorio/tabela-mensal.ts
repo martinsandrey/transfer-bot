@@ -1,8 +1,8 @@
 /**
  * Tabela simples do mês (pedido do usuário, 2026-10-30): uma linha por funcionário, identificado só pelos 2 últimos números do
- * número da linha 1, e uma coluna por dia do mês com quantas transferências concluídas ele fez naquele dia; última linha com o total
- * de cada dia. Cabeçalhos em chinês ("編號" e "總計"), como no modelo do usuário. Vira CSV com ";" (o Excel em português separa as
- * colunas por ";"); a página acrescenta o BOM UTF-8 ao baixar, para o Excel ler os caracteres chineses.
+ * número da linha 1, e uma coluna por dia do mês com quantas transferências concluídas ele fez naquele dia; última linha (`總計`) com
+ * o total de cada dia. A página monta com isso uma planilha .xlsx (colunas de verdade, em qualquer idioma do Excel; o CSV separado
+ * por ";" não abriu em colunas no Excel do usuário). Cabeçalhos em chinês ("編號" e "總計"), como no modelo do usuário.
  *
  * Esta função é copiada para dentro da página do relatório (`Function.toString`), então NÃO pode usar nada de fora dela.
  *
@@ -14,30 +14,26 @@ export function montarTabelaMensal(
   ligacoes: ReadonlyArray<{ t: number; f: string; r: string; rm?: unknown; s?: number }>,
   mes: string,
   fuso: string,
-): string {
+): { dias: number; linhas: Array<{ chave: string; contagem: number[] }>; totais: number[] } {
   const [ano, mesNum] = mes.split("-").map(Number) as [number, number];
   const dias = new Date(Date.UTC(ano, mesNum, 0)).getUTCDate();
-  const linhas = new Map<string, number[]>();
+  const porChave = new Map<string, number[]>();
   for (const c of ligacoes) {
     if (c.r !== "a" || c.rm || c.s) continue;
     const dia = new Date(c.t).toLocaleDateString("sv-SE", { timeZone: fuso }); // AAAA-MM-DD
     if (dia.slice(0, 7) !== mes) continue;
     const numero = String(c.f).replace(/\D+/g, "");
     const chave = numero === "" ? "?" : numero.slice(-2).padStart(2, "0");
-    const contagem = linhas.get(chave) ?? new Array<number>(dias).fill(0);
+    const contagem = porChave.get(chave) ?? new Array<number>(dias).fill(0);
     const i = Number(dia.slice(8, 10)) - 1;
     contagem[i] = (contagem[i] ?? 0) + 1;
-    linhas.set(chave, contagem);
+    porChave.set(chave, contagem);
   }
-  const saida: string[] = [
-    ["編號", ...Array.from({ length: dias }, (_, i) => String(i + 1))].join(";"),
-  ];
   const totais = new Array<number>(dias).fill(0);
-  for (const chave of [...linhas.keys()].sort()) {
-    const contagem = linhas.get(chave) as number[];
+  const linhas = [...porChave.keys()].sort().map((chave) => {
+    const contagem = porChave.get(chave) as number[];
     contagem.forEach((n, i) => (totais[i] = (totais[i] ?? 0) + n));
-    saida.push([chave, ...contagem.map(String)].join(";"));
-  }
-  saida.push(["總計", ...totais.map(String)].join(";"));
-  return saida.join("\r\n") + "\r\n";
+    return { chave, contagem };
+  });
+  return { dias, linhas, totais };
 }
