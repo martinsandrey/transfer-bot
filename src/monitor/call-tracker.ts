@@ -116,9 +116,10 @@ export interface OpcoesTracker {
   /** Quanto tempo (ms) sem nenhuma linha de Stage 3 do mesmo Callee, depois de ter tocado sem atender, antes de emitir `callback` (padrão 3000). */
   esperaCallbackMs?: number;
   /**
-   * Uma ligação atendida no Stage 3 que dure MENOS que isto (segundos) também conta como CALLBACK. A duração é a do "Call Duration"
-   * da linha do Stage 3 (maior valor visto antes de ela sumir); se a coluna não for legível, conta-se desde que o Stage 3 Agent
-   * apareceu. Ausente/0 = só conta CALLBACK quando ninguém atendeu.
+   * Uma ligação atendida na linha de destino que fique MENOS que isto (segundos) com ela também conta como CALLBACK. O tempo é
+   * medido pelo RELÓGIO, da primeira à última leitura com uma linha de destino em "Agent" (o "Call Duration" da tabela conta a ligação
+   * inteira, inclusive o tempo antes da transferência, e por isso não serve: evidência do log de 2026-10-30, 31 s na linha 2 contra
+   * 18 min de Call Duration). Ausente/0 = só conta CALLBACK quando ninguém atendeu.
    */
   duracaoCallbackSeg?: number;
   /** Duração (segundos) que uma ligação em Stage 1 precisa atingir para gerar `ligacao_longa`. Ausente/0 = desligado. */
@@ -128,34 +129,52 @@ export interface OpcoesTracker {
   /**
    * Chamado uma vez quando uma ligação transferida que FOI ATENDIDA no Stage 3 termina (a linha some da tabela) e NÃO é CALLBACK
    * por duração curta: `duracaoSeg` é o maior "Call Duration" visto (ou o tempo contado desde o atendimento, se a coluna for
-   * ilegível). Alimenta a duração média do relatório. `vinculo` tem telefone: não pode ir para o log.
+   * ilegível); ATENÇÃO: esse "Call Duration" conta a ligação INTEIRA (inclui o tempo antes da transferência). `naLinha2Seg` é o
+   * tempo só na linha de destino, medido pelo relógio. Alimenta a duração média e a regra de religação do relatório.
+   * `vinculo` tem telefone: não pode ir para o log.
    */
   aoEncerrarLigacao?: (info: {
     vinculo: string;
     callback: string;
     callee: string;
     duracaoSeg: number;
+    /** Tempo (s) com uma linha de destino em "Agent", pelo relógio (primeira à última leitura). */
+    naLinha2Seg: number;
     /** Duração (s) que a ligação já tinha quando foi transferida para o Stage 3; `null` se a coluna não estava legível. */
     ateTransferenciaSeg: number | null;
   }) => void;
   /**
-   * Diagnóstico (sem telefones, vai para o log): chamado uma vez quando o acompanhamento de uma ligação transferida termina, com o
-   * que o rastreador viu e por que decidiu o que decidiu. Serve para descobrir CALLBACKs que o programa não pegou.
-   * - `motivo`: `atendida` (durou o mínimo), `ligacao_curta` (CALLBACK), `sem_atendimento` (CALLBACK) ou `foi_adiante` (passou para a linha 3);
-   * - `callDurationSeg`: maior "Call Duration" lido nas linhas de destino (é o que decide o CALLBACK por ligação curta);
-   * - `agentRelogioSeg`: tempo medido pelo relógio entre a primeira e a última leitura com uma linha de destino em "Agent";
-   * - `linhasDestino`: quantas linhas de destino diferentes (funcionários que receberam a chamada) apareceram para esse cliente.
-   */
-  /**
    * Diagnóstico: uma ligação atendida na linha de destino continua na tabela depois de 2, 10, 30, 60 e 120 min (relógio). Mostra o
    * "Call Duration" atual: se ele não anda, a linha está presa na tabela (e o fim da ligação nunca é visto).
    */
+  /**
+   * Chamado uma vez quando o tempo na linha de destino chega ao mínimo (`duracaoCallbackSeg`) com a ligação ainda aberta: ela já
+   * provou que NÃO é CALLBACK por ser curta. Permite gravar uma duração provisória, para o relatório não depender de o programa
+   * estar aberto quando a ligação terminar. Mesmos campos de `aoEncerrarLigacao`.
+   */
+  aoAtendimentoConfirmado?: (info: {
+    vinculo: string;
+    callback: string;
+    callee: string;
+    duracaoSeg: number;
+    naLinha2Seg: number;
+    ateTransferenciaSeg: number | null;
+  }) => void;
   aoAcompanhamentoAberto?: (info: {
     ocorrencia: string;
     minutos: number;
     callDurationSeg: number | null;
     linhasDestino: number;
   }) => void;
+  /**
+   * Diagnóstico (sem telefones, vai para o log): chamado uma vez quando o acompanhamento de uma ligação transferida termina, com o
+   * que o rastreador viu e por que decidiu o que decidiu. Serve para descobrir CALLBACKs que o programa não pegou.
+   * - `motivo`: `atendida` (durou o mínimo), `ligacao_curta` (CALLBACK), `sem_atendimento` (CALLBACK) ou `foi_adiante` (passou para a linha 3);
+   * - `callDurationSeg`: maior "Call Duration" lido nas linhas de destino (conta a ligação INTEIRA; só informativo);
+   * - `agentRelogioSeg`: tempo medido pelo relógio entre a primeira e a última leitura com uma linha de destino em "Agent" (é o que
+   *   decide o CALLBACK por ligação curta);
+   * - `linhasDestino`: quantas linhas de destino diferentes (funcionários que receberam a chamada) apareceram para esse cliente.
+   */
   aoDecidirAtendimento?: (info: {
     ocorrencia: string;
     motivo: "atendida" | "ligacao_curta" | "sem_atendimento" | "foi_adiante";
@@ -247,6 +266,8 @@ export class CallTracker {
       duracaoAteTransferenciaSeg: number | null;
       /** Fluxo novo: a ligação já apareceu na linha 3 (seguiu adiante depois da linha 2). */
       foiAdiante?: boolean;
+      /** `aoAtendimentoConfirmado` já foi chamado. */
+      confirmada?: boolean;
       /** Quantos marcos de `aoAcompanhamentoAberto` já foram avisados (diagnóstico). */
       marcosAvisados?: number;
       /** Última leitura com uma linha de destino em "Agent" (diagnóstico). */
@@ -647,6 +668,8 @@ export class CallTracker {
         continue;
       }
       naTabela.add(r.calleeNumber);
+      // Fluxo antigo (destino 3): a linha passar para o Stage 4 é a ligação seguindo adiante, nunca CALLBACK por ser curta.
+      if (this.destino === 3 && st.numero === 4) adiante.add(r.calleeNumber);
       if (contaDuracao(st.numero) && r.callDurationSec !== null)
         duracoes.set(
           r.calleeNumber,
@@ -679,6 +702,8 @@ export class CallTracker {
         sg.atendida = true;
         sg.inicioAtendimento ??= s.readAt;
         sg.ultimoAgent = s.readAt;
+      } else if (cega && sg.atendida) {
+        sg.ultimoAgent = s.readAt; // sem leitura por um tempo: assume que continuou atendida (evita CALLBACK falso)
       }
       for (const n of linhasDoDestino.get(callee) ?? []) (sg.linhasDestino ??= new Set()).add(n);
       if (comStage3.has(callee) || cega) sg.ultimoStage3 = s.readAt;
@@ -688,29 +713,49 @@ export class CallTracker {
       if (sg.atendida) {
         const sumiu = !naTabela.has(callee) && !cega;
         if (sumiu && s.readAt - sg.ultimoStage3 >= espera) {
-          // Atendida e a linha sumiu: se durou menos que o mínimo, conta como CALLBACK; senão registra a duração (relatório).
-          const duracao =
-            sg.maiorDuracaoSeg ??
-            (sg.inicioAtendimento === null
-              ? null
-              : Math.round((sg.ultimoStage3 - sg.inicioAtendimento) / 1000));
+          // Atendida e a linha sumiu: se ficou menos que o mínimo na linha de destino, conta como CALLBACK; senão registra a duração.
+          const naLinha2 = this.segundosNaLinhaDeDestino(sg);
+          const duracao = sg.maiorDuracaoSeg ?? naLinha2;
           this.seguimentos.delete(callee);
-          const curta = !sg.foiAdiante && minimoSeg > 0 && duracao !== null && duracao < minimoSeg;
+          const curta =
+            !sg.foiAdiante && minimoSeg > 0 && naLinha2 !== null && naLinha2 < minimoSeg;
           this.diagnosticar(
             sg,
             sg.foiAdiante ? "foi_adiante" : curta ? "ligacao_curta" : "atendida",
           );
           // Passou para a linha 3: a ligação seguiu em frente, nunca é CALLBACK por ser curta (pedido do usuário).
-          if (curta) this.emitirCallback(sg, callee, "ligacao_curta", duracao, s.readAt, eventos);
-          else if (duracao !== null)
+          if (curta)
+            this.emitirCallback(
+              sg,
+              callee,
+              "ligacao_curta",
+              naLinha2 ?? undefined,
+              s.readAt,
+              eventos,
+            );
+          else if (duracao !== null && naLinha2 !== null)
             this.op.aoEncerrarLigacao?.({
               vinculo: sg.vinculo,
               callback: sg.callback,
               callee,
               duracaoSeg: duracao,
+              naLinha2Seg: naLinha2,
               ateTransferenciaSeg: sg.duracaoAteTransferenciaSeg,
             });
           continue;
+        }
+        // Ainda na tabela e já com o tempo mínimo na linha de destino: não é CALLBACK por ser curta; grava a duração provisória.
+        const parcial = this.segundosNaLinhaDeDestino(sg);
+        if (!sg.confirmada && minimoSeg > 0 && parcial !== null && parcial >= minimoSeg) {
+          sg.confirmada = true;
+          this.op.aoAtendimentoConfirmado?.({
+            vinculo: sg.vinculo,
+            callback: sg.callback,
+            callee,
+            duracaoSeg: sg.maiorDuracaoSeg ?? parcial,
+            naLinha2Seg: parcial,
+            ateTransferenciaSeg: sg.duracaoAteTransferenciaSeg,
+          });
         }
         this.avisarSeguimentoAberto(sg, duracoes.get(callee), s.readAt);
         // atendida e sem regra de duração: nada mais a fazer; esquece quando a linha some
@@ -726,6 +771,18 @@ export class CallTracker {
         this.emitirCallback(sg, callee, "sem_atendimento", undefined, s.readAt, eventos);
       }
     }
+  }
+
+  /** Segundos (relógio) com uma linha de destino em Agent: da primeira à última leitura. `null` se nunca foi vista em Agent. */
+  private segundosNaLinhaDeDestino(sg: {
+    inicioAtendimento: number | null;
+    ultimoAgent?: number;
+  }): number | null {
+    if (sg.inicioAtendimento === null) return null;
+    return Math.max(
+      0,
+      Math.round(((sg.ultimoAgent ?? sg.inicioAtendimento) - sg.inicioAtendimento) / 1000),
+    );
   }
 
   /** Avisa (para o log) que uma ligação atendida continua na tabela nos marcos de 2, 10, 30, 60 e 120 minutos. */
@@ -768,10 +825,7 @@ export class CallTracker {
       ocorrencia: sg.ocId,
       motivo,
       callDurationSeg: sg.maiorDuracaoSeg,
-      agentRelogioSeg:
-        sg.inicioAtendimento === null || sg.ultimoAgent === undefined
-          ? null
-          : Math.round((sg.ultimoAgent - sg.inicioAtendimento) / 1000),
+      agentRelogioSeg: this.segundosNaLinhaDeDestino(sg),
       linhasDestino: sg.linhasDestino?.size ?? 0,
     });
   }

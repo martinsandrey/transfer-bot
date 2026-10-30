@@ -143,7 +143,7 @@ const esquema = z.object({
   AUSENCIA_MAX_LEITURAS: inteiro("AUSENCIA_MAX_LEITURAS", 3, 1, 100),
   TTL_OCORRENCIAS_MIN: inteiro("TTL_OCORRENCIAS_MIN", 720, 1, 100000),
   CALLBACK_ESPERA_SEG: inteiro("CALLBACK_ESPERA_SEG", 3, 1, 120),
-  CALLBACK_DURACAO_SEG: inteiro("CALLBACK_DURACAO_SEG", 20, 0, 3600),
+  CALLBACK_LINHA2_SEG: inteiro("CALLBACK_LINHA2_SEG", 45, 0, 3600),
   // Só o relatório usa (relatorio/cli.ts lê direto do .env); validado aqui para o erro aparecer em português ao iniciar.
   CALLBACK_RELIGACAO_MIN: inteiro("CALLBACK_RELIGACAO_MIN", 60, 0, 1440),
   JANELA_TRANSFERENCIA_SEG: inteiro("JANELA_TRANSFERENCIA_SEG", 60, 5, 600),
@@ -284,7 +284,7 @@ export function validarConfig(bruto: Record<string, string | undefined>): AppCon
       ttlOcorrenciasMin: c.TTL_OCORRENCIAS_MIN,
       janelaTransferenciaMs: c.JANELA_TRANSFERENCIA_SEG * 1000,
       callbackEsperaMs: c.CALLBACK_ESPERA_SEG * 1000,
-      callbackDuracaoSeg: c.CALLBACK_DURACAO_SEG,
+      callbackDuracaoSeg: c.CALLBACK_LINHA2_SEG,
       destinoStage: c.TRANSFERENCIA_DESTINO_STAGE,
       destinoDigito:
         c.TRANSFERENCIA_DESTINO_DIGITO === "nenhum" ? undefined : c.TRANSFERENCIA_DESTINO_DIGITO,

@@ -25,11 +25,19 @@ const snap = (rows: CallRow[]): TableSnapshot => {
   relogio += 1000;
   return { readAt: relogio, rows, valid: true };
 };
+const snapMais = (rows: CallRow[], segundos: number): TableSnapshot => {
+  relogio += segundos * 1000;
+  return { readAt: relogio, rows, valid: true };
+};
 const vazias = (n = 5): TableSnapshot[] => Array.from({ length: n }, () => snap([]));
 
 function novo() {
-  const fim: Array<{ callback: string; duracaoSeg: number; ateTransferenciaSeg: number | null }> =
-    [];
+  const fim: Array<{
+    callback: string;
+    duracaoSeg: number;
+    naLinha2Seg: number;
+    ateTransferenciaSeg: number | null;
+  }> = [];
   const t = new CallTracker({
     leiturasConfirmacao: 1,
     ausenciaMaxLeituras: 3,
@@ -136,7 +144,7 @@ describe("fluxo linha 1 → linha 2 (Stage 2, funcionário ***2**)", () => {
     ler(
       snap([row(L1, "Stage 1 Agent")]),
       snap([row(L2, "Stage 2 Agent", 3)]),
-      snap([row(L2, "Stage 2 Agent", 8)]),
+      snapMais([row(L2, "Stage 2 Agent", 8)], 8),
       ...vazias(),
     );
     expect(tipos(ev)).toEqual(["transferencia", "callback"]);
@@ -149,11 +157,13 @@ describe("fluxo linha 1 → linha 2 (Stage 2, funcionário ***2**)", () => {
     ler(
       snap([row(L1, "Stage 1 Agent", 30)]),
       snap([row(L2, "Stage 2 Agent", 5)]),
-      snap([row(L2, "Stage 2 Agent", 45)]),
+      snapMais([row(L2, "Stage 2 Agent", 45)], 40),
       ...vazias(),
     );
     expect(tipos(ev)).toEqual(["transferencia"]);
-    expect(fim).toEqual([expect.objectContaining({ duracaoSeg: 45, ateTransferenciaSeg: 30 })]);
+    expect(fim).toEqual([
+      expect.objectContaining({ duracaoSeg: 45, naLinha2Seg: 40, ateTransferenciaSeg: 30 }),
+    ]);
   });
 
   it("linha 2 tocou e ninguém atendeu: CALLBACK (sem atendimento)", () => {

@@ -299,20 +299,20 @@ describe("religação: configuração do relatório (.env)", () => {
     writeFileSync(f, texto);
     return lerEnv(f).religacao;
   };
-  it("padrão 60 min e 20 s; lê CALLBACK_RELIGACAO_MIN e CALLBACK_DURACAO_SEG; valor inválido usa o padrão", () => {
-    expect(env("")).toEqual({ janelaMs: 3_600_000, duracaoMinSeg: 20 });
-    expect(env("CALLBACK_RELIGACAO_MIN=30\nCALLBACK_DURACAO_SEG=25\n")).toEqual({
+  it("padrão 60 min e 45 s; lê CALLBACK_RELIGACAO_MIN e CALLBACK_LINHA2_SEG; valor inválido usa o padrão", () => {
+    expect(env("")).toEqual({ janelaMs: 3_600_000, duracaoMinSeg: 45 });
+    expect(env("CALLBACK_RELIGACAO_MIN=30\nCALLBACK_LINHA2_SEG=25\n")).toEqual({
       janelaMs: 1_800_000,
       duracaoMinSeg: 25,
     });
     expect(env("CALLBACK_RELIGACAO_MIN=0\n")).toMatchObject({ janelaMs: 0 });
-    expect(env("CALLBACK_RELIGACAO_MIN=abc\nCALLBACK_DURACAO_SEG=-5\n")).toEqual({
+    expect(env("CALLBACK_RELIGACAO_MIN=abc\nCALLBACK_LINHA2_SEG=-5\n")).toEqual({
       janelaMs: 3_600_000,
-      duracaoMinSeg: 20,
+      duracaoMinSeg: 45,
     });
     expect(lerEnv(join(tmpdir(), "nao-existe", ".env")).religacao).toEqual({
       janelaMs: 3_600_000,
-      duracaoMinSeg: 20,
+      duracaoMinSeg: 45,
     });
   });
 });

@@ -359,18 +359,16 @@ describe("CALLBACK por ligação curta no registro e na configuração", () => {
     expect(ligacoes).toHaveLength(1);
     expect(ligacoes[0]?.resultado).toBe("callback");
   });
-  it("CALLBACK_DURACAO_SEG: padrão 20, configurável, 0 desliga, inválido dá erro", async () => {
+  it("CALLBACK_LINHA2_SEG: padrão 45, configurável, 0 desliga, inválido dá erro", async () => {
     const { validarConfig } = await import("../src/config/config.js");
     const base = { SITE_URL: "https://exemplo.invalid/" };
-    expect(validarConfig(base).monitor.callbackDuracaoSeg).toBe(20);
-    expect(validarConfig({ ...base, CALLBACK_DURACAO_SEG: "30" }).monitor.callbackDuracaoSeg).toBe(
+    expect(validarConfig(base).monitor.callbackDuracaoSeg).toBe(45);
+    expect(validarConfig({ ...base, CALLBACK_LINHA2_SEG: "30" }).monitor.callbackDuracaoSeg).toBe(
       30,
     );
-    expect(validarConfig({ ...base, CALLBACK_DURACAO_SEG: "0" }).monitor.callbackDuracaoSeg).toBe(
-      0,
-    );
-    expect(() => validarConfig({ ...base, CALLBACK_DURACAO_SEG: "vinte" })).toThrow(
-      /CALLBACK_DURACAO_SEG/,
+    expect(validarConfig({ ...base, CALLBACK_LINHA2_SEG: "0" }).monitor.callbackDuracaoSeg).toBe(0);
+    expect(() => validarConfig({ ...base, CALLBACK_LINHA2_SEG: "vinte" })).toThrow(
+      /CALLBACK_LINHA2_SEG/,
     );
   });
 });

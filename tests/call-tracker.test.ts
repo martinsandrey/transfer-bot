@@ -26,6 +26,11 @@ function snap(rows: CallRow[], valid = true): TableSnapshot {
   relogio += 1000;
   return { readAt: relogio, rows, valid };
 }
+/** Leitura `segundos` depois da anterior (o tempo na linha de destino é medido pelo relógio, não pelo Call Duration). */
+function snapMais(rows: CallRow[], segundos: number): TableSnapshot {
+  relogio += segundos * 1000;
+  return { readAt: relogio, rows, valid: true };
+}
 function tracker(over: Partial<ConstructorParameters<typeof CallTracker>[0]> = {}): CallTracker {
   return new CallTracker({
     leiturasConfirmacao: 2,
@@ -946,41 +951,73 @@ describe("CALLBACK também por ligação curta (atendida, mas com menos de N seg
     comecar(t);
     const ev = alimentar(
       t,
-      snap([AGENT3("908301", 3)]),
-      snap([AGENT3("908301", 8)]),
-      snap([AGENT3("908301", 12)]),
+      snapMais([AGENT3("908301", 3)], 1),
+      snapMais([AGENT3("908301", 8)], 5),
+      snapMais([AGENT3("908301", 12)], 7),
       ...VAZIAS(),
     );
     expect(tipos(ev)).toEqual(["callback"]);
     expect(ev[0]).toMatchObject({
       motivo: "ligacao_curta",
-      duracaoSeg: 12,
+      duracaoSeg: 12, // 12 s com a linha de destino em Agent (relógio)
       callback: "100001",
       callee: X,
     });
   });
 
-  it("ligação de 35 s: sem CALLBACK; exatamente 20 s também não (só MENOS que o mínimo)", () => {
-    for (const dur of [35, 20]) {
+  it("35 s na linha de destino: sem CALLBACK; exatamente 20 s também não (só MENOS que o mínimo)", () => {
+    for (const seg of [35, 20]) {
       const t = mk();
       comecar(t);
       const ev = alimentar(
         t,
-        snap([AGENT3("908301", 5)]),
-        snap([AGENT3("908301", dur)]),
+        snapMais([AGENT3("908301", 5)], 1),
+        snapMais([AGENT3("908301", 5 + seg)], seg),
         ...VAZIAS(),
       );
       expect(tipos(ev)).toEqual([]);
     }
     const t = mk();
     comecar(t);
-    expect(tipos(alimentar(t, snap([AGENT3("908301", 19)]), ...VAZIAS()))).toEqual(["callback"]);
+    expect(
+      tipos(
+        alimentar(
+          t,
+          snapMais([AGENT3("908301", 5)], 1),
+          snapMais([AGENT3("908301", 24)], 19),
+          ...VAZIAS(),
+        ),
+      ),
+    ).toEqual(["callback"]);
+  });
+
+  it("o Call Duration da tabela (que conta a ligação inteira) NÃO decide: 18 min de Call Duration com só 31 s na linha de destino é CALLBACK", () => {
+    // caso real de 2026-10-30: a linha de destino ficou em Agent por 31 s, mas o Call Duration chegou a 1122 s
+    const t = mk(45);
+    comecar(t);
+    const ev = alimentar(
+      t,
+      snapMais([AGENT3("908301", 1091)], 1),
+      snapMais([AGENT3("908301", 1122)], 31),
+      ...VAZIAS(),
+    );
+    expect(tipos(ev)).toEqual(["callback"]);
+    expect(ev[0]).toMatchObject({ motivo: "ligacao_curta", duracaoSeg: 31 });
   });
 
   it("o mínimo vem da configuração: com 10 s, uma ligação de 12 s não é CALLBACK; com 0 desliga a regra", () => {
     const t10 = mk(10);
     comecar(t10);
-    expect(tipos(alimentar(t10, snap([AGENT3("908301", 12)]), ...VAZIAS()))).toEqual([]);
+    expect(
+      tipos(
+        alimentar(
+          t10,
+          snapMais([AGENT3("908301", 1)], 1),
+          snapMais([AGENT3("908301", 13)], 12),
+          ...VAZIAS(),
+        ),
+      ),
+    ).toEqual([]);
     const t0 = mk(0);
     comecar(t0);
     expect(tipos(alimentar(t0, snap([AGENT3("908301", 2)]), ...VAZIAS()))).toEqual([]);
@@ -991,8 +1028,8 @@ describe("CALLBACK também por ligação curta (atendida, mas com menos de N seg
     comecar(t);
     const ev = alimentar(
       t,
-      snap([AGENT3("908301", 5)]),
-      snap([ST4("908301", 8)]), // 8 s e mudou de Stage: a ligação NÃO acabou
+      snapMais([AGENT3("908301", 5)], 1),
+      snapMais([ST4("908301", 8)], 3), // 3 s e mudou de Stage: a ligação NÃO acabou
       snap([ST4("908301", 9)]),
       snap([ST4("908301", 10)]),
       snap([ST4("908301", 60)]),
@@ -1005,9 +1042,14 @@ describe("CALLBACK também por ligação curta (atendida, mas com menos de N seg
     const t = mk();
     alimentar(t, snap([]));
     alimentar(t, snap([ST1()]));
-    const ev = alimentar(t, snap([AGENT3("908301", 1)]), snap([AGENT3("908301", 6)]), ...VAZIAS());
+    const ev = alimentar(
+      t,
+      snapMais([AGENT3("908301", 1)], 1),
+      snapMais([AGENT3("908301", 6)], 5),
+      ...VAZIAS(),
+    );
     expect(tipos(ev)).toEqual(["transferencia", "callback"]);
-    expect(ev[1]).toMatchObject({ motivo: "ligacao_curta", duracaoSeg: 6 });
+    expect(ev[1]).toMatchObject({ motivo: "ligacao_curta", duracaoSeg: 5 });
   });
 
   it("Call Duration ilegível: conta o tempo desde que o Stage 3 Agent apareceu", () => {
@@ -1075,6 +1117,7 @@ describe("duração da ligação atendida (para o relatório)", () => {
     const fim: Array<{
       vinculo: string;
       duracaoSeg: number;
+      naLinha2Seg: number;
       ateTransferenciaSeg: number | null;
     }> = [];
     const t = tracker({
@@ -1092,24 +1135,26 @@ describe("duração da ligação atendida (para o relatório)", () => {
     const { fim, ev } = rodar(
       20,
       snap([ST1, AG(2)]),
-      snap([AG(60)]),
-      snap([AG(185)]),
+      snapMais([AG(60)], 58),
+      snapMais([AG(185)], 125),
       ...VAZIAS(),
       ...VAZIAS(),
     );
     expect(tipos(ev)).toEqual(["transferencia"]);
     expect(fim).toHaveLength(1);
-    expect(fim[0]?.duracaoSeg).toBe(185);
+    expect(fim[0]?.duracaoSeg).toBe(185); // Call Duration (ligação inteira)
+    expect(fim[0]?.naLinha2Seg).toBe(183); // tempo na linha de destino, pelo relógio
   });
   it("ligação curta vira CALLBACK e NÃO entra na duração média", () => {
-    const { fim, ev } = rodar(20, snap([ST1, AG(2)]), snap([AG(9)]), ...VAZIAS());
+    const { fim, ev } = rodar(20, snap([ST1, AG(2)]), snapMais([AG(9)], 7), ...VAZIAS());
     expect(tipos(ev)).toEqual(["transferencia", "callback"]);
     expect(fim).toEqual([]);
   });
   it("com a regra de duração desligada (0), a duração continua sendo registrada", () => {
-    const { fim, ev } = rodar(0, snap([ST1, AG(2)]), snap([AG(9)]), ...VAZIAS());
+    const { fim, ev } = rodar(0, snap([ST1, AG(2)]), snapMais([AG(9)], 7), ...VAZIAS());
     expect(tipos(ev)).toEqual(["transferencia"]);
     expect(fim[0]?.duracaoSeg).toBe(9);
+    expect(fim[0]?.naLinha2Seg).toBe(7);
   });
   it("informa quanto a ligação já durava no Stage 1 quando foi transferida (última leitura da origem)", () => {
     const st1 = (dur: number | null) => ({ ...ST1, callDurationSec: dur });
@@ -1124,7 +1169,14 @@ describe("duração da ligação atendida (para o relatório)", () => {
     alimentar(t, snap([st1(40)]));
     alimentar(t, snap([st1(95)]));
     // a linha do Stage 1 some e a do Stage 3 aparece: a duração da transferência é a última lida no Stage 1
-    alimentar(t, snap([AG(3)]), snap([AG(60)]), snap([AG(185)]), ...VAZIAS(), ...VAZIAS());
+    alimentar(
+      t,
+      snap([AG(3)]),
+      snapMais([AG(60)], 57),
+      snapMais([AG(185)], 125),
+      ...VAZIAS(),
+      ...VAZIAS(),
+    );
     expect(fim).toHaveLength(1);
     expect(fim[0]).toMatchObject({ duracaoSeg: 185, ateTransferenciaSeg: 95 });
   });
@@ -1138,7 +1190,7 @@ describe("duração da ligação atendida (para o relatório)", () => {
     });
     alimentar(t, snap([]));
     alimentar(t, snap([{ ...ST1, callDurationSec: null }]));
-    alimentar(t, snap([AG(3)]), snap([AG(60)]), ...VAZIAS(), ...VAZIAS());
+    alimentar(t, snap([AG(3)]), snapMais([AG(60)], 57), ...VAZIAS(), ...VAZIAS());
     expect(fim[0]).toMatchObject({ duracaoSeg: 60, ateTransferenciaSeg: null });
   });
   it("mesma linha que muda de Stage 1 Agent para Stage 3 Agent: vale a última leitura do Stage 1, não a do Stage 3", () => {
@@ -1155,7 +1207,7 @@ describe("duração da ligação atendida (para o relatório)", () => {
     });
     alimentar(t, snap([]));
     alimentar(t, snap([mesma(S1, 40)]), snap([mesma(S1, 95)]));
-    const ev = alimentar(t, snap([mesma(S3, 96)]), snap([mesma(S3, 300)]), ...VAZIAS());
+    const ev = alimentar(t, snap([mesma(S3, 96)]), snapMais([mesma(S3, 300)], 204), ...VAZIAS());
     expect(tipos(ev)).toContain("transferencia");
     expect(fim[0]).toMatchObject({ duracaoSeg: 300, ateTransferenciaSeg: 95 });
   });

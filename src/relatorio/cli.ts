@@ -20,6 +20,7 @@ import {
   ARQUIVO_DURACOES,
   lerDuracoes,
   lerDuracoesAteTransferencia,
+  lerDuracoesNaLinha2,
   lerRegistro,
   montarLigacoes,
   NOMES_DE_PERIODO,
@@ -110,7 +111,11 @@ async function principal(): Promise<void> {
       entradas,
       lerDuracoes(ler(ARQUIVO_DURACOES) ?? ""),
       lerCallbacksManuais(ler(ARQUIVO_CALLBACKS_MANUAIS) ?? ""),
-      { religacao, ateTransferencia: lerDuracoesAteTransferencia(ler(ARQUIVO_DURACOES) ?? "") },
+      {
+        religacao,
+        ateTransferencia: lerDuracoesAteTransferencia(ler(ARQUIVO_DURACOES) ?? ""),
+        naLinha2: lerDuracoesNaLinha2(ler(ARQUIVO_DURACOES) ?? ""),
+      },
     );
   };
   const pagina = (servidor?: { token: string }): string | null => {

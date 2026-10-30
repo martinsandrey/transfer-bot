@@ -49,18 +49,23 @@ export class RegistroEmArquivo {
 
   /**
    * Uma linha: quando terminou, código da ligação (o mesmo do cabeçalho das mensagens), a duração em segundos e, se legível,
-   * quanto a ligação já durava quando foi transferida ("Até a transferência"; é esta que entra na duração média do relatório).
+   * quanto a ligação já durava quando foi transferida ("Até a transferência"; é esta que entra na duração média do relatório) e
+   * quanto tempo ficou só na linha de destino ("Na linha 2"; é esta que a regra de religação do relatório confere).
    */
   registrarDuracao(r: {
     ligacao: string;
     duracaoSeg: number;
     ateTransferenciaSeg?: number | null;
+    /** Tempo (s) só na linha de destino, medido pelo relógio (o "Duração" acima conta a ligação inteira). */
+    naLinha2Seg?: number | null;
+    /** Gravada enquanto a ligação ainda está aberta; a linha final (mesmo código) substitui esta. */
+    provisoria?: boolean;
   }): void {
     try {
       mkdirSync(this.pasta, { recursive: true });
       appendFileSync(
         join(this.pasta, ARQUIVO_DURACOES),
-        `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s${r.ateTransferenciaSeg == null ? "" : ` | Até a transferência: ${Math.max(0, Math.round(r.ateTransferenciaSeg))} s`}\n`,
+        `${this.carimbo()} | Ligação: ${r.ligacao} | Duração: ${Math.max(0, Math.round(r.duracaoSeg))} s${r.ateTransferenciaSeg == null ? "" : ` | Até a transferência: ${Math.max(0, Math.round(r.ateTransferenciaSeg))} s`}${r.naLinha2Seg == null ? "" : ` | Na linha 2: ${Math.max(0, Math.round(r.naLinha2Seg))} s`}${r.provisoria ? " | provisória" : ""}\n`,
         { encoding: "utf8" },
       );
     } catch (e) {

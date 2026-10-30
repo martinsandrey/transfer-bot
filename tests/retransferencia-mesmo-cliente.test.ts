@@ -62,6 +62,7 @@ describe("o mesmo cliente é transferido de novo depois de um CALLBACK", () => {
   it("2ª transferência sem CALLBACK antes (mesma pessoa transferida duas vezes no dia)", () => {
     const { ev, ler } = novo();
     ler(snap([row(L1, "Stage 1 Agent", 60, "T1")]), snap([row(L2, "Stage 2 Agent", 90, "T1")]));
+    ler(snap([row(L2, "Stage 2 Agent", 150, "T1")], 60_000)); // 60 s na linha 2: atendida
     ler(...vazias(8));
     ler(snap([row(L1, "Stage 1 Agent", 10, "T3")]), snap([row(L2, "Stage 2 Agent", 90, "T3")]));
     expect(tipos(ev)).toEqual(["transferencia", "transferencia"]);
@@ -112,6 +113,7 @@ describe("o mesmo cliente é transferido de novo depois de um CALLBACK", () => {
   it("2ª transferência com várias linhas Stage 2 do mesmo cliente: uma mensagem só", () => {
     const { ev, ler } = novo();
     ler(snap([row(L1, "Stage 1 Agent", 60, "T1")]), snap([row(L2, "Stage 2 Agent", 90, "T1")]));
+    ler(snap([row(L2, "Stage 2 Agent", 150, "T1")], 60_000)); // 60 s na linha 2: atendida
     ler(...vazias(8));
     ler(snap([row(L1, "Stage 1 Manual Call", 10, "T2")]));
     ler(snap([row(L1, "Stage 1 Manual Call", 11, "T2"), row(L2, "Stage 2 Ringing", 0, "T2")]));

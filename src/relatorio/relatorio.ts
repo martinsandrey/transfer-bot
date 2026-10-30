@@ -101,6 +101,16 @@ export function lerDuracoes(texto: string): Map<string, number> {
   return mapa;
 }
 
+/** Tempo (s) só na linha 2 de cada ligação (campo "Na linha 2" de duracoes.txt; só registros novos). Vale a última linha de cada código. */
+export function lerDuracoesNaLinha2(texto: string): Map<string, number> {
+  const mapa = new Map<string, number>();
+  for (const linha of texto.replace(/\r\n?/g, "\n").split("\n")) {
+    const m = /\|\s*Ligação:\s*(\S+)\s*\|.*\|\s*Na linha 2:\s*(\d+)\s*s/.exec(linha);
+    if (m) mapa.set(m[1] as string, Number(m[2]));
+  }
+  return mapa;
+}
+
 /** Duração (s) que cada ligação já tinha quando foi transferida (campo "Até a transferência" de duracoes.txt; só registros novos). */
 export function lerDuracoesAteTransferencia(texto: string): Map<string, number> {
   const mapa = new Map<string, number>();
@@ -131,6 +141,12 @@ export interface Ligacao {
    * registrada (registros anteriores a esta versão) ou se foi CALLBACK. Como `duracaoSeg`, é guardada na marcação manual.
    */
   duracaoAteTransfSeg: number | null;
+  /**
+   * Tempo (s) só na linha 2, medido pelo relógio (campo "Na linha 2" de duracoes.txt); ausente/`null` em registros anteriores a
+   * 2026-10-30, CALLBACK e transferência adicionada à mão. É este tempo (e não `duracaoSeg`, que conta a ligação inteira) que a
+   * regra de religação confere.
+   */
+  naLinha2Seg?: number | null;
   /** Identifica a transferência para marcá-la como callback no relatório (ver `callbacks-manuais.ts`); ausente no CALLBACK sem transferência. */
   chave?: string;
   /** CALLBACK marcado à mão no relatório (o bot tinha registrado como atendida). */
@@ -153,12 +169,15 @@ export interface OpcoesMontagem {
   /**
    * Religação: CALLBACK do bot é desfeito se o mesmo cliente for transferido de novo, no mesmo dia do CALLBACK (`janelaMs` > 0 liga
    * a regra; o valor em si não é mais usado), e essa nova
-   * transferência tiver sido atendida e durado pelo menos `duracaoMinSeg` (duração registrada em duracoes.txt). Ausente ou
+   * transferência tiver sido atendida e ficado pelo menos `duracaoMinSeg` na linha 2 ("Na linha 2" de duracoes.txt; em registro
+   * antigo, sem esse campo, vale a "Duração" da ligação inteira) ou tiver sido adicionada à mão. Ausente ou
    * `janelaMs` 0 = desligado.
    */
   religacao?: { janelaMs: number; duracaoMinSeg: number };
   /** Duração até a transferência por código de ligação (ver `lerDuracoesAteTransferencia`). */
   ateTransferencia?: ReadonlyMap<string, number>;
+  /** Tempo só na linha 2 por código de ligação (ver `lerDuracoesNaLinha2`). */
+  naLinha2?: ReadonlyMap<string, number>;
 }
 
 /** Só os números do telefone, sem zeros à esquerda (o 0 do DDD digitado à mão: 011963507426 e 11963507426 são o mesmo número). */
@@ -175,7 +194,10 @@ function aplicarReligacao(
       !l.semTransferencia &&
       l.resultado === "atendida" &&
       // a transferência digitada à mão não tem duração: vale como atendida (foi o usuário que confirmou que deu certo)
-      (l.adicionadaAMao === true || (l.duracaoSeg !== null && l.duracaoSeg >= op.duracaoMinSeg)) &&
+      (l.adicionadaAMao === true ||
+        (l.naLinha2Seg != null
+          ? l.naLinha2Seg >= op.duracaoMinSeg
+          : l.duracaoSeg !== null && l.duracaoSeg >= op.duracaoMinSeg)) &&
       soDigitos(l.cliente) !== "",
   );
   for (const l of ligacoes) {
@@ -293,6 +315,8 @@ export function montarLigacoes(
         duracaoSeg: comCallback.has(t) || !t.ligacao ? null : (duracoes.get(t.ligacao) ?? null),
         duracaoAteTransfSeg:
           comCallback.has(t) || !t.ligacao ? null : (op.ateTransferencia?.get(t.ligacao) ?? null),
+        naLinha2Seg:
+          comCallback.has(t) || !t.ligacao ? null : (op.naLinha2?.get(t.ligacao) ?? null),
         chave,
         manual,
         ...(t.ligacao?.startsWith("manual-") ? { adicionadaAMao: true } : {}),

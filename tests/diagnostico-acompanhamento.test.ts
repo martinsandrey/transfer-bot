@@ -77,8 +77,13 @@ describe("diagnóstico do fim do acompanhamento (vai para o log, sem telefones)"
     const { ler, decisoes } = novo();
     ler(snap([row(L1, "Stage 1 Agent", 60)]), snap([row(L2, "Stage 2 Ringing", 0)]));
     ler(snap([row(L2B, "Stage 2 Agent", 70)], 15_000));
+    ler(snap([row(L2B, "Stage 2 Agent", 130)], 60_000));
     ler(...vazias());
-    expect(decisoes[0]).toMatchObject({ motivo: "atendida", linhasDestino: 2 });
+    expect(decisoes[0]).toMatchObject({
+      motivo: "atendida",
+      linhasDestino: 2,
+      agentRelogioSeg: 60,
+    });
   });
 
   it("ninguém atendeu: 'sem_atendimento'", () => {

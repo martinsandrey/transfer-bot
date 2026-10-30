@@ -165,6 +165,13 @@ async function principal(): Promise<void> {
     encerrada?: (i: {
       vinculo: string;
       duracaoSeg: number;
+      naLinha2Seg: number;
+      ateTransferenciaSeg: number | null;
+    }) => void;
+    confirmada?: (i: {
+      vinculo: string;
+      duracaoSeg: number;
+      naLinha2Seg: number;
       ateTransferenciaSeg: number | null;
     }) => void;
   } = {};
@@ -180,6 +187,7 @@ async function principal(): Promise<void> {
       ? { destinoDigito: cfg.monitor.destinoDigito }
       : {}),
     aoEncerrarLigacao: (i) => ganchos.encerrada?.(i),
+    aoAtendimentoConfirmado: (i) => ganchos.confirmada?.(i),
     aoAcompanhamentoAberto: (i) =>
       log.info("Ligação atendida continua na tabela", {
         evento: "acompanhamento_aberto",
@@ -306,7 +314,17 @@ async function principal(): Promise<void> {
       registro.registrarDuracao({
         ligacao: idDaLigacao(i.vinculo),
         duracaoSeg: i.duracaoSeg,
+        naLinha2Seg: i.naLinha2Seg,
         ateTransferenciaSeg: i.ateTransferenciaSeg,
+      });
+    // Duração provisória assim que a ligação prova que não é curta: vale mesmo que o programa feche antes de ela terminar.
+    ganchos.confirmada = (i) =>
+      registro.registrarDuracao({
+        ligacao: idDaLigacao(i.vinculo),
+        duracaoSeg: i.duracaoSeg,
+        naLinha2Seg: i.naLinha2Seg,
+        ateTransferenciaSeg: i.ateTransferenciaSeg,
+        provisoria: true,
       });
   }
   let sender: MessageSender = new EnviadorConsole();

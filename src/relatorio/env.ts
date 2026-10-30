@@ -18,9 +18,9 @@ export function lerEnv(caminho = ".env"): {
   let pasta = "registros";
   let apelidos = new Map<string, string>();
   let digitos: string[] = ["0"];
-  // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60, CALLBACK_DURACAO_SEG 20.
+  // Mesmos padrões do programa (config.ts): CALLBACK_RELIGACAO_MIN 60, CALLBACK_LINHA2_SEG 45.
   let janelaMin = 60;
-  let duracaoMinSeg = 20;
+  let duracaoMinSeg = 45;
   let fuso = FUSO_PADRAO;
   let duracaoLongaMin = 5;
   const inteiro = (v: string | undefined, min: number, max: number): number | null => {
@@ -38,7 +38,7 @@ export function lerEnv(caminho = ".env"): {
       const d = interpretarDigitos((env["EQUIPE_PAQUISTANES_DIGITOS"] ?? "").trim() || "0");
       if (d) digitos = [...d];
       janelaMin = inteiro(env["CALLBACK_RELIGACAO_MIN"], 0, 1440) ?? janelaMin;
-      duracaoMinSeg = inteiro(env["CALLBACK_DURACAO_SEG"], 0, 3600) ?? duracaoMinSeg;
+      duracaoMinSeg = inteiro(env["CALLBACK_LINHA2_SEG"], 0, 3600) ?? duracaoMinSeg;
       duracaoLongaMin = inteiro(env["DURACAO_LONGA_MIN"], 1, 600) ?? duracaoLongaMin;
       const f = (env["FUSO_HORARIO"] ?? "").trim();
       if (f && fusoValido(f)) fuso = f;
