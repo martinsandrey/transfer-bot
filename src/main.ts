@@ -180,6 +180,14 @@ async function principal(): Promise<void> {
       ? { destinoDigito: cfg.monitor.destinoDigito }
       : {}),
     aoEncerrarLigacao: (i) => ganchos.encerrada?.(i),
+    aoAcompanhamentoAberto: (i) =>
+      log.info("Ligação atendida continua na tabela", {
+        evento: "acompanhamento_aberto",
+        idCurto: i.ocorrencia,
+        contagem: i.linhasDestino,
+        duracaoMs: i.minutos * 60_000,
+        ...(i.callDurationSeg !== null ? { duracaoSeg: i.callDurationSeg } : {}),
+      }),
     // Diário do porquê de cada ligação ter sido (ou não) CALLBACK: ajuda a achar CALLBACKs que o programa não pegou.
     aoDecidirAtendimento: (i) =>
       log.info("Acompanhamento da ligação encerrado", {

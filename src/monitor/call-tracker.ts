@@ -146,6 +146,16 @@ export interface OpcoesTracker {
    * - `agentRelogioSeg`: tempo medido pelo relógio entre a primeira e a última leitura com uma linha de destino em "Agent";
    * - `linhasDestino`: quantas linhas de destino diferentes (funcionários que receberam a chamada) apareceram para esse cliente.
    */
+  /**
+   * Diagnóstico: uma ligação atendida na linha de destino continua na tabela depois de 2, 10, 30, 60 e 120 min (relógio). Mostra o
+   * "Call Duration" atual: se ele não anda, a linha está presa na tabela (e o fim da ligação nunca é visto).
+   */
+  aoAcompanhamentoAberto?: (info: {
+    ocorrencia: string;
+    minutos: number;
+    callDurationSeg: number | null;
+    linhasDestino: number;
+  }) => void;
   aoDecidirAtendimento?: (info: {
     ocorrencia: string;
     motivo: "atendida" | "ligacao_curta" | "sem_atendimento" | "foi_adiante";
@@ -237,6 +247,8 @@ export class CallTracker {
       duracaoAteTransferenciaSeg: number | null;
       /** Fluxo novo: a ligação já apareceu na linha 3 (seguiu adiante depois da linha 2). */
       foiAdiante?: boolean;
+      /** Quantos marcos de `aoAcompanhamentoAberto` já foram avisados (diagnóstico). */
+      marcosAvisados?: number;
       /** Última leitura com uma linha de destino em "Agent" (diagnóstico). */
       ultimoAgent?: number;
       /** Callback Numbers das linhas de destino já vistas para esse cliente (diagnóstico; só a contagem vai para o log). */
@@ -700,6 +712,7 @@ export class CallTracker {
             });
           continue;
         }
+        this.avisarSeguimentoAberto(sg, duracoes.get(callee), s.readAt);
         // atendida e sem regra de duração: nada mais a fazer; esquece quando a linha some
         if (!comStage3.has(callee) && s.readAt - sg.ultimoStage3 > 60_000)
           this.seguimentos.delete(callee);
@@ -713,6 +726,31 @@ export class CallTracker {
         this.emitirCallback(sg, callee, "sem_atendimento", undefined, s.readAt, eventos);
       }
     }
+  }
+
+  /** Avisa (para o log) que uma ligação atendida continua na tabela nos marcos de 2, 10, 30, 60 e 120 minutos. */
+  private avisarSeguimentoAberto(
+    sg: {
+      ocId: string;
+      inicioAtendimento: number | null;
+      marcosAvisados?: number;
+      linhasDestino?: Set<string>;
+    },
+    callDurationSeg: number | undefined,
+    agora: number,
+  ): void {
+    if (!this.op.aoAcompanhamentoAberto || sg.inicioAtendimento === null) return;
+    const marcos = [2, 10, 30, 60, 120];
+    const feitos = sg.marcosAvisados ?? 0;
+    const proximo = marcos[feitos];
+    if (proximo === undefined || agora - sg.inicioAtendimento < proximo * 60_000) return;
+    sg.marcosAvisados = feitos + 1;
+    this.op.aoAcompanhamentoAberto({
+      ocorrencia: sg.ocId,
+      minutos: proximo,
+      callDurationSeg: callDurationSeg ?? null,
+      linhasDestino: sg.linhasDestino?.size ?? 0,
+    });
   }
 
   /** Entrega ao log (sem telefones) o que o rastreador viu ao decidir o fim do acompanhamento. */

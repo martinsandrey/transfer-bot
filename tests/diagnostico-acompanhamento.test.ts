@@ -24,6 +24,7 @@ type Decisao = Parameters<
 >[0];
 function novo() {
   const decisoes: Decisao[] = [];
+  const abertos: Array<{ minutos: number; callDurationSeg: number | null }> = [];
   const t = new CallTracker({
     leiturasConfirmacao: 1,
     ausenciaMaxLeituras: 3,
@@ -33,13 +34,14 @@ function novo() {
     destinoStage: 2,
     destinoDigito: "2",
     aoDecidirAtendimento: (d) => decisoes.push(d),
+    aoAcompanhamentoAberto: (a) => abertos.push(a),
   });
   const ev: EventoTracker[] = [];
   const ler = (...s: TableSnapshot[]) => {
     for (const x of s) ev.push(...t.ingest(x));
   };
   ler(snap([]));
-  return { ev, ler, decisoes };
+  return { ev, ler, decisoes, abertos };
 }
 const vazias = (n = 6) => Array.from({ length: n }, () => snap([]));
 
@@ -89,5 +91,20 @@ describe("diagnóstico do fim do acompanhamento (vai para o log, sem telefones)"
       agentRelogioSeg: null,
       linhasDestino: 1,
     });
+  });
+
+  it("linha de destino atendida que não some: avisa nos marcos de 2 e 10 min com o Call Duration atual (para ver se está presa)", () => {
+    const { ler, decisoes, abertos } = novo();
+    ler(snap([row(L1, "Stage 1 Agent", 60)]), snap([row(L2, "Stage 2 Agent", 3)]));
+    ler(snap([row(L2, "Stage 2 Agent", 60)], 60_000)); // 1 min
+    expect(abertos).toEqual([]);
+    ler(snap([row(L2, "Stage 2 Agent", 125)], 61_000)); // ~2 min
+    ler(snap([row(L2, "Stage 2 Agent", 126)], 1000)); // não repete o mesmo marco
+    ler(snap([row(L2, "Stage 2 Agent", 640)], 8 * 60_000)); // ~10 min
+    expect(abertos).toEqual([
+      expect.objectContaining({ minutos: 2, callDurationSeg: 125 }),
+      expect.objectContaining({ minutos: 10, callDurationSeg: 640 }),
+    ]);
+    expect(decisoes).toEqual([]); // ainda não terminou
   });
 });
