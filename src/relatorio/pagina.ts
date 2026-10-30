@@ -1,3 +1,4 @@
+import { montarTabelaMensal } from "./tabela-mensal.js";
 import { ESTILO, montarXlsx } from "./xlsx.js";
 import type { Ligacao, LigacaoLonga } from "./relatorio.js";
 
@@ -80,6 +81,7 @@ export function paginaHtml(d: DadosDaPagina): string {
   };
   const html = PAGINA.replace("/*DADOS*/null", () => jsonSeguro(dados))
     .replace("/*XLSX*/null", () => `(${montarXlsx.toString()})`)
+    .replace("/*TABELAMENSAL*/null", () => `(${montarTabelaMensal.toString()})`)
     .replace("/*ESTILOS*/null", () => JSON.stringify(ESTILO));
   const n = d.duracaoLongaMin ?? 5;
   // Todo "5 min"/"5 minutos" da página é sobre a ligação longa: usa o tempo configurado (DURACAO_LONGA_MIN).
@@ -232,6 +234,7 @@ dialog .confirmar{background:var(--alerta);border-color:var(--alerta);color:#fff
     </ul>
     <div class="acoes">
       <button class="acao" id="planilha">Baixar planilha (Excel)</button>
+      <span class="sem-print"><label for="mes-csv">Tabela por dia do mês:</label> <input type="month" id="mes-csv"> <button class="acao" id="mes-btn">Baixar tabela do mês (CSV)</button></span>
       <button class="acao" onclick="window.print()">Imprimir</button>
       <button class="acao sem-print" id="adicionar-btn" hidden>Adicionar transferência manual</button>
     </div>
@@ -599,6 +602,7 @@ $("obs").addEventListener("change", () => { estado.obs = $("obs").checked; desen
 $("pk").addEventListener("change", () => { estado.pk = $("pk").checked; desenhar(); });
 /* ---- planilha Excel (.xlsx) com o que está na tela (mesmo período e filtros) ---- */
 const montarXlsx = /*XLSX*/null;
+const montarTabelaMensal = /*TABELAMENSAL*/null;
 const E = /*ESTILOS*/null;
 const serialExcel = (t) => (t + deslocFuso(t) * 60000) / 86400000 + 25569;
 const diaFr = (seg) => (seg === null || seg === undefined || isNaN(seg) ? null : Math.round(seg) / 86400);
@@ -710,6 +714,14 @@ function abasDaPlanilha() {
   return { abas, arquivo: nomeArquivo(iv) };
 }
 window.__abasDaPlanilha = abasDaPlanilha;
+/* Tabela simples do mês: 2 últimos números da linha 1 x dia do mês, só transferências concluídas (CSV com ";" e BOM para o Excel). */
+$("mes-csv").value = new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
+$("mes-btn").addEventListener("click", () => {
+  const mes = $("mes-csv").value || new Date().toLocaleDateString("sv-SE", { timeZone: D.fuso }).slice(0, 7);
+  const lista = D.ligacoes.filter((c) => (estado.obs || !c.o) && (estado.pk || !ehPk(c.f)));
+  const blob = new Blob(["\ufeff" + montarTabelaMensal(lista, mes, D.fuso)], { type: "text/csv;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "transferencias-por-dia_" + mes + ".csv"; a.click();
+});
 $("planilha").addEventListener("click", () => {
   const { abas, arquivo } = abasDaPlanilha();
   const blob = new Blob([montarXlsx(abas)], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
