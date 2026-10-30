@@ -37,6 +37,26 @@ describe("tabela do mês (2 últimos números da linha 1 x dia do mês)", () => 
     expect(t.linhas.every((l) => l.contagem.length === 31)).toBe(true);
   });
 
+  it("separa cada dia em antes e depois das 12:00 do fuso (12:00 em ponto já é depois; 11:59 é antes)", () => {
+    const t = montarTabelaMensal(
+      [
+        { t: dia(4, 8), f: "908101", r: "a" },
+        { t: Date.UTC(2026, 9, 4, 14, 59), f: "908101", r: "a" }, // 11:59 em Brasília
+        { t: Date.UTC(2026, 9, 4, 15, 0), f: "908101", r: "a" }, // 12:00 em Brasília
+        { t: dia(4, 18), f: "908101", r: "a" },
+        { t: dia(4, 15), f: "908112", r: "a" },
+      ],
+      "2026-10",
+      FUSO,
+    );
+    const a = t.linhas.find((l) => l.chave === "01");
+    const b = t.linhas.find((l) => l.chave === "12");
+    expect([a?.antes[3], a?.depois[3], a?.contagem[3]]).toEqual([2, 2, 4]);
+    expect([b?.antes[3], b?.depois[3]]).toEqual([0, 1]);
+    expect([t.totaisAntes[3], t.totaisDepois[3], t.totais[3]]).toEqual([2, 3, 5]);
+    expect(t.totaisAntes[0]).toBe(0);
+  });
+
   it("só conta transferência concluída que vale: callback, desconsiderada e CALLBACK sem transferência ficam de fora", () => {
     const t = montarTabelaMensal(
       [
@@ -48,7 +68,8 @@ describe("tabela do mês (2 últimos números da linha 1 x dia do mês)", () => 
       "2026-10",
       FUSO,
     );
-    expect(t.linhas).toEqual([{ chave: "01", contagem: expect.arrayContaining([1]) }]);
+    expect(t.linhas.map((l) => l.chave)).toEqual(["01"]);
+    expect(t.linhas[0]?.contagem[1]).toBe(1);
     expect(t.totais[1]).toBe(1);
   });
 
@@ -130,6 +151,24 @@ describe.skipIf(!CHROMIUM_DE_TESTE)("botão Baixar tabela do mês (Excel)", () =
       // dia 2: o funcionário 11 fez 2 (coluna D = dia 3? B = dia 1, C = dia 2)
       expect(planilha).toMatch(/<c r="C2"[^>]*><v>2<\/v><\/c>/);
       expect(planilha).toMatch(/<c r="D3"[^>]*><v>1<\/v><\/c>/);
+      // segundo botão: o mesmo mês dividido em antes/depois das 12h, com barra
+      const turno = async () => {
+        const [d] = await Promise.all([
+          pagina.waitForEvent("download"),
+          pagina.locator("#mes-turno-btn").click(),
+        ]);
+        const destino = join(pasta, `u${Math.random()}.xlsx`);
+        await d.saveAs(destino);
+        return { nome: d.suggestedFilename(), z: lerZip(new Uint8Array(readFileSync(destino))) };
+      };
+      const c = await turno();
+      expect(c.nome).toBe(`transferencias-por-dia-antes-depois-12h_${mes}.xlsx`);
+      const pt = c.z.get("xl/worksheets/sheet1.xml") as string;
+      // dia 2: funcionário 11 fez 1 às 9h e 1 às 10h (2 antes, 0 depois); dia 3: o 21 fez 1 às 9h
+      expect(pt).toMatch(/<c r="C2"[^>]*t="inlineStr"><is><t[^>]*>2\/0<\/t>/);
+      expect(pt).toMatch(/<c r="D3"[^>]*t="inlineStr"><is><t[^>]*>1\/0<\/t>/);
+      expect(pt).toMatch(/<c r="B2"[^>]*t="inlineStr"><is><t[^>]*>0\/0<\/t>/); // dia sem transferência
+      expect(pt).toMatch(/<c r="C4"[^>]*t="inlineStr"><is><t[^>]*>2\/0<\/t>/); // 總計 do dia 2
       // as prévias do modo observação só entram quando a caixa da página está ligada (aqui não há prévias)
       expect(planilha.match(/<row /g)).toHaveLength(4); // cabeçalho, 11, 21 e 總計
     } finally {
